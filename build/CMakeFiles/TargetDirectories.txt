@@ -1,3 +1,0 @@
-C:/Users/aib/CerebrumLux/build/CMakeFiles/CerebrumLux.dir
-C:/Users/aib/CerebrumLux/build/CMakeFiles/edit_cache.dir
-C:/Users/aib/CerebrumLux/build/CMakeFiles/rebuild_cache.dir
