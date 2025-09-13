@@ -1,8 +1,8 @@
 #ifndef CEREBRUM_LUX_SIGNAL_PROCESSOR_H
 #define CEREBRUM_LUX_SIGNAL_PROCESSOR_H
 
-#include "atomic_signal.h" // AtomicSignal için
 #include "../core/enums.h" // Enum'lar için
+#include "atomic_signal.h" // AtomicSignal için
 
 
 class AtomicSignalProcessor; // İleri bildirim

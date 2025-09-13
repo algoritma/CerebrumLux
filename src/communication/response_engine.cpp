@@ -61,6 +61,17 @@ ResponseEngine::ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_m
         L"Nasıl bir destek istersiniz? "
     };
 
+    response_templates[UserIntent::Greeting][AbstractState::None].responses = {
+        L"Merhaba! Size nasıl yardımcı olabilirim?",
+        L"Hoş geldiniz! Gününüz nasıl geçiyor?",
+        L"Selam! Hazır mısınız?"
+    };
+
+    response_templates[UserIntent::None][AbstractState::LowPerformance].responses = {
+        L"Sistem performansınız düşük görünüyor. Optimizasyon yapmamı ister misiniz?",
+        L"Uygulamalarınız yavaş mı çalışıyor? Arka plan işlemlerini kontrol edebilirim."
+    };
+
     // YENİ NİYETLER İÇİN YANIT ŞABLONLARI
     response_templates[UserIntent::Programming][AbstractState::Focused].responses = {
         L"Programlama modundasınız ve odaklanmışsınız. Akışınızı bozmayalım. ",
@@ -236,13 +247,23 @@ std::wstring ResponseEngine::generate_response(UserIntent current_intent, Abstra
         }
     }
 
+    // Genel kriptofig tabanlı gözlemler (eğer daha spesifik bir yanıt eklenmediyse)
+    if (possible_responses.empty() || (possible_responses.size() == 1 && possible_responses[0].find(L"Anlık veriler eksik olduğu için") != std::wstring::npos)) { // Sadece genel fallback yanıtı varsa
+        if (latent_complexity > 0.7f) {
+            possible_responses.push_back(L"Latent analiziniz, şu anki görevinizin oldukça karmaşık olduğunu gösteriyor. Size nasıl destek olabilirim?");
+        }
+        if (latent_activity < 0.3f && latent_engagement < 0.3f) {
+            possible_responses.push_back(L"Latent analiziniz düşük aktiflik ve etkileşim görüyor. Belki yeni bir göreve başlamak veya kısa bir mola vermek istersiniz?");
+        }
+    }
+
     // 2. Eğer hala bir yanıt yoksa veya çok genel bir yanıt varsa, hedefi vurgula (latent kriptofig kullanımı ile geliştirildi)
-    if (possible_responses.empty() || 
-        (possible_responses.size() == 1 && (possible_responses[0].find(L"özel bir eylem önerisi yok") != std::wstring::npos || 
+    if (possible_responses.empty() ||
+        (possible_responses.size() == 1 && (possible_responses[0].find(L"özel bir eylem önerisi yok") != std::wstring::npos ||
                                           possible_responses[0].find(L"özel bir plan oluşturulamadı") != std::wstring::npos ||
                                           possible_responses[0].find(L"AI, ogrenmeye devam ediyor") != std::wstring::npos ||
                                           possible_responses[0].find(L"size nasil yardimci olabilirim?") != std::wstring::npos)
-        )) 
+        ))
     {
         switch (current_goal) {
             case AIGoal::OptimizeProductivity:

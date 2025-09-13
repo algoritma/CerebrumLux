@@ -89,7 +89,7 @@ void PredictionEngine::update_state_graph(UserIntent previous_intent, UserIntent
 
 float PredictionEngine::calculate_euclidean_distance(const std::vector<float>& vec1, const std::vector<float>& vec2) const {
     if (vec1.empty() || vec2.empty() || vec1.size() != vec2.size()) {
-        LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"calculate_euclidean_distance: Boyut uyuşmazlığı veya boş vektörler. Geçersiz mesafe döndürülüyor.\n");
+        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"calculate_euclidean_distance: Boyut uyuşmazlığı veya boş vektörler. Geçersiz mesafe döndürülüyor.");
         return std::numeric_limits<float>::max();
     }
     float sum_sq_diff = 0.0f;
@@ -105,7 +105,7 @@ UserIntent PredictionEngine::predict_next_intent(UserIntent previous_intent, con
 
     if (current_analyzed_intent == UserIntent::Unknown || previous_intent == UserIntent::Unknown ||
         current_analyzed_intent == UserIntent::None || previous_intent == UserIntent::None) {
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: Current veya Previous intent bilinmiyor/hiçbiri, doğrudan analiz döndürülüyor.\n");
+        LOG(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: Current veya Previous intent bilinmiyor/hiçbiri, doğrudan analiz döndürülüyor.\n");
         return current_analyzed_intent; 
     }
 
@@ -127,13 +127,13 @@ UserIntent PredictionEngine::predict_next_intent(UserIntent previous_intent, con
 
                 combined_score = (edge.transition_probability * W1) + (cryptofig_similarity * W2);
 
-                LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"Edge: " << intent_to_string(edge.from_intent) << L" -> " << intent_to_string(edge.to_intent)
+                                LOG(LogLevel::TRACE, std::wcerr, L"Edge: " << intent_to_string(edge.from_intent) << L" -> " << intent_to_string(edge.to_intent)
                            << L", Prob: " << std::fixed << std::setprecision(4) << edge.transition_probability
                            << L", Mesafe: " << std::fixed << std::setprecision(4) << distance
                            << L", Benzerlik: " << std::fixed << std::setprecision(4) << cryptofig_similarity
-                           << L", Birleşik Skor: " << std::fixed << std::setprecision(4) << combined_score << L"\n");
+                           << L", Birleşik Skor: " << std::fixed << std::setprecision(4) << combined_score);
             } else {
-                 LOG_MESSAGE(LogLevel::WARNING, std::wcerr, L"predict_next_intent: Kriptofig delta boş veya boyut uyuşmazlığı. Sadece geçiş olasılığı kullanılıyor.\n");
+                 LOG(LogLevel::WARNING, std::wcerr, L"predict_next_intent: Kriptofig delta boş veya boyut uyuşmazlığı. Sadece geçiş olasılığı kullanılıyor.");
             }
 
             if (combined_score > max_combined_score) {
@@ -143,14 +143,14 @@ UserIntent PredictionEngine::predict_next_intent(UserIntent previous_intent, con
         }
     }
     
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: En yüksek birleşik skor: " << std::fixed << std::setprecision(4) << max_combined_score << L"\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: En yüksek birleşik skor: " << std::fixed << std::setprecision(4) << max_combined_score);
 
     if (max_combined_score < 0.25f) { 
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: Birleşik skor eşiğin altında (" << std::fixed << std::setprecision(4) << max_combined_score << L" < 0.2500), mevcut analiz döndürülüyor: " << intent_to_string(current_analyzed_intent) << L"\n");
+        LOG(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: Birleşik skor eşiğin altında (" << std::fixed << std::setprecision(4) << max_combined_score << L" < 0.2500), mevcut analiz döndürülüyor: " << intent_to_string(current_analyzed_intent));
         return current_analyzed_intent;
     }
 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: En olası gelecek niyet: " << intent_to_string(most_probable_future_intent) << L"\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"predict_next_intent: En olası gelecek niyet: " << intent_to_string(most_probable_future_intent));
 
     return most_probable_future_intent; 
 }
@@ -169,7 +169,7 @@ void PredictionEngine::learn_time_patterns(const std::deque<AtomicSignal>& signa
 void PredictionEngine::save_state_graph(const std::wstring& filename) const {
     FILE* fp = _wfopen(filename.c_str(), L"w"); 
     if (!fp) {
-        LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Durum grafigi dosyasi yazilamadi: " << filename << L" (errno: " << errno << L")\n");
+        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Durum grafigi dosyasi yazilamadi: " << filename << L" (errno: " << errno << L")");
         return;
     }
 
@@ -191,13 +191,13 @@ void PredictionEngine::save_state_graph(const std::wstring& filename) const {
         fwprintf(fp, L"%.8f %lld %d\n", edge.transition_probability, edge.last_observed_us, edge.observation_count);
     }
     fclose(fp);
-    LOG_MESSAGE(LogLevel::INFO, std::wcout, L"Durum grafigi kaydedildi: " << filename << L"\n");
+    LOG(LogLevel::INFO, std::wcout, L"Durum grafigi kaydedildi: " << filename);
 }
 
 void PredictionEngine::load_state_graph(const std::wstring& filename) {
     FILE* fp = _wfopen(filename.c_str(), L"r"); 
     if (!fp) {
-        LOG_MESSAGE(LogLevel::WARNING, std::wcerr, L"Uyari: Durum grafigi dosyasi bulunamadi, bos grafik kullaniliyor: " << filename << L" (errno: " << errno << L")\n");
+        LOG(LogLevel::WARNING, std::wcerr, L"Uyari: Durum grafigi dosyasi bulunamadi, bos grafik kullaniliyor: " << filename << L" (errno: " << errno << L")");
         return;
     }
 
@@ -206,14 +206,14 @@ void PredictionEngine::load_state_graph(const std::wstring& filename) {
 
     size_t num_nodes;
     if (fwscanf(fp, L"%zu\n", &num_nodes) != 1) {
-        LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Durum grafigi dosyasi formati bozuk veya bos (nodes): " << filename << L"\n");
+        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Durum grafigi dosyasi formati bozuk veya bos (nodes): " << filename);
         fclose(fp);
         return;
     }
     for (size_t i = 0; i < num_nodes; ++i) {
         int intent_id_int;
         if (fwscanf(fp, L"%d", &intent_id_int) != 1) { 
-            LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Durum grafigi yuklenirken intent_id okunamadi. Satir: " << i << L"\n");
+            LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Durum grafigi yuklenirken intent_id okunamadi. Satir: " << i << L"\n");
             break; 
         }
         UserIntent intent = static_cast<UserIntent>(intent_id_int);

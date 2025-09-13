@@ -56,7 +56,8 @@ private:
     //mesaj işleme metodu
     MessageQueue messageQueue;
 
-    std::map<UserIntent, float> evaluate_implicit_feedback(const std::deque<AtomicSignal>& recent_signals); 
+    void evaluate_implicit_feedback(UserIntent current_intent, AbstractState current_abstract_state);
+    AbstractState infer_abstract_state(const std::deque<AtomicSignal>& recent_signals); 
 
     void adjust_template(UserIntent intent_id, const DynamicSequence& sequence, float feedback_strength);
     void adjust_action_score(UserIntent intent_id, AIAction action, float score_change); 

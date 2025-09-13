@@ -1,5 +1,6 @@
 #include "cryptofig_processor.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG_MESSAGE ve intent_to_string için
+#include "../core/logger.h"      // LOG makrosu için
+#include "../core/utils.h"       // intent_to_string için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "intent_learner.h"      // IntentLearner için
 #include "intent_analyzer.h"     // IntentAnalyzer için

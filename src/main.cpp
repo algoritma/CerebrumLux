@@ -8,9 +8,9 @@
 #include <fstream> 
 
 // Cerebrum Lux modüllerinin başlık dosyaları
+#include "sensors/atomic_signal.h" // AtomicSignal için eklendi
 #include "core/enums.h"
 #include "core/utils.h"
-#include "core/logger.h"
 #include "core/logger.h"
 #include "sensors/simulated_processor.h"
 #include "data_models/sequence_manager.h"
@@ -288,7 +288,7 @@ int main() {
 
             // Unknown niyet tespit edildiğinde bilgi transferi yerine Autoencoder'ı doğrudan besleme
             if (current_predicted_intent == UserIntent::Unknown) {
-                LOG(LogLevel::DEBUG, L"Unknown niyet tespit edildi, Autoencoder'a istatistiksel özellikler ile öğrenme sinyali gönderiliyor.\n");
+                LOG(LogLevel::DEBUG, std::wcout, L"Unknown niyet tespit edildi, Autoencoder'a istatistiksel özellikler ile öğrenme sinyali gönderiliyor.\n");
                 std::wcout << L"AI: (Algı belirsizliği. Autoencoder yeni desenleri öğreniyor!)" << std::endl;
             }
 
