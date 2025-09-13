@@ -13,6 +13,8 @@
 #include "../brain/autoencoder.h"           // CryptofigAutoencoder için ileri bildirim
 #include "../brain/cryptofig_processor.h"   // CryptofigProcessor için ileri bildirim
 
+#include "../brain/intent_learner.h"
+
 
 // İleri bildirimler
 struct DynamicSequence;
@@ -38,6 +40,7 @@ public:
 
     // AI'ın mevcut iç durumunu ve performansını analiz eder ve içgörüler üretir
     std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence);
+    std::string generateResponse(UserIntent intent, const std::vector<float>& latent_cryptofig_vector);
 
     // Bu metot public olacak (GoalManager tarafından erişim için)
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
@@ -54,6 +57,7 @@ private:
 
     // Yardımcı fonksiyonlar
     float calculate_average_feedback_score(UserIntent intent_id) const;
+
 };
 
 #endif // CEREBRUM_LUX_AI_INSIGHTS_ENGINE_H

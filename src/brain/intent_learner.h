@@ -8,6 +8,7 @@
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "../sensors/atomic_signal.h" // AtomicSignal için (evaluate_implicit_feedback içinde kullanılır)
 #include "intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
+#include "../core/utils.h"
 
 // İleri bildirimler
 struct DynamicSequence;
@@ -17,6 +18,11 @@ class IntentAnalyzer;
 class IntentLearner {
 public:
     IntentLearner(IntentAnalyzer& analyzer_ref);
+    //mesaj kuyruğunu
+    void adjust_learning_rate(float new_learning_rate);
+    void processMessages();
+    void update_action_success_score(UserIntent intent, AIAction next_action, float success_score);
+
 
     void process_feedback(const DynamicSequence& sequence, UserIntent predicted_intent, 
                           const std::deque<AtomicSignal>& recent_signals);
@@ -46,7 +52,9 @@ public:
 private:
     IntentAnalyzer& analyzer; 
 
-    float learning_rate = 0.01f; 
+    float learning_rate = 0.1f; // Varsayılan öğrenme oranı
+    //mesaj işleme metodu
+    MessageQueue messageQueue;
 
     std::map<UserIntent, float> evaluate_implicit_feedback(const std::deque<AtomicSignal>& recent_signals); 
 
@@ -63,6 +71,7 @@ private:
     std::map<SensorType, int> sensor_feedback_count; 
     
     float desired_other_signals_multiplier = 1.0f; 
+
 };
 
 #endif // CEREBRUM_LUX_INTENT_LEARNER_H

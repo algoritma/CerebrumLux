@@ -20,6 +20,7 @@ set(SOURCE_FILES
     src/communication/response_engine.cpp
     src/communication/suggestion_engine.cpp
     src/core/utils.cpp
+    src/core/logger.cpp
     src/data_models/dynamic_sequence.cpp
     src/data_models/sequence_manager.cpp
     src/planning_execution/goal_manager.cpp

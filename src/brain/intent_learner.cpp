@@ -8,6 +8,10 @@
 #include <cmath>     // std::sqrt, std::log10, std::fabs için
 #include <algorithm> // std::min/max için
 #include <iostream>  // std::wcerr için
+#include "intent_learner.h" //IntentLearner::adjust_learning_rate
+
+#include "intent_learner.h"
+#include <iostream>
 
 // === IntentLearner Implementasyonlari ===
 
@@ -46,7 +50,7 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
             feedback_strength = -0.5f; 
             intent_to_adjust = UserIntent::Unknown;
 
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Niyet 'Bilinmiyor' için hesaplanan geri bildirim gucu: " << std::fixed << std::setprecision(2) << feedback_strength << L". (Net potansiyel niyet bulunamadı.)\n");
+            LOG(LogLevel::INFO, L"[AI-Ogrenen] Niyet 'Bilinmiyor' için hesaplanan geri bildirim gucu: " << std::fixed << std::setprecision(2) << feedback_strength << L". (Net potansiyel niyet bulunamadı.)\n");
         }
     } else {
         if (potential_feedbacks.count(predicted_intent)) {
@@ -133,7 +137,7 @@ std::map<UserIntent, float> IntentLearner::evaluate_implicit_feedback(const std:
     for (size_t i = 0; i < recent_signals.size(); ++i) {
         const AtomicSignal& sig = recent_signals[i];
 
-        LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"evaluate_implicit_feedback: Sinyal isleniyor (indeks " << i << L", tip: " << static_cast<int>(sig.sensor_type) << L").\n");
+        LOG(LogLevel::TRACE, L"evaluate_implicit_feedback: Sinyal isleniyor (indeks " << i << L", tip: " << static_cast<int>(sig.sensor_type) << L").\n");
 
         if (sig.sensor_type == SensorType::Keyboard) {
             if (sig.event_type == KeyEventType::Press) {
@@ -179,7 +183,7 @@ std::map<UserIntent, float> IntentLearner::evaluate_implicit_feedback(const std:
             network_sample_count++;
         }
     } 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"evaluate_implicit_feedback: Sinyal işleme döngüsü bitti.\n");
+    LOG(LogLevel::DEBUG, L"evaluate_implicit_feedback: Sinyal işleme döngüsü bitti.\n");
 
     const float MAX_INTERVAL_LOG_BASE_MS = 10000.0f; 
     const float MAX_MOUSE_MOVEMENT_FOR_NORM = 500.0f; 
@@ -322,7 +326,7 @@ std::map<UserIntent, float> IntentLearner::evaluate_implicit_feedback(const std:
     for (const auto& pair : potential_feedbacks) {
         ss_feedback << L"'" << intent_to_string(pair.first) << L"': " << std::fixed << std::setprecision(2) << pair.second << L"\n";
     }
-    LOG_MESSAGE(LogLevel::INFO, std::wcout, ss_feedback.str());
+    LOG(LogLevel::INFO, L"[AI-Ogrenen] Potansiyel geri bildirimler:\n" << ss_feedback.str());
 
     LOG_MESSAGE(LogLevel::DEBUG, std::wcout, L"Metrikler(Norm): KbdAvg:" << normalized_avg_keystroke_interval
                << L" KbdVar:" << normalized_keystroke_variability
@@ -337,4 +341,47 @@ std::map<UserIntent, float> IntentLearner::evaluate_implicit_feedback(const std:
                << L" (Buffer Kbd Press:" << total_keyboard_press_events_in_buffer << L" Mouse All:" << mouse_total_events_in_buffer << L")\n");
     LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"evaluate_implicit_feedback: Bitti. Geri bildirimler döndürülüyor.\n"); 
     return potential_feedbacks;
+}
+
+// processMessages metodunun tanımı
+//Bu metot, mesaj kuyruğunda bekleyen mesajları sürekli olarak kontrol edecek ve her bir mesajı işleyecektir. LearningRateAdjustment mesajı alındığında, adjust_learning_rate metodunu çağırarak öğrenme oranını güncelleyecektir.
+void IntentLearner::adjust_learning_rate(float new_learning_rate) {
+    if (new_learning_rate > 0.0f && new_learning_rate <= 1.0f) {
+        learning_rate = new_learning_rate;
+        std::cout << "[INTENT-LEARNER] Learning rate adjusted to: " << learning_rate << std::endl;
+    } else {
+        std::cerr << "[INTENT-LEARNER] Invalid learning rate: " << new_learning_rate << ". Value must be between 0.0 and 1.0."
+ << std::endl;
+    }
+}
+
+void IntentLearner::processMessages() {
+    while (!messageQueue.isEmpty()) {
+        MessageData message = messageQueue.dequeue();
+
+        switch (message.type) {
+            case MessageType::LearningRateAdjustment:
+                adjust_learning_rate(message.learningRate);
+                break;
+            default:
+                std::cerr << "[INTENT-LEARNER] Unknown message type received."
+ << std::endl;
+                break;
+        }
+    }
+}
+
+void IntentLearner::update_action_success_score(UserIntent intent, AIAction next_action, float success_score) {
+    // ... (Implementasyon)
+}
+void IntentLearner::adjust_template(UserIntent intent, const DynamicSequence& seq, float value) {
+    // Fonksiyonun içeriğini buraya ekleyin
+}
+
+void IntentLearner::evaluate_and_meta_adjust() {
+    // Fonksiyonun içeriğini buraya ekleyin
+}
+
+void IntentLearner::adjust_action_score(UserIntent intent, AIAction action, float score) {
+    // Fonksiyonun içeriğini buraya ekleyin
 }

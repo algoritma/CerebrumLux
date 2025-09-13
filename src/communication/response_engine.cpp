@@ -118,7 +118,7 @@ ResponseEngine::ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_m
 }
 
 std::wstring ResponseEngine::generate_response(UserIntent current_intent, AbstractState current_abstract_state, AIGoal current_goal, const DynamicSequence& sequence) const {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"ResponseEngine::generate_response: Niyet=" << intent_to_string(current_intent) 
+    LOG(LogLevel::DEBUG, L"ResponseEngine::generate_response: Niyet=" << intent_to_string(current_intent) 
                 << L", Durum=" << abstract_state_to_string(current_abstract_state) << L", Hedef=" << static_cast<int>(current_goal) << L"\n");
 
     std::wstring final_response_text = L"";
@@ -126,7 +126,7 @@ std::wstring ResponseEngine::generate_response(UserIntent current_intent, Abstra
 
     // Kriptofig vektörünün boş olup olmadığını kontrol et (artık latent kriptofig)
     if (sequence.latent_cryptofig_vector.empty() || sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) {
-        LOG_MESSAGE(LogLevel::WARNING, std::wcerr, L"ResponseEngine::generate_response: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Genel yanıt döndürülüyor.\n");
+        LOG(LogLevel::WARNING, L"ResponseEngine::generate_response: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Genel yanıt döndürülüyor.\n");
         if (response_templates.count(UserIntent::None) && response_templates.at(UserIntent::None).count(AbstractState::None)) {
             std::uniform_int_distribution<> distrib(0, response_templates.at(UserIntent::None).at(AbstractState::None).responses.size() - 1);
             return response_templates.at(UserIntent::None).at(AbstractState::None).responses[distrib(gen)];
@@ -326,6 +326,6 @@ std::wstring ResponseEngine::generate_response(UserIntent current_intent, Abstra
         }
     }
 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"ResponseEngine::generate_response: Oluşturulan yanıt: " << final_response_text << L"\n");
+    LOG(LogLevel::DEBUG, L"ResponseEngine::generate_response: Oluşturulan yanıt: " << final_response_text << L"\n");
     return final_response_text; 
 }

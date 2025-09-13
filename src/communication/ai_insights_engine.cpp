@@ -10,6 +10,9 @@
 #include <cmath>     // std::sqrt için
 #include <algorithm> // std::min/max için
 #include <iostream>  // std::wcerr için
+#include <iostream>
+#include <iomanip>   // std::fixed, std::setprecision için
+
 
 // YENİ: AIInsightsEngine Implementasyonu
 AIInsightsEngine::AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& learner_ref, 
@@ -17,6 +20,14 @@ AIInsightsEngine::AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& 
                                  CryptofigProcessor& cryptofig_processor_ref)
     : analyzer(analyzer_ref), learner(learner_ref), predictor(predictor_ref), 
       autoencoder(autoencoder_ref), cryptofig_processor(cryptofig_processor_ref) {}
+//    AIInsightsEngine(IntentLearner& intentLearner);
+
+std::string AIInsightsEngine::generateResponse(UserIntent intent, const std::vector<float>& latent_cryptofig_vector) {
+    // ... (Implementasyon)
+    return "Response"; // Örnek bir yanıt
+}
+
+
 
 float AIInsightsEngine::calculate_average_feedback_score(UserIntent intent_id) const {
     auto it = learner.get_implicit_feedback_history().find(intent_id);
@@ -28,7 +39,7 @@ float AIInsightsEngine::calculate_average_feedback_score(UserIntent intent_id) c
 
 float AIInsightsEngine::calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const {
     if (statistical_features.empty() || statistical_features.size() != CryptofigAutoencoder::INPUT_DIM) {
-        LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"AIInsightsEngine::calculate_autoencoder_reconstruction_error: İstatistiksel özellik vektörü boş veya boyut uyuşmuyor. Yüksek hata döndürülüyor.\n");
+        LOG(LogLevel::ERR_CRITICAL, L"AIInsightsEngine::calculate_autoencoder_reconstruction_error: İstatistiksel özellik vektörü boş veya boyut uyuşmuyor. Yüksek hata döndürülüyor.\n");
         return 1.0f; // Hata durumunda yüksek hata döndür
     }
     std::vector<float> reconstructed = autoencoder.reconstruct(statistical_features);
@@ -46,7 +57,7 @@ IntentAnalyzer& AIInsightsEngine::get_analyzer() const {
 
 
 std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence& current_sequence) {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"AIInsightsEngine::generate_insights: Icgoru uretimi basladi.\n");
+    LOG(LogLevel::DEBUG, L"AIInsightsEngine::generate_insights: Icgoru uretimi basladi.\n");
     std::vector<AIInsight> insights;
 
     // 1. Niyet Analizörü Performansı Hakkında İçgörüler
@@ -92,6 +103,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         insights.push_back({L"İç durumum stabil görünüyor. Yeni öğrenme fırsatları için hazırım.", AIAction::None, 0.0f});
     }
 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << L"\n");
+    LOG(LogLevel::DEBUG, L"AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << L"\n");
     return insights;
 }
+

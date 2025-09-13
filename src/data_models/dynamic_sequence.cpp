@@ -63,7 +63,8 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
     for (size_t i = 0; i < signal_buffer.size(); ++i) {
         const AtomicSignal& current_sig = signal_buffer[i];
 
-        LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"DynamicSequence::update_from_signals: Sinyal isleniyor (indeks " << i << L", tip: " << static_cast<int>(current_sig.sensor_type) << L").\n");
+        LOG(LogLevel::TRACE, L"DynamicSequence::update_from_signals: Sinyal isleniyor (indeks " << i << L", tip: " << static_cast<int>(current_sig.sensor_type) << L").
+");
 
         if (current_sig.sensor_type == SensorType::Keyboard) {
             if (current_sig.event_type == KeyEventType::Press) {

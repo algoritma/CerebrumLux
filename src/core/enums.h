@@ -142,6 +142,18 @@ enum class LogLevel : unsigned char {
     TRACE     // Çok detaylı, her adımı gösteren çıktılar
 };
 
+
+// LearningRateAdjustmentMessage 
+enum class MessageType {
+    Unknown,
+    LearningRateAdjustment
+};
+
+struct MessageData {
+    MessageType type;
+    float learningRate;
+};
+
 #endif // CEREBRUM_LUX_ENUMS_H
 
 

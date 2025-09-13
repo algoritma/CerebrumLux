@@ -8,12 +8,14 @@
 #include <stringapiset.h> // _CRT_WIDE için (Windows özel)
 #endif
 
+//mesajlamşa için
+#include "utils.h"
+#include <iostream>
+
 // Bu dosyada tüm genel yardımcı fonksiyon implementasyonları yer alacak:
 // log_level_to_string, get_current_timestamp_wstr, hash_string
 
-// Global değişkenlerin tanımları
-LogLevel g_current_log_level = LogLevel::INFO; // Varsayılan olarak sadece bilgi mesajları
-std::wofstream g_log_file_stream;
+
 
 // Fonksiyon implementasyonları (utils.h'deki bildirimlere uygun olarak)
 
@@ -93,4 +95,27 @@ unsigned short hash_string(const std::wstring& s) {
         hash = (hash * 31 + c) % 65535; 
     }
     return hash;
+}
+
+// MessageQueue sınıfın  tanımı
+void MessageQueue::enqueue(MessageData data) {
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        queue.push(data);
+    }
+    cv.notify_one();
+}
+
+MessageData MessageQueue::dequeue() {
+    std::unique_lock<std::mutex> lock(mutex);
+    cv.wait(lock, [this]{ return !queue.empty(); });
+    
+    MessageData data = queue.front();
+    queue.pop();
+    return data;
+}
+
+bool MessageQueue::isEmpty() {
+    std::lock_guard<std::mutex> lock(mutex);
+    return queue.empty();
 }

@@ -13,23 +13,23 @@ CryptofigProcessor::CryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAu
 
 // Bu metod DynamicSequence'i işleyerek hem statistical_features_vector'ı kullanacak hem de latent_cryptofig_vector'ı güncelleyecek.
 void CryptofigProcessor::process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate) {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"CryptofigProcessor::process_sequence: Latent kriptofig Autoencoder ile olusturuluyor ve ogrenme tetikleniyor.\n");
+    LOG(LogLevel::DEBUG, L"CryptofigProcessor::process_sequence: Latent kriptofig Autoencoder ile olusturuluyor ve ogrenme tetikleniyor.\n");
     if (sequence.statistical_features_vector.empty() || sequence.statistical_features_vector.size() != CryptofigAutoencoder::INPUT_DIM) {
-        LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"CryptofigProcessor::process_sequence: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Autoencoder işlemi atlanıyor.\n");
+        LOG(LogLevel::ERR_CRITICAL, L"CryptofigProcessor::process_sequence: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Autoencoder işlemi atlanıyor.\n");
         sequence.latent_cryptofig_vector.assign(CryptofigAutoencoder::LATENT_DIM, 0.0f); // Latent vektörü sıfırla
         return;
     }
     sequence.latent_cryptofig_vector = autoencoder.encode(sequence.statistical_features_vector);
     autoencoder.adjust_weights_on_error(sequence.statistical_features_vector, autoencoder_learning_rate);
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"CryptofigProcessor::process_sequence: Latent kriptofig olusturuldu ve Autoencoder ogrenme adimi tamamlandi.\n");
+    LOG(LogLevel::DEBUG, L"CryptofigProcessor::process_sequence: Latent kriptofig olusturuldu ve Autoencoder ogrenme adimi tamamlandi.\n");
 }
 
 
 void CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, UserIntent target_intent) const {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"CryptofigProcessor::apply_cryptofig_for_learning: Niyet " << intent_to_string(target_intent) << L" için kriptofig ile öğrenme başlatıldı.\n");
+    LOG(LogLevel::DEBUG, L"CryptofigProcessor::apply_cryptofig_for_learning: Niyet " << intent_to_string(target_intent) << L" için kriptofig ile öğrenme başlatıldı.\n");
     std::vector<float> current_weights = analyzer.get_intent_weights(target_intent);
     if (current_weights.empty() || current_weights.size() != received_cryptofig.size()) {
-        LOG_MESSAGE(LogLevel::ERR_CRITICAL, std::wcerr, L"apply_cryptofig_for_learning: Boyut uyuşmazlığı veya boş ağırlıklar. İlerleme durduruldu.\n");
+        LOG(LogLevel::ERR_CRITICAL, L"apply_cryptofig_for_learning: Boyut uyuşmazlığı veya boş ağırlıklar. İlerleme durduruldu.\n");
         return;
     }
 
@@ -42,10 +42,19 @@ void CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, co
     }
     analyzer.update_template_weights(target_intent, current_weights);
     
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme tamamlandı.\n");
+    LOG(LogLevel::DEBUG, L"CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme tamamlandı.\n");
 }
 
 // Getter metodu tanımı
+const CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() const {
+    return autoencoder;
+}
+/*
 CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() const { 
     return autoencoder; 
 }
+*/
+CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() {
+    return autoencoder;
+}
+

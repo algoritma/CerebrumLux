@@ -57,6 +57,11 @@
         "locale": "cpp",
         "map": "cpp",
         "fstream": "cpp",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "condition_variable": "cpp",
+        "mutex": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp"
     }
 }
