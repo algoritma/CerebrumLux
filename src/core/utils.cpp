@@ -19,6 +19,8 @@
 
 // Fonksiyon implementasyonları (utils.h'deki bildirimlere uygun olarak)
 
+/*
+//kaldırıldı. logger.cpp de aynı tanım var. burada tekrarı hataya sebep oluyor
 // log_level_to_string fonksiyonunun tanımı
 std::wstring log_level_to_string(LogLevel level) {
     switch (level) {
@@ -31,6 +33,7 @@ std::wstring log_level_to_string(LogLevel level) {
         default:                 return L"UNKNOWN";
     }
 }
+*/
 
 // Mevcut zamanı formatlı bir string olarak döndüren yardımcı fonksiyon
 std::wstring get_current_timestamp_wstr() {
@@ -85,6 +88,22 @@ std::wstring abstract_state_to_string(AbstractState state) {
         case AbstractState::SocialInteraction: return L"Sosyal Etkilesim";
         case AbstractState::Count: return L"Durum Sayisi"; 
         default: return L"Tanimlanmamis Durum";
+    }
+}
+
+// goal_to_string fonksiyonunun tanımı
+std::wstring goal_to_string(AIGoal goal) {
+    switch (goal) {
+        case AIGoal::None: return L"Yok";
+        case AIGoal::OptimizeProductivity: return L"Üretkenliği Optimize Etmek";
+        case AIGoal::MaximizeBatteryLife: return L"Batarya Ömrünü Maksimuma Çıkarmak";
+        case AIGoal::ReduceDistractions: return L"Dikkat Dağıtıcıları Azaltmak";
+        case AIGoal::EnhanceCreativity: return L"Yaratıcılığı Artırmak";
+        case AIGoal::ImproveGamingExperience: return L"Oyun Deneyimini İyileştirmek";
+        case AIGoal::FacilitateResearch: return L"Araştırmayı Kolaylaştırmak";
+        case AIGoal::SelfImprovement: return L"Kendi Kendini Geliştirmek";
+        case AIGoal::Count: return L"Hedef Sayısı";
+        default: return L"Bilinmeyen Hedef";
     }
 }
 

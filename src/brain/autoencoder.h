@@ -5,7 +5,7 @@
 #include <string>  // For std::wstring (save/load için)
 #include <random>  // For std::random_device, std::mt19937, std::uniform_real_distribution
 #include "../core/enums.h" // LogLevel için
-#include "../core/utils.h" // LOG_MESSAGE için (ileri bildirimden sonra)
+#include "../core/utils.h" // LOG için (ileri bildirimden sonra)
 #include <cmath>   // std::exp için
 
 // *** CryptofigAutoencoder sınıfı tanımı ***
@@ -18,11 +18,13 @@ public:
     CryptofigAutoencoder();
 
     // Encoder: statistical_features -> latent_cryptofig
-    std::vector<float> encode(const std::vector<float>& input_features) const;
+    virtual std::vector<float> encode(const std::vector<float>& input_features) const;
 
     // Decoder: latent_cryptofig -> reconstructed_statistical_features
-    std::vector<float> decode(const std::vector<float>& latent_features) const;
+    virtual std::vector<float> decode(const std::vector<float>& latent_features) const;
+    virtual float calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const; // YENİ EKLENDİ VE VIRTUAL
 
+    
     // Encoder ve Decoder'ı birleştirerek yeniden yapılandırma
     std::vector<float> reconstruct(const std::vector<float>& input_features) const;
 

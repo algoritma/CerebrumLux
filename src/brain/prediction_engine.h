@@ -7,7 +7,7 @@
 #include <limits>  // For std::numeric_limits
 #include <cmath>   // For std::exp
 #include "../core/enums.h"         // Enumlar için
-#include "../core/utils.h"         // intent_to_string için (LOG_MESSAGE içinde kullanılır)
+#include "../core/utils.h"         // intent_to_string için (LOG içinde kullanılır)
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
 #include "autoencoder.h"           // CryptofigAutoencoder::LATENT_DIM için (sadece boyut için)
@@ -45,7 +45,7 @@ class PredictionEngine {
 public:
     PredictionEngine(IntentAnalyzer& analyzer_ref, SequenceManager& manager_ref);
 
-    UserIntent predict_next_intent(UserIntent previous_intent, const DynamicSequence& current_sequence) const; // latent_cryptofig_vector kullanacak
+    virtual UserIntent predict_next_intent(UserIntent previous_intent, const DynamicSequence& current_sequence) const; // latent_cryptofig_vector kullanacak
 
     void update_state_graph(UserIntent previous_intent, UserIntent current_intent, const DynamicSequence& sequence); // latent_cryptofig_vector kullanacak
     

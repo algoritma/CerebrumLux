@@ -49,14 +49,13 @@ int main() {
     std::wcin.imbue(std::locale(""));
 
     Logger::get_instance().init(LogLevel::INFO, AI_LOG_FILE);
-    LOG(LogLevel::INFO, L"Log dosyası açıldı: " << AI_LOG_FILE << L"\n");
+    LOG(LogLevel::INFO, std::wcout, L"Log dosyası açıldı: " << AI_LOG_FILE << L"\n");
 
     // AI bileşenlerini başlat
     SimulatedAtomicSignalProcessor simulatedSignalProcessor;
     SequenceManager sequenceManager;
 
     IntentAnalyzer analyzer; // IntentAnalyzer nesnesi oluşturun
-
     IntentLearner learner(analyzer); // IntentLearner nesnesini IntentAnalyzer ile oluşturun
 
     PredictionEngine predictor(analyzer, sequenceManager);
@@ -86,8 +85,7 @@ int main() {
 
     // Kullanıcı arayüzü mesajları
     std::wcout << L"\n--- Cerebrum Lux Baslatildi ---" << std::endl;
-                     std::wcout << L"    - Mevcut Log Seviyesi: " << log_level_to_string(Logger::get_instance().get_level()) << std::endl;
-    std::wcout << L"  - Raporlama Seviyesini Degistirmek Icin 'L' tusuna basin." << std::endl;
+    std::wcout << L"    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << std::endl;    std::wcout << L"  - Raporlama Seviyesini Degistirmek Icin 'L' tusuna basin." << std::endl;
     std::wcout << L"    (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE)" << std::endl;
     std::wcout << L"  - Durum Raporu Icin 'S' veya 'R' tusuna basin." << L" (Yeni satırda girilmelidir)" << std::endl;
     std::wcout << L"  - Cikis Icin 'Q' tusuna basin." << L" (Yeni satırda girilmelidir)" << std::endl;
@@ -95,8 +93,6 @@ int main() {
 
     UserIntent last_predicted_intent = UserIntent::Unknown; 
     AIAction last_suggested_action = AIAction::None; 
-
-    
 
     
     while (true) {
@@ -139,7 +135,7 @@ int main() {
                  const auto& history_map = learner.get_implicit_feedback_history(); 
                  for (int i = static_cast<int>(UserIntent::FastTyping); i < static_cast<int>(UserIntent::Count); ++i) { 
                      UserIntent intent_id = static_cast<UserIntent>(i);
-                     auto it = history_map.find(intent_id); 
+                     auto it = history_map.find(intent_id);
 
                      if (it != history_map.end() && !it->second.empty()) { 
                          float avg = std::accumulate(it->second.begin(), it->second.end(), 0.0f) / it->second.size();
@@ -152,22 +148,20 @@ int main() {
                      std::wcout << L"    - Toplam Ort. Ortuk Performans (Bilinen Niyetler): " << std::fixed << std::setprecision(3) << total_implicit_performance / implicit_count << std::endl;
                  } else {
                      std::wcout << L"    - Henuz bilinen niyetler icin yeterli ortuk performans verisi yok." << std::endl;
-                 }
-
-                 std::wcout << L"    - Mevcut Log Seviyesi: " << log_level_to_string(Logger::get_instance().get_level()) << std::endl;
+                 }                 
+                 std::wcout << L"    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << std::endl;
                  std::wcout << L"    - AI, niyetleri basariyla tahmin etmeye baslamistir. Ogrenme devam ediyor." << std::endl;
                  std::wcout << L"Rapor tamamlandi. Devam etmek icin herhangi bir tusa basin (yeni girdi): ";
                  continue; 
             } else if (ch == L'l') { 
-                                                                std::wcout << L"Yeni Log Seviyesi Seçin (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE, Mevcut: " << log_level_to_string(Logger::get_instance().get_level()) << L"): ";
+                std::wcout << L"Yeni Log Seviyesi Seçin (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE, Mevcut: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << L"): ";
                 int level_int;
                 std::wcin >> level_int;
                 if (std::wcin.fail() || level_int < static_cast<int>(LogLevel::SILENT) || level_int > static_cast<int>(LogLevel::TRACE)) {
                     std::wcin.clear(); 
                     std::wcout << L"Geçersiz log seviyesi. Mevcut seviye korunuyor." << std::endl;
                 } else {
-                    Logger::get_instance().init(static_cast<LogLevel>(level_int));
-                    std::wcout << L"Log Seviyesi '" << log_level_to_string(static_cast<LogLevel>(level_int)) << L"' olarak ayarlandi." << std::endl;
+                    std::wcout << L"Log Seviyesi '" << Logger::get_instance().level_to_string(static_cast<LogLevel>(level_int)) << L"' olarak ayarlandi." << std::endl;
                 }
                 std::wcin.ignore(std::numeric_limits<std::streamsize>::max(), L'\n'); 
                 continue; 
@@ -182,20 +176,20 @@ int main() {
 
         for (int i = 0; i < num_other_signals_to_simulate; ++i) {
             AtomicSignal other_signal = simulatedSignalProcessor.capture_next_signal(); 
-            LOG(LogLevel::DEBUG, L"Diger sensor sinyali olusturuldu (tip: " << static_cast<int>(other_signal.sensor_type) << L"). Manager'a ekleniyor.\n"); 
+            LOG(LogLevel::DEBUG, std::wcout, L"Diger sensor sinyali olusturuldu (tip: " << static_cast<int>(other_signal.sensor_type) << L"). Manager'a ekleniyor.\n"); 
             sequenceManager.add_signal(other_signal, cryptofig_processor); 
-            LOG(LogLevel::DEBUG, L"Diger sensor sinyali manager'a eklendi.\n"); 
+            LOG(LogLevel::DEBUG, std::wcout, L"Diger sensor sinyali manager'a eklendi.\n"); 
         }
 
         bool sequence_updated_in_this_line = false; 
 
         for (wchar_t ch : user_input_line) {
             AtomicSignal keyboard_signal = simulatedSignalProcessor.create_keyboard_signal(ch); 
-            LOG(LogLevel::DEBUG, L"Klavye sinyali manager'a ekleniyor (karakter: '" << ch << L").\n"); 
+            LOG(LogLevel::DEBUG, std::wcout, L"Klavye sinyali manager'a ekleniyor (karakter: '" << ch << L").\n"); 
             if (sequenceManager.add_signal(keyboard_signal, cryptofig_processor)) { 
                 sequence_updated_in_this_line = true; 
             }
-            LOG(LogLevel::DEBUG, L"Klavye sinyali manager'a eklendi. Sequence güncellendi mi? " << (sequence_updated_in_this_line ? L"Evet" : L"Hayir") << L".\n"); 
+            LOG(LogLevel::DEBUG, std::wcout, L"Klavye sinyali manager'a eklendi. Sequence güncellendi mi? " << (sequence_updated_in_this_line ? L"Evet" : L"Hayir") << L".\n"); 
         }
 
         if (sequence_updated_in_this_line) { 
@@ -235,7 +229,7 @@ int main() {
                 }
             }
             std::wcout << L"]" << std::endl;
-
+            
             // YENİ: Dinamik hedef belirleme
             goal_manager.evaluate_and_set_goal(*sequenceManager.current_sequence); // Her döngüde hedefi güncelle
             std::wcout << L"AI'ın Mevcut Hedefi: ";
@@ -256,7 +250,15 @@ int main() {
             UserIntent current_predicted_intent = analyzer.analyze_intent(*sequenceManager.current_sequence);
             std::wcout << L"Tahmini Kullanici Niyeti: " << intent_to_string(current_predicted_intent) << std::endl; 
 
-            AbstractState current_abstract_state = analyzer.analyze_abstract_state(*sequenceManager.current_sequence, current_predicted_intent);
+            // current_abstract_state çıkarımı için IntentLearner'ı kullan
+            // DÜZELTME: SequenceManager'ın public unique_ptr'ına ve içindeki DynamicSequence'in recent_signals'ına erişim.
+            // Ancak DynamicSequence'de recent_signals YOK. Bu yeni bir problem olacak.
+            // Şimdilik SequenceManager'ın kendi signal_buffer'ını kullanalım,
+            // zira IntentLearner::infer_abstract_state bir std::deque<AtomicSignal> bekliyor.
+            AbstractState current_abstract_state = learner.infer_abstract_state(sequenceManager.get_signal_buffer_copy());            
+            
+            // veya eğer DynamicSequence'in kendisinde recent_signals tutuluyorsa:
+            // AbstractState current_abstract_state = learner.infer_abstract_state(sequenceManager.current_sequence->recent_signals);
             std::wcout << L"Tahmini Soyut Durum: " << abstract_state_to_string(current_abstract_state) << std::endl;
 
             learner.process_feedback(*sequenceManager.current_sequence, current_predicted_intent, sequenceManager.get_signal_buffer_copy());

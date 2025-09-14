@@ -18,7 +18,7 @@ struct IntentTemplate;
 class IntentAnalyzer {
 public:
     IntentAnalyzer(); 
-    UserIntent analyze_intent(const DynamicSequence& sequence); // latent_cryptofig_vector kullanacak
+    virtual UserIntent analyze_intent(const DynamicSequence& sequence); // Eklendi: virtual
     
     std::vector<IntentTemplate> intent_templates; 
 
@@ -30,8 +30,6 @@ public:
     void load_memory(const std::wstring& filename);
 
     void report_learning_performance(UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg);
-
-    AbstractState analyze_abstract_state(const DynamicSequence& sequence, UserIntent current_intent) const; // latent_cryptofig_vector kullanacak
 
     float confidence_threshold_for_known_intent; 
     void set_confidence_threshold(float threshold); 

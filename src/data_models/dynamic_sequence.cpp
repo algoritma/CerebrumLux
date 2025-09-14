@@ -1,11 +1,13 @@
 #include "dynamic_sequence.h" // Kendi başlık dosyasını dahil et
 #include "../sensors/atomic_signal.h" // AtomicSignal için
 #include "../brain/autoencoder.h" // CryptofigAutoencoder için
-#include "../core/utils.h"       // LOG_MESSAGE için
+#include "../core/logger.h"      // LOG makrosu için
+#include "../core/utils.h"       // Diğer yardımcı fonksiyonlar için
 #include <numeric>   // std::accumulate için
 #include <cmath>     // std::sqrt, std::log10, std::fabs için
 #include <algorithm> // std::min, std::max için
-#include <iostream>  // std::wcerr için EKLEDİM
+#include <iostream>  // std::wcout, std::wcerr için
+#include <iomanip>   // std::fixed, std::setprecision için
 
 // === DynamicSequence Implementasyonlari ===
 
@@ -24,12 +26,12 @@ DynamicSequence::DynamicSequence() :
 
 // update_from_signals fonksiyonu CryptofigAutoencoder referansı alacak şekilde güncellendi
 void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal_buffer, long long current_time_us, unsigned short app_hash, CryptofigAutoencoder& autoencoder) {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"DynamicSequence::update_from_signals: Basladi. Buffer boyutu: " << signal_buffer.size() << L"\n");
+    LOG(LogLevel::DEBUG, std::wcout, L"DynamicSequence::update_from_signals: Basladi. Buffer boyutu: " << signal_buffer.size() << L"\n");
     last_updated_us = current_time_us;
     current_app_hash = app_hash; 
 
     if (signal_buffer.empty()) {
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"DynamicSequence::update_from_signals: Buffer boş, sıfırlanıyor.\n");
+        LOG(LogLevel::DEBUG, std::wcout, L"DynamicSequence::update_from_signals: Buffer boş, sıfırlanıyor.\n");
         statistical_features_vector.clear();
         latent_cryptofig_vector.clear();
         return;
@@ -47,7 +49,7 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
     int mouse_total_events_in_buffer = 0; 
     int last_mouse_x_in_buffer = -1; 
     int last_mouse_y_in_buffer = -1; 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"DynamicSequence::update_from_signals: Fare metrikleri başlangıç değerleri ayarlandı.\n"); 
+    LOG(LogLevel::DEBUG, std::wcout, L"DynamicSequence::update_from_signals: Fare metrikleri başlangıç değerleri ayarlandı.\n"); 
 
     int total_brightness_sum = 0; 
     int brightness_sample_count = 0;
@@ -63,8 +65,7 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
     for (size_t i = 0; i < signal_buffer.size(); ++i) {
         const AtomicSignal& current_sig = signal_buffer[i];
 
-        LOG(LogLevel::TRACE, L"DynamicSequence::update_from_signals: Sinyal isleniyor (indeks " << i << L", tip: " << static_cast<int>(current_sig.sensor_type) << L").
-");
+        LOG(LogLevel::TRACE, std::wcout, L"DynamicSequence::update_from_signals: Sinyal isleniyor (indeks " << i << L", tip: " << static_cast<int>(current_sig.sensor_type) << L")\n");
 
         if (current_sig.sensor_type == SensorType::Keyboard) {
             if (current_sig.event_type == KeyEventType::Press) {
@@ -82,22 +83,22 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
                 }
             }
         } else if (current_sig.sensor_type == SensorType::Mouse) {
-            LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"DynamicSequence::update_from_signals: Fare sinyali isleniyor.\n");
+            LOG(LogLevel::TRACE, std::wcout, L"DynamicSequence::update_from_signals: Fare sinyali isleniyor.\n");
             mouse_total_events_in_buffer++; 
             if (current_sig.mouse_event_type == 0) { 
-                LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"DynamicSequence::update_from_signals: Fare hareket sinyali (x=" << current_sig.mouse_x << L", y=" << current_sig.mouse_y << L").\n");
+                LOG(LogLevel::TRACE, std::wcout, L"DynamicSequence::update_from_signals: Fare hareket sinyali (x=" << current_sig.mouse_x << L", y=" << current_sig.mouse_y << L").\n");
                 if (last_mouse_x_in_buffer != -1 && last_mouse_y_in_buffer != -1) { 
                     total_mouse_movement += (std::abs(current_sig.mouse_x - last_mouse_x_in_buffer) + std::abs(current_sig.mouse_y - last_mouse_y_in_buffer));
-                    LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"DynamicSequence::update_from_signals: Toplam fare hareketi güncellendi: " << total_mouse_movement << L".\n");
+                    LOG(LogLevel::TRACE, std::wcout, L"DynamicSequence::update_from_signals: Toplam fare hareketi güncellendi: " << total_mouse_movement << L".\n");
                 }
                 mouse_move_count++;
             } else if (current_sig.mouse_event_type == 1) { 
-                LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"DynamicSequence::update_from_signals: Fare tiklama sinyali (x=" << current_sig.mouse_x << L", y=" << current_sig.mouse_y << L", button=" << (int)current_sig.mouse_button_state << L").\n");
+                LOG(LogLevel::TRACE, std::wcout, L"DynamicSequence::update_from_signals: Fare tiklama sinyali (x=" << current_sig.mouse_x << L", y=" << current_sig.mouse_y << L", button=" << (int)current_sig.mouse_button_state << L").\n");
                 mouse_click_count++;
             }
             last_mouse_x_in_buffer = current_sig.mouse_x;
             last_mouse_y_in_buffer = current_sig.mouse_y; 
-            LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"DynamicSequence::update_from_signals: last_mouse_x_in_buffer ve last_mouse_y_in_buffer güncellendi.\n");            
+            LOG(LogLevel::TRACE, std::wcout, L"DynamicSequence::update_from_signals: last_mouse_x_in_buffer ve last_mouse_y_in_buffer güncellendi.\n");            
         } else if (current_sig.sensor_type == SensorType::Display) {
             total_brightness_sum += current_sig.display_brightness;
             brightness_sample_count++;
@@ -117,7 +118,7 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
             this->current_network_active = current_sig.network_active; // network_active bilgisini kaydet
         }
     } 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"DynamicSequence::update_from_signals: Sinyal işleme döngüsü bitti.\n");
+    LOG(LogLevel::DEBUG, std::wcout, L"DynamicSequence::update_from_signals: Sinyal işleme döngüsü bitti.\n");
 
     if (!intervals.empty()) {
         long long sum_intervals = std::accumulate(intervals.begin(), intervals.end(), 0LL);
@@ -185,5 +186,5 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
     // Hata durumunda Autoencoder'ın ağırlıklarını ayarla (heuristik öğrenme)
     autoencoder.adjust_weights_on_error(statistical_features_vector, 0.01f); // Öğrenme oranı örnek
 
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"DynamicSequence::update_from_signals: Bitti. Cryptofig vektoru olusturuldu.\n");
+    LOG(LogLevel::DEBUG, std::wcout, L"DynamicSequence::update_from_signals: Bitti. Cryptofig vektoru olusturuldu.\n");
 }

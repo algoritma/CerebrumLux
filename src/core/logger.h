@@ -22,6 +22,9 @@ public:
     Logger(const Logger&) = delete;
     LogLevel get_level() const;
 
+    // LogLevel'ı string'e çevirmek için public bir metot
+    std::wstring level_to_string(LogLevel level) const;
+
 private:
     Logger() : level_(LogLevel::INFO) {}
     ~Logger();
@@ -31,9 +34,19 @@ private:
     std::mutex mutex_;
 };
 
-// Yeni LOG makrosu: stream'i de belirtir
-#define LOG(level, os, message_stream) do { if (Logger::get_instance().get_level() >= level) { std::wstringstream ss; ss << message_stream; Logger::get_instance().log(level, os, ss, __FILE__, __LINE__); } } while(0)
+// LOG_INIT makrosu: Logger'ı başlangıçta yapılandırmak için
+#define LOG_INIT(log_file_name) Logger::get_instance().init(LogLevel::INFO, log_file_name)
 
+// Yeni LOG makrosu: stream'i de belirtir
+#define LOG(level, os, message_stream) \
+    do { \
+        if (Logger::get_instance().get_level() >= level) { \
+            std::wstringstream ss_log_stream; \
+            ss_log_stream << message_stream; /* message_stream ifadesinin etrafındaki parantezleri kaldırdık */ \
+            Logger::get_instance().log(level, os, ss_log_stream, __FILE__, __LINE__); \
+        } \
+    } while(0)
+    
 // Eski LOG makrosu (varsayılan olarak std::wcout'a yazar)
 #define LOG_DEFAULT(level, message_stream) \
     do { \

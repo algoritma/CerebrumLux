@@ -3,7 +3,7 @@
 
 #include <string> // For wstring
 #include "../core/enums.h"               // Enumlar için
-#include "../core/utils.h"               // LOG_MESSAGE için
+#include "../core/utils.h"               // LOG için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "../communication/ai_insights_engine.h" // AIInsightsEngine için ileri bildirim
 #include "../brain/intent_analyzer.h" // IntentAnalyzer için ileri bildirim
@@ -17,7 +17,7 @@ class IntentAnalyzer;
 class GoalManager {
 public:
     GoalManager(AIInsightsEngine& insights_engine_ref); 
-    AIGoal get_current_goal() const;
+    virtual AIGoal get_current_goal() const; // Eklendi: virtual
     void set_current_goal(AIGoal goal);
     void evaluate_and_set_goal(const DynamicSequence& current_sequence); // Dinamik hedef belirleme
 private:

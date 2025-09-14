@@ -26,8 +26,10 @@ public:
 
     void apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, UserIntent target_intent) const;
     //CryptofigAutoencoder& get_autoencoder() const { return autoencoder; } // Getter metodu
-    CryptofigAutoencoder& get_autoencoder(); //non-const versiyo
-    const CryptofigAutoencoder& get_autoencoder() const; // Getter metodu - Sadece prototip
+    virtual void process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner); // YENİ EKLENDİ VE VIRTUAL
+    virtual std::vector<float> generate_cryptofig_from_signals(const DynamicSequence& sequence); // YENİ EKLENDİ VE VIRTUAL
+    virtual CryptofigAutoencoder& get_autoencoder(); //non-const versiyo
+    virtual const CryptofigAutoencoder& get_autoencoder() const; // Getter metodu - Sadece prototip
 
 private:
     IntentAnalyzer& analyzer;

@@ -1,5 +1,6 @@
 #include "response_engine.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG_MESSAGE, intent_to_string, abstract_state_to_string için
+#include "../core/logger.h"      // LOG makrosu için
+#include "../core/utils.h"       // intent_to_string, abstract_state_to_string için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "../brain/intent_analyzer.h" // IntentAnalyzer için
 #include "../planning_execution/goal_manager.h" // GoalManager için
@@ -7,7 +8,7 @@
 #include "../brain/autoencoder.h" // CryptofigAutoencoder::LATENT_DIM için
 #include <iomanip>   // std::fixed, std::setprecision için
 #include <algorithm> // std::min/max için
-#include <iostream>  // std::wcerr için
+#include <iostream>  // std::wcout, std::wcerr için
 
 // === ResponseEngine Implementasyonlari ===
 ResponseEngine::ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_manager_ref, AIInsightsEngine& insights_engine_ref) 
@@ -61,13 +62,7 @@ ResponseEngine::ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_m
         L"Nasıl bir destek istersiniz? "
     };
 
-    response_templates[UserIntent::Greeting][AbstractState::None].responses = {
-        L"Merhaba! Size nasıl yardımcı olabilirim?",
-        L"Hoş geldiniz! Gününüz nasıl geçiyor?",
-        L"Selam! Hazır mısınız?"
-    };
-
-    response_templates[UserIntent::None][AbstractState::LowPerformance].responses = {
+    response_templates[UserIntent::None][AbstractState::FaultyHardware].responses = {
         L"Sistem performansınız düşük görünüyor. Optimizasyon yapmamı ister misiniz?",
         L"Uygulamalarınız yavaş mı çalışıyor? Arka plan işlemlerini kontrol edebilirim."
     };
@@ -129,7 +124,7 @@ ResponseEngine::ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_m
 }
 
 std::wstring ResponseEngine::generate_response(UserIntent current_intent, AbstractState current_abstract_state, AIGoal current_goal, const DynamicSequence& sequence) const {
-    LOG(LogLevel::DEBUG, L"ResponseEngine::generate_response: Niyet=" << intent_to_string(current_intent) 
+    LOG(LogLevel::DEBUG, std::wcout, L"ResponseEngine::generate_response: Niyet=" << intent_to_string(current_intent) 
                 << L", Durum=" << abstract_state_to_string(current_abstract_state) << L", Hedef=" << static_cast<int>(current_goal) << L"\n");
 
     std::wstring final_response_text = L"";
@@ -137,7 +132,7 @@ std::wstring ResponseEngine::generate_response(UserIntent current_intent, Abstra
 
     // Kriptofig vektörünün boş olup olmadığını kontrol et (artık latent kriptofig)
     if (sequence.latent_cryptofig_vector.empty() || sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) {
-        LOG(LogLevel::WARNING, L"ResponseEngine::generate_response: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Genel yanıt döndürülüyor.\n");
+        LOG(LogLevel::WARNING, std::wcerr, L"ResponseEngine::generate_response: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Genel yanıt döndürülüyor.\n");
         if (response_templates.count(UserIntent::None) && response_templates.at(UserIntent::None).count(AbstractState::None)) {
             std::uniform_int_distribution<> distrib(0, response_templates.at(UserIntent::None).at(AbstractState::None).responses.size() - 1);
             return response_templates.at(UserIntent::None).at(AbstractState::None).responses[distrib(gen)];
@@ -306,6 +301,14 @@ std::wstring ResponseEngine::generate_response(UserIntent current_intent, Abstra
         possible_responses.push_back(L"[AI-ICGORU]: " + insight.observation + L" ");
     }
 
+    // cryptofig_vector Entegrasyonu: latent_complexity'ye dayalı ek bilgi
+    // Eğer latent_complexity belirli bir eşiğin üzerindeyse, yanıta ek bir ifade ekle.
+    const float COMPLEXITY_THRESHOLD = 0.7f; // Örnek eşik değeri
+
+    if (latent_complexity > COMPLEXITY_THRESHOLD) {
+        possible_responses.push_back(L"Bu durum oldukça karmaşık görünüyor, daha fazla detaya ihtiyacım olabilir.");
+        LOG(LogLevel::DEBUG, std::wcout, L"ResponseEngine::generate_response: Yüksek latent karmaşıklık algılandı. Ek yanıt eklendi.");
+    }
 
     // 4. Son bir fallback veya rastgele seçim
     if (!possible_responses.empty()) {
@@ -347,6 +350,6 @@ std::wstring ResponseEngine::generate_response(UserIntent current_intent, Abstra
         }
     }
 
-    LOG(LogLevel::DEBUG, L"ResponseEngine::generate_response: Oluşturulan yanıt: " << final_response_text << L"\n");
+    LOG(LogLevel::DEBUG, std::wcout, L"ResponseEngine::generate_response: Oluşturulan yanıt: " << final_response_text << L"\n");
     return final_response_text; 
 }

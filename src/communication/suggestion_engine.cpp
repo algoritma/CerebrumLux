@@ -1,5 +1,5 @@
 #include "suggestion_engine.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG_MESSAGE için
+#include "../core/utils.h"       // LOG için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "../brain/intent_analyzer.h" // IntentAnalyzer için
 #include <algorithm> // std::max için

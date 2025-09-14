@@ -1,12 +1,13 @@
 #include "planner.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG_MESSAGE ve intent_to_string için
+#include "../core/logger.h"
+#include "../core/utils.h"       // intent_to_string için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "../brain/intent_analyzer.h" // IntentAnalyzer için
 #include "../brain/prediction_engine.h" // PredictionEngine için
 #include "../communication/ai_insights_engine.h" // AIInsightsEngine için
 #include "../planning_execution/goal_manager.h" // GoalManager için (gerekliyse, çapraz bağımlılık olabilir)
 #include <algorithm> // std::min/max için
-#include <iostream>  // std::wcerr için 
+#include <iostream>  // std::wcout, std::wcerr için 
 
 // === ActionPlanStep Implementasyonu ===
 ActionPlanStep::ActionPlanStep(AIAction act, UserIntent intent, const std::wstring& desc)
@@ -17,7 +18,7 @@ Planner::Planner(IntentAnalyzer& analyzer_ref, SuggestionEngine& suggester_ref,
             GoalManager& goal_manager_ref, PredictionEngine& predictor_ref,
             AIInsightsEngine& insights_engine_ref) 
     : analyzer(analyzer_ref), suggester(suggester_ref), goal_manager(goal_manager_ref), 
-      predictor(predictor_ref), insights_engine(insights_engine_ref) {} 
+      predictor(predictor_ref), insights_engine(insights_engine_ref) {}
 
 std::vector<ActionPlanStep> Planner::create_action_plan(UserIntent current_intent, AbstractState current_abstract_state, AIGoal current_goal, const DynamicSequence& sequence) const {
     std::vector<ActionPlanStep> plan;
@@ -96,35 +97,35 @@ std::vector<ActionPlanStep> Planner::create_action_plan(UserIntent current_inten
 
 void Planner::execute_plan(const std::vector<ActionPlanStep>& plan) {
     if (plan.empty()) {
-        LOG_MESSAGE(LogLevel::INFO, std::wcout, L"[AI-Planlayici] Bos eylem plani.\n");
+        LOG(LogLevel::INFO, std::wcout, L"[AI-Planlayici] Bos eylem plani.\n");
         return;
     }
-    LOG_MESSAGE(LogLevel::INFO, std::wcout, L"[AI-Planlayici] Eylem plani yurutuluyor:\n");
+    LOG(LogLevel::INFO, std::wcout, L"[AI-Planlayici] Eylem plani yurutuluyor:\n");
     for (const auto& step : plan) {
-        LOG_MESSAGE(LogLevel::INFO, std::wcout, L"  - " << step.description << L" (Tetkikleyen Niyet: " << intent_to_string(step.triggered_by_intent) << L")\n");
+        LOG(LogLevel::INFO, std::wcout, L"  - " << step.description << L" (Tetkikleyen Niyet: " << intent_to_string(step.triggered_by_intent) << L")\n");
         
         if (step.action == AIAction::DimScreen) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Ekrani karartma eylemi simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Ekrani karartma eylemi simule ediliyor.\n");
         } else if (step.action == AIAction::MuteNotifications) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Bildirimleri sessize alma eylemi simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Bildirimleri sessize alma eylemi simule ediliyor.\n");
         } else if (step.action == AIAction::LaunchApplication) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Uygulama baslatma eylemi simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Uygulama baslatma eylemi simule ediliyor.\n");
         } else if (step.action == AIAction::SetReminder) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Hatirlatici kurma eylemi simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Hatirlatici kurma eylemi simule ediliyor.\n");
         }
         // YENİ EYLEMLERİN SİMÜLASYONU
         else if (step.action == AIAction::SuggestBreak) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Ara verme onerisi simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Ara verme onerisi simule ediliyor.\n");
         } else if (step.action == AIAction::OptimizeForGaming) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Oyun performansi optimizasyonu simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Oyun performansi optimizasyonu simule ediliyor.\n");
         } else if (step.action == AIAction::EnableFocusMode) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Odaklanma modu etkinlestirme simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Odaklanma modu etkinlestirme simule ediliyor.\n");
         } else if (step.action == AIAction::AdjustAudioVolume) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Ses seviyesi ayari simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Ses seviyesi ayari simule ediliyor.\n");
         } else if (step.action == AIAction::OpenDocumentation) {
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Dokümantasyon acma simule ediliyor.\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Dokümantasyon acma simule ediliyor.\n");
         } else if (step.action == AIAction::SuggestSelfImprovement) { 
-            LOG_MESSAGE(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Kendi kendini geliştirme önerisi simule ediliyor: " << step.description << L"\n");
+            LOG(LogLevel::INFO, std::wcout, L"    [AI-Eylem] Kendi kendini geliştirme önerisi simule ediliyor: " << step.description << L"\n");
         }
     }
 }

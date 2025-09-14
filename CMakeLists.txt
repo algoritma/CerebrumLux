@@ -7,65 +7,63 @@ project(CerebrumLux CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Tüm kaynak dosyalarını tanımla (ana yürütülebilir dosya için)
-set(SOURCE_FILES
-    src/main.cpp
-    src/brain/autoencoder.cpp
-    src/brain/cryptofig_processor.cpp
-    src/brain/intent_analyzer.cpp
-    src/brain/intent_learner.cpp
-    src/brain/intent_template.cpp
-    src/brain/prediction_engine.cpp
-    src/communication/ai_insights_engine.cpp
-    src/communication/response_engine.cpp
-    src/communication/suggestion_engine.cpp
-    src/core/utils.cpp
-    src/core/logger.cpp
-    src/data_models/dynamic_sequence.cpp
-    src/data_models/sequence_manager.cpp
-    src/planning_execution/goal_manager.cpp
-    src/planning_execution/planner.cpp
-    src/sensors/atomic_signal.cpp
-    src/sensors/simulated_processor.cpp
+# Kaynak dizinlerini tanımla
+set(PROJECT_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(PROJECT_TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/tests") # testler src altında varsayılıyor
+
+
+# --- Ana CerebrumLux Yürütülebilir Dosyası İçin ---
+# src dizinindeki tüm .cpp dosyalarını otomatik olarak bul
+file(GLOB_RECURSE CEREBRUM_LUX_SOURCES
+    "${PROJECT_SRC_DIR}/*.cpp"
+    "${PROJECT_SRC_DIR}/brain/*.cpp"
+    "${PROJECT_SRC_DIR}/communication/*.cpp"
+    "${PROJECT_SRC_DIR}/core/*.cpp"
+    "${PROJECT_SRC_DIR}/data_models/*.cpp"
+    "${PROJECT_SRC_DIR}/planning_execution/*.cpp"
+    "${PROJECT_SRC_DIR}/sensors/*.cpp"
 )
 
 # Yürütülebilir dosyayı oluştur
-add_executable(CerebrumLux ${SOURCE_FILES})
+add_executable(CerebrumLux ${CEREBRUM_LUX_SOURCES})
 
-# Başlık dosyası yollarını belirt (ana yürütülebilir dosya için)
+# Başlık dosyası yollarını belirt
 target_include_directories(CerebrumLux PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/brain
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/communication
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/data_models
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/planning_execution
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/sensors
+    "${PROJECT_SRC_DIR}"
+    "${PROJECT_SRC_DIR}/brain"
+    "${PROJECT_SRC_DIR}/communication"
+    "${PROJECT_SRC_DIR}/core"
+    "${PROJECT_SRC_DIR}/data_models"
+    "${PROJECT_SRC_DIR}/planning_execution"
+    "${PROJECT_SRC_DIR}/sensors"
 )
 
-# Test yürütülebilir dosyası için kaynak dosyası
-set(TEST_SOURCE_FILES
-    tests/test_response_engine.cpp
-)
+# --- test_response_engine Yürütülebilir Dosyası İçin ---
+# test_response_engine.cpp dosyasını bul
+file(GLOB TEST_MAIN_SOURCE "${PROJECT_TESTS_DIR}/test_response_engine.cpp")
 
 # Test yürütülebilir dosyasını oluştur
-add_executable(test_response_engine ${TEST_SOURCE_FILES} ${SOURCE_FILES})
+# Bu test için sadece kendi kaynak dosyası ve gerekli tüm diğer proje kaynak dosyaları linklenmeli.
+# Ancak bu sefer "CerebrumLux" kütüphanesine linkleyerek tüm implementasyonları alacağız.
+add_executable(test_response_engine ${TEST_MAIN_SOURCE})
 
 # Başlık dosyası yollarını belirt (test yürütülebilir dosyası için)
 target_include_directories(test_response_engine PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/brain
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/communication
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/data_models
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/planning_execution
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/sensors
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests # Include the tests directory itself for test-specific headers if any
+    "${PROJECT_SRC_DIR}"
+    "${PROJECT_SRC_DIR}/brain"
+    "${PROJECT_SRC_DIR}/communication"
+    "${PROJECT_SRC_DIR}/core"
+    "${PROJECT_SRC_DIR}/data_models"
+    "${PROJECT_SRC_DIR}/planning_execution"
+    "${PROJECT_SRC_DIR}/sensors"
+    "${PROJECT_TESTS_DIR}" # Testlerin kendi başlıklarına erişimi için
 )
 
-# Test yürütülebilir dosyasını ana projenin kütüphanelerine bağla
-# Bu, testin ana projenin sınıflarını ve fonksiyonlarını kullanabilmesini sağlar.
-# target_link_libraries(test_response_engine CerebrumLux) # REMOVED
+# Test yürütülebilir dosyasını ana projenin yürütülebilir dosyasına linkle
+# Bu, testin ana projenin tüm implementasyonlarını (sınıf tanımları, fonksiyonlar vb.) kullanabilmesini sağlar.
+# Bu, "multiple definition" hatalarını önlemek için çok önemlidir, çünkü her .cpp ayrı derlenir.
+# Ancak bu, "undefined reference" hatalarını çözmek için daha modüler bir yol sunar.
+target_link_libraries(test_response_engine CerebrumLux)
 
 # Windows için özel bağlama (genellikle MinGW tarafından otomatik halledilir,
 # ancak emin olmak için eklenebilir, şimdilik varsayılan C++ runtime yeterli olacaktır)

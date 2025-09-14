@@ -1,11 +1,12 @@
 #include "simulated_processor.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG_MESSAGE ve hash_string için
+#include "../core/utils.h"       // LOG ve hash_string için
 #include <iostream>              // std::wcout, std::wcerr için
 #include <numeric>               // std::accumulate için
 #include <cmath>                 // std::abs için
 #include <algorithm>             // std::min, std::max, std::towlower için
 #include <chrono>                // std::chrono için
 #include <locale> // std::towlower için (cerebrum_lux_core.cpp'den geldi)
+#include "../core/logger.h"
 
 // Statik üyelerin sınıf dışında başlatılması
 std::random_device SimulatedAtomicSignalProcessor::s_rd;
@@ -15,7 +16,7 @@ std::uniform_int_distribution<int> SimulatedAtomicSignalProcessor::s_sensor_sele
 SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor() : last_key_press_time_us(0) {}
 
 bool SimulatedAtomicSignalProcessor::start_capture() {
-    LOG_MESSAGE(LogLevel::INFO, std::wcout, L"Simulasyon baslatildi. Tuslara basin (Q ile çikis).\n");
+    LOG(LogLevel::INFO, std::wcout, L"Simulasyon baslatildi. Tuslara basin (Q ile çikis).\n");
     last_key_press_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()
     ).count();
@@ -23,7 +24,7 @@ bool SimulatedAtomicSignalProcessor::start_capture() {
 }
 
 void SimulatedAtomicSignalProcessor::stop_capture() { 
-    LOG_MESSAGE(LogLevel::INFO, std::wcout, L"Simulasyon durduruldu.\n");
+    LOG(LogLevel::INFO, std::wcout, L"Simulasyon durduruldu.\n");
 }
 
 unsigned short SimulatedAtomicSignalProcessor::get_active_application_id_hash() {
@@ -61,7 +62,7 @@ AtomicSignal SimulatedAtomicSignalProcessor::create_keyboard_signal(wchar_t ch) 
         long long interval = current_time_us - last_key_press_time_us;
         interval = std::max(50000LL, std::min(1000000LL, interval)); 
         keyboard_signal.pressure_estimate = static_cast<unsigned char>(255 - (interval * 255 / 1000000LL)); 
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"Klavye sinyali aralığı: " << interval / 1000.0f << L" ms, Basınç: " << (int)keyboard_signal.pressure_estimate << L"\n");
+        LOG(LogLevel::DEBUG, std::wcerr, L"Klavye sinyali aralığı: " << interval / 1000.0f << L" ms, Basınç: " << (int)keyboard_signal.pressure_estimate << L"\n");
     } else {
         keyboard_signal.pressure_estimate = 128; 
     }
@@ -86,10 +87,10 @@ AtomicSignal SimulatedAtomicSignalProcessor::create_keyboard_signal(wchar_t ch) 
 AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
     AtomicSignal signal; 
 
-    std::uniform_int_distribution<> other_sensor_type_distrib(static_cast<int>(SensorType::Mouse), static_cast<int>(SensorType::Other)); 
+    std::uniform_int_distribution<> other_sensor_type_distrib(static_cast<int>(SensorType::Mouse), static_cast<int>(SensorType::Keyboard)); 
     int chosen_sensor_type_for_sim = other_sensor_type_distrib(s_gen);
 
-    LOG_MESSAGE(LogLevel::TRACE, std::wcerr, L"SimulatedAtomicSignalProcessor::capture_next_signal: Rastgele seçilen klavye dışı sensor tipi: " << chosen_sensor_type_for_sim << L".\n"); 
+    LOG(LogLevel::TRACE, std::wcerr, L"SimulatedAtomicSignalProcessor::capture_next_signal: Rastgele seçilen klavye dışı sensor tipi: " << chosen_sensor_type_for_sim << L".\n"); 
 
     if (static_cast<SensorType>(chosen_sensor_type_for_sim) == SensorType::Mouse) { 
         signal = simulate_mouse_event();
@@ -100,7 +101,7 @@ AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
     } else if (static_cast<SensorType>(chosen_sensor_type_for_sim) == SensorType::Network) { 
         signal = simulate_network_event();
     } else { 
-        signal.sensor_type = SensorType::Other;
+        signal.sensor_type = SensorType::Keyboard;
         signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::high_resolution_clock::now().time_since_epoch()
         ).count();
@@ -111,7 +112,7 @@ AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
 }
 
 AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Basladi.\n"); 
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Basladi.\n"); 
     AtomicSignal signal;
     signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()
@@ -127,7 +128,7 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
     signal.mouse_event_type = event_distrib(s_gen); 
     
     if (signal.mouse_event_type == 0 || signal.mouse_event_type == 3 || signal.mouse_event_type == 4) {
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Hareket olayı tespit edildi.\n"); 
+        LOG(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Hareket olayı tespit edildi.\n"); 
         signal.mouse_event_type = 0; 
         
         int delta_x_val = coord_change_distrib_large(s_gen);
@@ -145,15 +146,15 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
         signal.mouse_x = current_mouse_x;
         signal.mouse_y = current_mouse_y;
         signal.mouse_button_state = 0; 
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"Mouse Hareket Sinyali Oluşturuldu: x=" << signal.mouse_x << L", y=" << signal.mouse_y << L", delta=(" << delta_x_val << L"," << delta_y_val << L")\n"); 
+        LOG(LogLevel::DEBUG, std::wcerr, L"Mouse Hareket Sinyali Oluşturuldu: x=" << signal.mouse_x << L", y=" << signal.mouse_y << L", delta=(" << delta_x_val << L"," << delta_y_val << L")\n"); 
     } else if (signal.mouse_event_type == 1) { 
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Tiklama olayı tespit edildi.\n"); 
+        LOG(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Tiklama olayı tespit edildi.\n"); 
         signal.mouse_button_state = (button_distrib(s_gen) == 0) ? 1 : 2; 
         signal.mouse_x = current_mouse_x; 
         signal.mouse_y = current_mouse_y;
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"Mouse Tiklama Sinyali Oluşturuldu: x=" << signal.mouse_x << L", y=" << signal.mouse_y << L", button=" << (int)signal.mouse_button_state << L"\n"); 
+        LOG(LogLevel::DEBUG, std::wcerr, L"Mouse Tiklama Sinyali Oluşturuldu: x=" << signal.mouse_x << L", y=" << signal.mouse_y << L", button=" << (int)signal.mouse_button_state << L"\n"); 
     } else { 
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Kaydırma olayı tespit edildi.\n"); 
+        LOG(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Kaydırma olayı tespit edildi.\n"); 
         signal.mouse_button_state = 0; 
         
         int delta_x_scroll = coord_change_distrib_min(s_gen);
@@ -167,14 +168,14 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
         current_mouse_y = std::max(0, std::min(1080, current_mouse_y));
         signal.mouse_x = current_mouse_x; 
         signal.mouse_y = current_mouse_y;
-        LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"Mouse Kaydirma Sinyali Oluşturuldu: x=" << signal.mouse_x << L", y=" << signal.mouse_y << L"\n");
+        LOG(LogLevel::DEBUG, std::wcerr, L"Mouse Kaydirma Sinyali Oluşturuldu: x=" << signal.mouse_x << L", y=" << signal.mouse_y << L"\n");
     }
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Bitti. Sinyal döndürülüyor.\n"); 
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_mouse_event: Bitti. Sinyal döndürülüyor.\n"); 
     return signal;
 }
 
 AtomicSignal SimulatedAtomicSignalProcessor::simulate_display_event() {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_display_event: Basladi.\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_display_event: Basladi.\n");
     AtomicSignal signal;
     signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()
@@ -193,13 +194,13 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_display_event() {
         current_brightness = brightness_distrib(s_gen);
     }
     signal.display_brightness = current_brightness;
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_display_event: Parlaklik=" << (int)signal.display_brightness << L", Acik=" << (signal.display_on ? L"Evet" : L"Hayir") << L"\n");
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_display_event: Bitti.\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_display_event: Parlaklik=" << (int)signal.display_brightness << L", Acik=" << (signal.display_on ? L"Evet" : L"Hayir") << L"\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_display_event: Bitti.\n");
     return signal;
 }
 
 AtomicSignal SimulatedAtomicSignalProcessor::simulate_battery_event() {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_battery_event: Basladi.\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_battery_event: Basladi.\n");
     AtomicSignal signal;
     signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()
@@ -219,13 +220,13 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_battery_event() {
 
     signal.battery_percentage = current_battery;
     signal.battery_charging = current_charging;
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_battery_event: Pil=" << (int)signal.battery_percentage << L"%, Sarj=" << (signal.battery_charging ? L"Evet" : L"Hayir") << L"\n");
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_battery_event: Bitti.\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_battery_event: Pil=" << (int)signal.battery_percentage << L"%, Sarj=" << (signal.battery_charging ? L"Evet" : L"Hayir") << L"\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_battery_event: Bitti.\n");
     return signal;
 }
 
 AtomicSignal SimulatedAtomicSignalProcessor::simulate_network_event() {
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_network_event: Basladi.\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_network_event: Basladi.\n");
     AtomicSignal signal;
     signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()
@@ -246,8 +247,8 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_network_event() {
     } else {
         signal.network_bandwidth_estimate = idle_bandwidth_distrib(s_gen); 
     }
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_network_event: Ag aktif=" << (signal.network_active ? L"Evet" : L"Hayir") << L", Bant genisliği=" << signal.network_bandwidth_estimate << L" Kbps\n");
-    LOG_MESSAGE(LogLevel::DEBUG, std::wcerr, L"simulate_network_event: Bitti.\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_network_event: Ag aktif=" << (signal.network_active ? L"Evet" : L"Hayir") << L", Bant genisliği=" << signal.network_bandwidth_estimate << L" Kbps\n");
+    LOG(LogLevel::DEBUG, std::wcerr, L"simulate_network_event: Bitti.\n");
     return signal;
 }
 //--------------------------------

@@ -24,16 +24,17 @@
 #include "enums.h"
 
 // Bu dosyada tüm genel yardımcı fonksiyon bildirimleri yer alacak:
-// log_level_to_string, get_current_timestamp_wstr, hash_string, LOG_MESSAGE makrosu
-//İçerik Notu: cerebrum_lux_core.h ve cerebrum_lux_core.cpp dosyalarındaki g_current_log_level, g_log_file_stream tanımlarını, log_level_to_string, get_current_timestamp_wstr, hash_string fonksiyonlarının bildirimlerini ve LOG_MESSAGE makrosunu buraya taşıyın. Global değişkenlerin tanımları utils.cpp'ye gidecek.
+// log_level_to_string, get_current_timestamp_wstr, hash_string, LOG makrosu
+//İçerik Notu: cerebrum_lux_core.h ve cerebrum_lux_core.cpp dosyalarındaki g_current_log_level, g_log_file_stream tanımlarını, log_level_to_string, get_current_timestamp_wstr, hash_string fonksiyonlarının bildirimlerini ve LOG makrosunu buraya taşıyın. Global değişkenlerin tanımları utils.cpp'ye gidecek.
 
 
     
 // Yardımcı fonksiyon bildirimleri
-std::wstring log_level_to_string(LogLevel level);
+//std::wstring log_level_to_string(LogLevel level); kaldırıldı. çünkü bu fonksiyonun Logger'ın iç bir yardımcı fonksiyonu olması daha mantıklıdır ve dışarıdan direkt erişime gerek yoktur.
 std::wstring get_current_timestamp_wstr();
 std::wstring intent_to_string(UserIntent intent); // UserIntent'ı string'e çevirme
 std::wstring abstract_state_to_string(AbstractState state); // AbstractState'i string'e çevirme
+std::wstring goal_to_string(AIGoal goal); // AIGoal'ı string'e çevirme
 unsigned short hash_string(const std::wstring& s);
 
 class MessageQueue {

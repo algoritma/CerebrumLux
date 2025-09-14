@@ -5,7 +5,8 @@
 #include <locale>  // std::use_facet, std::numpunct
 
 // LogLevel'ı string'e çeviren yardımcı fonksiyon
-std::wstring log_level_to_string(LogLevel level) {
+// Logger sınıfının bir üye fonksiyonu olarak LogLevel'ı string'e çeviren metot
+std::wstring Logger::level_to_string(LogLevel level) const {
     switch (level) {
         case LogLevel::SILENT: return L"SILENT";
         case LogLevel::ERR_CRITICAL: return L"CRITICAL";
@@ -25,7 +26,7 @@ Logger& Logger::get_instance() {
 void Logger::init(LogLevel level, const std::wstring& log_file) {
     level_ = level;
     if (!log_file.empty()) {
-        file_stream_.open(log_file, std::ios_base::app);
+        file_stream_.open(log_file.c_str(), std::ios_base::app);
         if (!file_stream_.is_open()) {
             // Hata durumunda konsola yaz
             std::wcerr << L"Hata: Log dosyası açılamadı: " << log_file << std::endl;
@@ -62,11 +63,11 @@ void Logger::log(LogLevel level, std::wostream& os, const std::wstringstream& me
     std::wstringstream file_line_ss;
     file_line_ss << L" (" << file << L":" << line << L")";
 
-    os << L"[" << time_ss.str() << L"] [" << log_level_to_string(level) << L"] "
+    os << L"[" << time_ss.str() << L"] [" << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << L"] "
        << message_stream.str() << file_line_ss.str() << std::endl;
 
     if (file_stream_.is_open()) {
-        file_stream_ << L"[" << time_ss.str() << L"] [" << log_level_to_string(level) << L"] "
+        file_stream_ << L"[" << time_ss.str() << L"] [" << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << L"] "
                      << message_stream.str() << file_line_ss.str() << std::endl;
         file_stream_.flush();
     }

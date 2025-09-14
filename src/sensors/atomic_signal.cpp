@@ -1,11 +1,12 @@
 #include "atomic_signal.h" // Kendi başlık dosyasını dahil et
 #include "../core/enums.h" // Gerekli enum'lar için
 #include <chrono> // std::chrono için
+#include "../core/logger.h"
 
 // === AtomicSignal Implementasyonu (Constructor) ===
 AtomicSignal::AtomicSignal() :
     timestamp_us(0),
-    sensor_type(SensorType::Other),
+    sensor_type(SensorType::Keyboard),
     virtual_key_code(0),
     character(L'\0'),
     key_type(KeyType::Other), 

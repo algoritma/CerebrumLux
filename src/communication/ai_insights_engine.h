@@ -5,7 +5,7 @@
 #include <string>  // For std::wstring
 #include <numeric> // For std::accumulate
 #include "../core/enums.h"         // Enumlar için
-#include "../core/utils.h"         // LOG_MESSAGE için
+#include "../core/utils.h"         // LOG için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "../brain/intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
 #include "../brain/intent_learner.h"        // IntentLearner için ileri bildirim
@@ -34,19 +34,19 @@ struct AIInsight {
 // YENİ: AIInsightsEngine sınıfı tanımı
 class AIInsightsEngine {
 public:
-    AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& learner_ref, 
+    AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& learner_ref,
                      PredictionEngine& predictor_ref, CryptofigAutoencoder& autoencoder_ref,
                      CryptofigProcessor& cryptofig_processor_ref);
+    virtual std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence); // Eklendi: virtual
 
     // AI'ın mevcut iç durumunu ve performansını analiz eder ve içgörüler üretir
-    std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence);
     std::string generateResponse(UserIntent intent, const std::vector<float>& latent_cryptofig_vector);
 
     // Bu metot public olacak (GoalManager tarafından erişim için)
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
     
     // IntentAnalyzer üyesine erişim için getter metodu (GoalManager tarafından erişim için)
-    IntentAnalyzer& get_analyzer() const; 
+    virtual IntentAnalyzer& get_analyzer() const; 
 
 private:
     IntentAnalyzer& analyzer;

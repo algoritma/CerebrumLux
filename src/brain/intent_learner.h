@@ -27,7 +27,7 @@ public:
     void process_feedback(const DynamicSequence& sequence, UserIntent predicted_intent, 
                           const std::deque<AtomicSignal>& recent_signals);
 
-    void process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence);
+    virtual void process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence);
 
     void self_adjust_learning_rate(float adjustment_factor);
 
@@ -49,6 +49,8 @@ public:
 
     float get_desired_other_signals_multiplier() const { return desired_other_signals_multiplier; }
 
+    virtual AbstractState infer_abstract_state(const std::deque<AtomicSignal>& recent_signals); // Buraya 'virtual' ekleyin
+    
 private:
     IntentAnalyzer& analyzer; 
 
@@ -57,8 +59,6 @@ private:
     MessageQueue messageQueue;
 
     void evaluate_implicit_feedback(UserIntent current_intent, AbstractState current_abstract_state);
-    AbstractState infer_abstract_state(const std::deque<AtomicSignal>& recent_signals); 
-
     void adjust_template(UserIntent intent_id, const DynamicSequence& sequence, float feedback_strength);
     void adjust_action_score(UserIntent intent_id, AIAction action, float score_change); 
     

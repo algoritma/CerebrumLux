@@ -4,7 +4,7 @@
 #include "../core/enums.h"    // Enumlar için
 #include "atomic_signal.h"    // AtomicSignal için
 #include "signal_processor.h" // Base class için
-#include "../core/utils.h"    // hash_string ve LOG_MESSAGE için
+#include "../core/utils.h"    // hash_string ve LOG için
 #include <random>             // Random sayı üretimi için
 #include <chrono>             // Zaman damgaları için
 #include <algorithm>          // std::min/max için
