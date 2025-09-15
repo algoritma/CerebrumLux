@@ -1,7 +1,6 @@
 # Cerebrum Lux (Işık Beyin)
 
-![Cerebrum Lux Logo/Banner Placeholder](https://via.placeholder.com/150x50?text=Cerebrum+Lux+Logo) 
-*(Buraya projenin logosu veya özel bir banner'ı gelebilir.)*
+![Logo açıklaması](images/proje-logo.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
