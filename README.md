@@ -88,7 +88,7 @@ Cerebrum Lux, açık kaynak bir projedir ve her türlü katkıya açıktır! Eğ
 1.  Depoyu forklayın.
 2.  Yeni bir dal (branch) oluşturun (`git checkout -b ozellik/yeni-ozellik`).
 3.  Değişikliklerinizi yapın.
-4.  Kod stil rehberimize uyun (varsa, buraya link eklenebilir).
+4.  Kod stil rehberimize uyun (*).
 5.  Yeni özellikler için testler yazın.
 6.  Değişikliklerinizi commit edin (`git commit -m "Ozellik: Yeni ozellik eklendi"`).
 7.  Dalınızı push edin (`git push origin ozellik/yeni-ozellik`).
