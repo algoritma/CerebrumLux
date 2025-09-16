@@ -1,38 +1,38 @@
 #ifndef CEREBRUM_LUX_UTILS_H
 #define CEREBRUM_LUX_UTILS_H
 
-#include <string>    // For std::string, std::wstring
-#include <sstream> // For std::stringstream, std::wstringstream
-#include <chrono>  // For std::chrono
-#include <iomanip> // For std::put_time
-#include <ctime>   // For std::localtime
-#include <cstdio>  // For _CRT_WIDE
-#include <cerrno>  // For errno
-#include <fstream> // For std::ofstream (was std::wofstream, but now for general use)
-#include <mutex>
-#include <codecvt> // For std::codecvt_utf8
-#include <locale>  // For std::locale, std::wstring_convert
-
+#include <string>    // std::string için
+#include <sstream>   // std::stringstream için
+#include <chrono>    // std::chrono için (timestamp)
+#include <iomanip>   // std::put_time için
+#include <ctime>     // std::localtime için
+#include <cerrno>    // errno için
+#include <algorithm> // std::tolower (char versiyonu için)
+#include <locale>    // std::locale için (sadece convert_wstring_to_string'de kullanılacak)
+#include <codecvt>   // std::wstring_convert için (convert_wstring_to_string'de kullanılacak)
 #ifdef _WIN32
-#include <stringapiset.h> // For _CRT_WIDE (Windows specific)
+#include <stringapiset.h> // WideCharToMultiByte için (Windows'a özel)
 #endif
 
-#include "enums.h" // Enum'lar için
-
-//mesaj sistemi için
+// Mesaj sistemi için (eğer MessageData ve MessageType burada tanımlıysa)
 #include <queue>
+#include <mutex>
 #include <condition_variable>
+#include "enums.h" // MessageData, MessageType, UserIntent, AbstractState, AIGoal, LogLevel için
 
-// Helper function to convert wstring to string
+// Yardımcı fonksiyon bildirimleri (tümü std::string tabanlı)
+std::string get_current_timestamp_str();
+std::string intent_to_string(UserIntent intent);
+std::string abstract_state_to_string(AbstractState state);
+std::string goal_to_string(AIGoal goal);
+unsigned short hash_string(const std::string& s); // Artık std::string alıyor
+
+// std::wstring'den std::string'e dönüştürme yardımcı fonksiyonu
+// Bu, sadece harici std::wstring'ler geldiğinde veya bir std::wstring literalini dönüştürmek gerektiğinde kullanılacaktır.
+// Mümkün olduğunca doğrudan std::string kullanmayı hedefliyoruz.
 std::string convert_wstring_to_string(const std::wstring& wstr);
 
-// Yardımcı fonksiyon bildirimleri
-std::string get_current_timestamp_str();
-std::string intent_to_string(UserIntent intent); // UserIntent'ı string'e çevirme
-std::string abstract_state_to_string(AbstractState state); // AbstractState'i string'e çevirme
-std::string goal_to_string(AIGoal goal); // AIGoal'ı string'e çevirme
-unsigned short hash_string(const std::string& s);
-
+// MessageQueue sınıfının bildirimi (eğer utils.h içinde ise)
 class MessageQueue {
 public:
     void enqueue(MessageData data);
@@ -44,5 +44,6 @@ private:
     std::mutex mutex;
     std::condition_variable cv;
 };
+
 
 #endif // CEREBRUM_LUX_UTILS_H
