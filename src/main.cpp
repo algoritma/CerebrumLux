@@ -41,8 +41,6 @@
 #include "communication/response_engine.h"
 #include "communication/suggestion_engine.h"
 
-using namespace cerebrum;
-
 
 // Dosya isimleri (constants)
 const std::string AI_MEMORY_FILE = "cerebrum_lux_memory.bin";
