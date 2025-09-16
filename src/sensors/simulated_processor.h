@@ -23,13 +23,12 @@ private:
     bool current_network_active = true;
     unsigned short current_network_bandwidth = 5000; 
 
-    static std::random_device s_rd;
-    static std::mt19937 s_gen;
-    static std::uniform_int_distribution<int> s_sensor_selection_distrib; 
+    
+     
 
 public:
     SimulatedAtomicSignalProcessor();
-    AtomicSignal create_keyboard_signal(wchar_t ch); 
+    AtomicSignal create_keyboard_signal(char ch); 
     
     AtomicSignal capture_next_signal() override; 
     

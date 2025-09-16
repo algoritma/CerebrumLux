@@ -1,5 +1,5 @@
 #include "intent_learner.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // intent_to_string için
+#include "../core/utils.h"       // intent_to_string
 #include "../core/logger.h"      // LOG makrosu için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "intent_analyzer.h"     // IntentAnalyzer için
@@ -8,7 +8,8 @@
 #include <algorithm> // std::min, std::max
 #include <cmath>     // std::abs
 #include <iomanip>   // std::fixed, std::setprecision
-#include <iostream>  // std::wcout, std::wcerr
+#include <iostream>  // std::cout, std::cerr
+#include <sstream>   // std::stringstream için
 
 // === IntentLearner Implementasyonlari ===
 
@@ -38,7 +39,7 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
         }
 
         if (best_potential_known_intent != UserIntent::Unknown && max_potential_score > analyzer.confidence_threshold_for_known_intent) { // Corrected access
-            LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] 'Bilinmiyor' olarak tahmin edildi, ancak güçlü potansiyel niyet '" << intent_to_string(best_potential_known_intent) << L"' (geri bildirim: " << std::fixed << std::setprecision(2) << feedback_strength << L") bulundu. Bu niyet için ayar yapılıyor.\n");
+            LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] 'Bilinmiyor' olarak tahmin edildi, ancak güçlü potansiyel niyet '" << intent_to_string(best_potential_known_intent) << "' (geri bildirim: " << feedback_strength << ") bulundu. Bu niyet için ayar yapılıyor.\n");
             // Bu durumda, best_potential_known_intent için ağırlıkları ayarla
             std::vector<float> current_weights = analyzer.get_intent_weights(best_potential_known_intent);
             for (size_t i = 0; i < current_weights.size(); ++i) {
@@ -49,13 +50,13 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
         } else {
             // Gerçekten Unknown ise, öğrenme oranını düşür veya hiçbir şey yapma
             feedback_strength = 0.0f;
-            LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Niyet 'Bilinmiyor' için hesaplanan geri bildirim gucu: " << std::fixed << std::setprecision(2) << feedback_strength << L". (Net potansiyel niyet bulunamadı.)\n");
+            LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Niyet 'Bilinmiyor' için hesaplanan geri bildirim gucu: " << feedback_strength << ". (Net potansiyel niyet bulunamadı.)\n");
         }
     }
     else {
         // Bilinen bir niyet tahmin edildiyse, bu niyet için ağırlıkları ayarla
         feedback_strength = 1.0f; // Pozitif geri bildirim
-        LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Niyet '" << intent_to_string(predicted_intent) << L"' için hesaplanan geri bildirim gucu: " << std::fixed << std::setprecision(2) << feedback_strength << L"\n");
+        LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Niyet '" << intent_to_string(predicted_intent) << "' için hesaplanan geri bildirim gucu: " << feedback_strength << "\n");
         std::vector<float> current_weights = analyzer.get_intent_weights(predicted_intent);
         for (size_t i = 0; i < current_weights.size(); ++i) {
             current_weights[i] += learning_rate * (sequence.latent_cryptofig_vector[i] - current_weights[i]);
@@ -80,17 +81,17 @@ void IntentLearner::evaluate_implicit_feedback(UserIntent current_intent, Abstra
                 current_intent == UserIntent::VideoEditing ||
                 current_intent == UserIntent::CreativeWork) { // Yüksek performans gerektiren niyetler
                 implicit_feedback_score = -0.5; // Güç tasarrufunda kötü performans -> negatif geri bildirim
-                LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Güç Tasarrufu modunda Yüksek Performans Niyeti algılandı. Negatif dolaylı geri bildirim uygulandı.");
+                LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Güç Tasarrufu modunda Yüksek Performans Niyeti algılandı. Negatif dolaylı geri bildirim uygulandı.");
             } else if (current_intent == UserIntent::MediaConsumption) { // Video izleme gibi, duruma göre değişebilir
                 // Daha detaylı kontrol: çözünürlük düşükse nötr, yüksekse hafif negatif olabilir.
                 // Şimdilik hafif negatif varsayalım, kullanıcı deneyimi tam olmayabilir.
                 implicit_feedback_score = -0.1;
-                LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Güç Tasarrufu modunda Medya Tüketimi Niyeti algılandı. Hafif negatif dolaylı geri bildirim uygulandı.");
+                LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Güç Tasarrufu modunda Medya Tüketimi Niyeti algılandı. Hafif negatif dolaylı geri bildirim uygulandı.");
             } else if (current_intent == UserIntent::Browsing ||
                        current_intent == UserIntent::Reading ||
                        current_intent == UserIntent::GeneralInquiry) { // Düşük güç gerektiren niyetler
                 implicit_feedback_score = 0.0; // Nötr veya hafif pozitif (eğer kullanıcı uzun pil ömrüne değer veriyorsa)
-                LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Güç Tasarrufu modunda Düşük Performans Niyeti algılandı. Nötr dolaylı geri bildirim uygulandı.");
+                LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Güç Tasarrufu modunda Düşük Performans Niyeti algılandı. Nötr dolaylı geri bildirim uygulandı.");
             }
             break;
 
@@ -116,9 +117,9 @@ void IntentLearner::evaluate_implicit_feedback(UserIntent current_intent, Abstra
             break;
     }
 
-    LOG(LogLevel::DEBUG, std::wcout, L"[AI-Ogrenen] Niyet: " << static_cast<int>(current_intent)
-                         << L", Durum: " << static_cast<int>(current_abstract_state)
-                         << L", Dolaylı Geri Bildirim Puanı: " << implicit_feedback_score);
+    LOG_DEFAULT(LogLevel::DEBUG, "[AI-Ogrenen] Niyet: " << static_cast<int>(current_intent) <<
+                         ", Durum: " << static_cast<int>(current_abstract_state) <<
+                         ", Dolaylı Geri Bildirim Puanı: " << implicit_feedback_score);
 
     // implicit_feedback_history'yi güncelle
     implicit_feedback_history[current_intent].push_back(implicit_feedback_score);
@@ -154,7 +155,7 @@ AbstractState IntentLearner::infer_abstract_state(const std::deque<AtomicSignal>
                 break;
             }
             case SensorType::Battery: {
-                float change = sig.battery_percentage; // Pil yüzdesi değişimi olarak kullanılıyor
+                float change = sig.battery_percentage;
                 if (change < -0.05f) { // %5'ten fazla düşüş
                     state_scores[AbstractState::FaultyHardware] += BATTERY_WEIGHT * 0.7f;
                 }
@@ -199,7 +200,7 @@ AbstractState IntentLearner::infer_abstract_state(const std::deque<AtomicSignal>
         }
     }
 
-    LOG(LogLevel::DEBUG, std::wcout, L"[AI-Ogrenen] Sinyallerden çıkarılan AbstractState: " << static_cast<int>(inferred_state) << L" (Puan: " << max_score << L")");
+    LOG_DEFAULT(LogLevel::DEBUG, "[AI-Ogrenen] Sinyallerden çıkarılan AbstractState: " << static_cast<int>(inferred_state) << " (Puan: " << max_score << ")");
     return inferred_state;
 }
 
@@ -222,12 +223,12 @@ void IntentLearner::process_explicit_feedback(UserIntent predicted_intent, AIAct
     float feedback_value = 0.0f;
     if (approved) {
         feedback_value = 0.5f; // Onaylandıysa pozitif geri bildirim
-        LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Kullanıcıdan açık geri bildirim: Niyet '" << intent_to_string(predicted_intent)
-                             << L"', Eylem '" << static_cast<int>(action) << L"' ONAYLANDI. Öğrenme güçlendiriliyor.");
+        LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Kullanıcıdan açık geri bildirim: Niyet '" << intent_to_string(predicted_intent) <<
+                             "', Eylem '" << static_cast<int>(action) << "' ONAYLANDI. Öğrenme güçlendiriliyor.");
     } else {
         feedback_value = -0.5f; // Reddedildiyse negatif geri bildirim
-        LOG(LogLevel::INFO, std::wcout, L"[AI-Ogrenen] Kullanıcıdan açık geri bildirim: Niyet '" << intent_to_string(predicted_intent)
-                             << L"', Eylem '" << static_cast<int>(action) << L"' REDDEDİLDİ. Öğrenme zayıflatılıyor.");
+        LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Kullanıcıdan açık geri bildirim: Niyet '" << intent_to_string(predicted_intent) <<
+                             "', Eylem '" << static_cast<int>(action) << "' REDDEDİLDİ. Öğrenme zayıflatılıyor.");
     }
 
     // feedback_value'yu kullanarak ilgili niyetin ağırlıklarını veya güven puanlarını ayarla

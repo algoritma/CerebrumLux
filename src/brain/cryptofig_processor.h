@@ -4,6 +4,7 @@
 #include <vector>
 #include <string> // For wstring
 #include "../core/enums.h"         // Enumlar için
+#include "../core/utils.h"         // For convert_wstring_to_string (if needed elsewhere)
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "intent_learner.h"        // IntentLearner için ileri bildirim
 #include "intent_analyzer.h"       // IntentAnalyzer için ileri bildirim

@@ -1,15 +1,17 @@
 #ifndef CEREBRUM_LUX_UTILS_H
 #define CEREBRUM_LUX_UTILS_H
 
-#include <string>    // For std::wstring
-#include <sstream> // For std::wstringstream
+#include <string>    // For std::string, std::wstring
+#include <sstream> // For std::stringstream, std::wstringstream
 #include <chrono>  // For std::chrono
 #include <iomanip> // For std::put_time
 #include <ctime>   // For std::localtime
 #include <cstdio>  // For _CRT_WIDE
 #include <cerrno>  // For errno
-#include <fstream> // For std::wofstream
+#include <fstream> // For std::ofstream (was std::wofstream, but now for general use)
 #include <mutex>
+#include <codecvt> // For std::codecvt_utf8
+#include <locale>  // For std::locale, std::wstring_convert
 
 #ifdef _WIN32
 #include <stringapiset.h> // For _CRT_WIDE (Windows specific)
@@ -19,23 +21,17 @@
 
 //mesaj sistemi için
 #include <queue>
-#include <mutex>
 #include <condition_variable>
-#include "enums.h"
 
-// Bu dosyada tüm genel yardımcı fonksiyon bildirimleri yer alacak:
-// log_level_to_string, get_current_timestamp_wstr, hash_string, LOG makrosu
-//İçerik Notu: cerebrum_lux_core.h ve cerebrum_lux_core.cpp dosyalarındaki g_current_log_level, g_log_file_stream tanımlarını, log_level_to_string, get_current_timestamp_wstr, hash_string fonksiyonlarının bildirimlerini ve LOG makrosunu buraya taşıyın. Global değişkenlerin tanımları utils.cpp'ye gidecek.
+// Helper function to convert wstring to string
+std::string convert_wstring_to_string(const std::wstring& wstr);
 
-
-    
 // Yardımcı fonksiyon bildirimleri
-//std::wstring log_level_to_string(LogLevel level); kaldırıldı. çünkü bu fonksiyonun Logger'ın iç bir yardımcı fonksiyonu olması daha mantıklıdır ve dışarıdan direkt erişime gerek yoktur.
-std::wstring get_current_timestamp_wstr();
-std::wstring intent_to_string(UserIntent intent); // UserIntent'ı string'e çevirme
-std::wstring abstract_state_to_string(AbstractState state); // AbstractState'i string'e çevirme
-std::wstring goal_to_string(AIGoal goal); // AIGoal'ı string'e çevirme
-unsigned short hash_string(const std::wstring& s);
+std::string get_current_timestamp_str();
+std::string intent_to_string(UserIntent intent); // UserIntent'ı string'e çevirme
+std::string abstract_state_to_string(AbstractState state); // AbstractState'i string'e çevirme
+std::string goal_to_string(AIGoal goal); // AIGoal'ı string'e çevirme
+unsigned short hash_string(const std::string& s);
 
 class MessageQueue {
 public:

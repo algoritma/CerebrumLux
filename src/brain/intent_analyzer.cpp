@@ -6,8 +6,9 @@
 #include "intent_template.h"     // IntentTemplate için
 #include <algorithm>             // std::min/max için
 #include <cmath>                 // std::log10 için
-#include <fstream>               // Dosya G/Ç için (fwprintf, fwscanf)
-#include <iostream>              // std::wcerr, std::wcout için
+#include <fstream>               // Dosya G/Ç için
+#include <iostream>              // std::cerr, std::cout için
+#include <sstream>               // std::stringstream için
 
 
 // === IntentTemplate Implementasyonu (burada kalmalı, IntentAnalyzer'ın bir parçası) ===
@@ -64,7 +65,7 @@ IntentAnalyzer::IntentAnalyzer() : confidence_threshold_for_known_intent(0.1f) {
 UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
     // latent_cryptofig_vector kontrol ediliyor
     if (sequence.latent_cryptofig_vector.empty() || sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) { 
-        LOG(LogLevel::WARNING, std::wcout, L"IntentAnalyzer::analyze_intent: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Unknown döndürülüyor.\n");
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer::analyze_intent: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Unknown döndürülüyor.\n");
         return UserIntent::Unknown;
     }
 
@@ -75,7 +76,7 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
         float score = 0.0f;
         // Ağırlık boyutu latent kriptofig boyutu ile eşleşmeli
         if (tmpl.weights.size() != sequence.latent_cryptofig_vector.size()) { 
-            LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"IntentAnalyzer::analyze_intent: Niyet şablonu ağırlık boyutu latent kriptofig boyutuyla uyuşmuyor! Niyet: " << intent_to_string(tmpl.id) << L".\n");
+            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "IntentAnalyzer::analyze_intent: Niyet şablonu ağırlık boyutu latent kriptofig boyutuyla uyuşmuyor! Niyet: " << intent_to_string(tmpl.id) << ".\n");
             continue; // Bu şablonu atla
         }
         for (size_t i = 0; i < tmpl.weights.size(); ++i) {
@@ -128,93 +129,93 @@ std::vector<float> IntentAnalyzer::get_intent_weights(UserIntent intent_id) cons
 }
 
 void IntentAnalyzer::report_learning_performance(UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg) {
-    LOG(LogLevel::INFO, std::wcout, L"[Meta-AI] Niyet: " << intent_to_string(intent_id) 
-               << L", Ortuk Performans (Ort): " << std::fixed << std::setprecision(4) << implicit_feedback_avg
-               << L", Acik Performans (Ort): " << explicit_feedback_avg << L"\n"); 
+    LOG_DEFAULT(LogLevel::INFO, "[Meta-AI] Niyet: " << intent_to_string(intent_id) << 
+               ", Ortuk Performans (Ort): " << implicit_feedback_avg << 
+               ", Acik Performans (Ort): " << explicit_feedback_avg << "\n"); 
 
 }
 
-void IntentAnalyzer::save_memory(const std::wstring& filename) const {
-    FILE* fp = _wfopen(filename.c_str(), L"w"); 
+void IntentAnalyzer::save_memory(const std::string& filename) const {
+    FILE* fp = fopen(filename.c_str(), "w"); 
     if (!fp) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi yazilamadi: " << filename << L" (errno: " << errno << L")\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yazilamadi: " << filename << " (errno: " << errno << ")\n");
         return;
     }
 
-    fwprintf(fp, L"%zu\n", intent_templates.size());
+    fprintf(fp, "%zu\n", intent_templates.size());
     for (const auto& tmpl : intent_templates) {
-        fwprintf(fp, L"%d %zu ", static_cast<int>(tmpl.id), tmpl.weights.size());
+        fprintf(fp, "%d %zu ", static_cast<int>(tmpl.id), tmpl.weights.size());
         for (float w : tmpl.weights) {
-            fwprintf(fp, L"%.8f ", w); 
+            fprintf(fp, "%.8f ", w); 
         }
-        fwprintf(fp, L"%zu ", tmpl.action_success_scores.size());
+        fprintf(fp, "%zu ", tmpl.action_success_scores.size());
         for (const auto& pair : tmpl.action_success_scores) {
-            fwprintf(fp, L"%d %.8f ", static_cast<int>(pair.first), pair.second); 
+            fprintf(fp, "%d %.8f ", static_cast<int>(pair.first), pair.second); 
         }
-        fwprintf(fp, L"\n");
+        fprintf(fp, "\n");
     }
     fclose(fp);
-    LOG(LogLevel::INFO, std::wcout, L"AI hafizasi kaydedildi: " << filename << L"\n");
+    LOG_DEFAULT(LogLevel::INFO, "AI hafizasi kaydedildi: " << filename << "\n");
 }
 
-void IntentAnalyzer::load_memory(const std::wstring& filename) {
-    FILE* fp = _wfopen(filename.c_str(), L"r"); 
+void IntentAnalyzer::load_memory(const std::string& filename) {
+    FILE* fp = fopen(filename.c_str(), "r"); 
     if (!fp) {
-        LOG(LogLevel::WARNING, std::wcout, L"Uyari: AI hafiza dosyasi bulunamadi, varsayilan sablonlar kullaniliyor: " << filename << L" (errno: " << errno << L")\n");
+        LOG_DEFAULT(LogLevel::WARNING, "Uyari: AI hafiza dosyasi bulunamadi, varsayilan sablonlar kullaniliyor: " << filename << " (errno: " << errno << ")\n");
         return;
     }
 
     intent_templates.clear(); 
     size_t num_templates;
-    if (fwscanf(fp, L"%zu\n", &num_templates) != 1) { 
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi formati bozuk veya bos (templates): " << filename << L"\n");
+    if (fscanf(fp, "%zu\n", &num_templates) != 1) { 
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi formati bozuk veya bos (templates): " << filename << "\n");
         fclose(fp);
         return;
     }
 
     for (size_t i = 0; i < num_templates; ++i) {
         int intent_id_int;
-        if (fwscanf(fp, L"%d", &intent_id_int) != 1) {
-             LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi yuklenirken intent_id okunamadi. Satir: " << i << L"\n");
+        if (fscanf(fp, "%d", &intent_id_int) != 1) {
+             LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken intent_id okunamadi. Satir: " << i << "\n");
              break;
         }
         UserIntent intent_id = static_cast<UserIntent>(intent_id_int);
 
         size_t num_weights;
-        if (fwscanf(fp, L"%zu", &num_weights) != 1) {
-            LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi yuklenirken num_weights okunamadi. Satir: " << i << L"\n");
+        if (fscanf(fp, "%zu", &num_weights) != 1) {
+            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken num_weights okunamadi. Satir: " << i << "\n");
             break;
         }
         std::vector<float> weights(num_weights);
         for (size_t j = 0; j < num_weights; ++j) {
-            if (fwscanf(fp, L"%f", &weights[j]) != 1) {
-                LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi yuklenirken weight okunamadi. Satir: " << i << L", Eleman: " << j << L"\n");
+            if (fscanf(fp, "%f", &weights[j]) != 1) {
+                LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken weight okunamadi. Satir: " << i << ", Eleman: " << j << "\n");
                 break;
             }
         }
 
         size_t num_action_scores;
-        if (fwscanf(fp, L"%zu", &num_action_scores) != 1) {
-            LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi yuklenirken num_action_scores okunamadi. Satir: " << i << L"\n");
+        if (fscanf(fp, "%zu", &num_action_scores) != 1) {
+            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken num_action_scores okunamadi. Satir: " << i << "\n");
             break;
         }
         std::map<AIAction, float> action_scores;
         for (size_t j = 0; j < num_action_scores; ++j) {
             int action_id_int;
             float score;
-            if (fwscanf(fp, L"%d %f", &action_id_int, &score) != 2) {
-                LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: AI hafiza dosyasi yuklenirken action_score okunamadi. Satir: " << i << L", Eleman: " << j << L"\n");
+            if (fscanf(fp, "%d %f", &action_id_int, &score) != 2) {
+                LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken action_score okunamadi. Satir: " << i << ", Eleman: " << j << "\n");
                 break;
             }
             action_scores[static_cast<AIAction>(action_id_int)] = score;
         }
         
-        wchar_t newline_char;
-        fwscanf(fp, L"%c", &newline_char); 
+        char newline_char;
+        fscanf(fp, "%c", &newline_char); 
 
         intent_templates.emplace_back(intent_id, weights);
         intent_templates.back().action_success_scores = action_scores;
     }
     fclose(fp);
-    LOG(LogLevel::INFO, std::wcout, L"AI hafizasi yuklendi: " << filename << L"\n");
+    LOG_DEFAULT(LogLevel::INFO, "AI hafizasi yuklendi: " << filename << "\n");
 }

@@ -5,6 +5,7 @@
 #include <deque>
 #include <chrono>
 #include "../core/enums.h"    // Enumlar için
+#include "../core/utils.h"    // For convert_wstring_to_string (if needed elsewhere)
 #include "../brain/autoencoder.h" // CryptofigAutoencoder için ileri bildirim (sadece bildirim için)
 #include "../sensors/atomic_signal.h" // AtomicSignal'ın tam tanımı için EKLEDİM
 

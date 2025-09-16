@@ -1,8 +1,8 @@
 #ifndef CEREBRUM_LUX_AUTOENCODER_H
 #define CEREBRUM_LUX_AUTOENCODER_H
 
-#include <vector>  // For std::vector
-#include <string>  // For std::wstring (save/load için)
+#include <vector>
+#include <string>  // For std::string
 #include <random>  // For std::random_device, std::mt19937, std::uniform_real_distribution
 #include "../core/enums.h" // LogLevel için
 #include "../core/utils.h" // LOG için (ileri bildirimden sonra)
@@ -32,8 +32,8 @@ public:
     void adjust_weights_on_error(const std::vector<float>& input_features, float learning_rate_ae);
 
     // Ağırlıkları dosyaya kaydetme/yükleme
-    void save_weights(const std::wstring& filename) const;
-    void load_weights(const std::wstring& filename);
+    void save_weights(const std::string& filename) const;
+    void load_weights(const std::string& filename);
 
 private:
     // Ağırlıklar ve bias'lar

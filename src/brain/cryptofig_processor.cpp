@@ -6,7 +6,8 @@
 #include "intent_analyzer.h"     // IntentAnalyzer için
 #include "autoencoder.h"         // CryptofigAutoencoder için
 #include <numeric> // std::accumulate
-#include <iostream>  // std::wcerr için
+#include <iostream>  // std::cerr için
+#include <sstream>   // std::stringstream için
 
 // === CryptofigProcessor Implementasyonlari ===
 CryptofigProcessor::CryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAutoencoder& autoencoder_ref)
@@ -14,23 +15,23 @@ CryptofigProcessor::CryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAu
 
 // Bu metod DynamicSequence'i işleyerek hem statistical_features_vector'ı kullanacak hem de latent_cryptofig_vector'ı güncelleyecek. 
 void CryptofigProcessor::process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate) {
-    LOG(LogLevel::DEBUG, std::wcout, L"CryptofigProcessor::process_sequence: Latent kriptofig Autoencoder ile olusturuluyor ve ogrenme tetikleniyor.\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::process_sequence: Latent kriptofig Autoencoder ile olusturuluyor ve ogrenme tetikleniyor.\n");
     if (sequence.statistical_features_vector.empty() || sequence.statistical_features_vector.size() != CryptofigAutoencoder::INPUT_DIM) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"CryptofigProcessor::process_sequence: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Autoencoder işlemi atlanıyor.\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "CryptofigProcessor::process_sequence: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Autoencoder işlemi atlanıyor.\n");
         sequence.latent_cryptofig_vector.assign(CryptofigAutoencoder::LATENT_DIM, 0.0f); // Latent vektörü sıfırla
         return;
     }
     sequence.latent_cryptofig_vector = autoencoder.encode(sequence.statistical_features_vector);
     autoencoder.adjust_weights_on_error(sequence.statistical_features_vector, autoencoder_learning_rate);
-    LOG(LogLevel::DEBUG, std::wcout, L"CryptofigProcessor::process_sequence: Latent kriptofig olusturuldu ve Autoencoder ogrenme adimi tamamlandi.\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::process_sequence: Latent kriptofig olusturuldu ve Autoencoder ogrenme adimi tamamlandi.\n");
 }
 
 
 void CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, UserIntent target_intent) const {
-    LOG(LogLevel::DEBUG, std::wcout, L"CryptofigProcessor::apply_cryptofig_for_learning: Niyet " << intent_to_string(target_intent) << L" için kriptofig ile öğrenme başlatıldı.\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::apply_cryptofig_for_learning: Niyet " << intent_to_string(target_intent) << " için kriptofig ile öğrenme başlatıldı.\n");
     std::vector<float> current_weights = analyzer.get_intent_weights(target_intent);
     if (current_weights.empty() || current_weights.size() != received_cryptofig.size()) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"apply_cryptofig_for_learning: Boyut uyuşmazlığı veya boş ağırlıklar. İlerleme durduruldu.\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "apply_cryptofig_for_learning: Boyut uyuşmazlığı veya boş ağırlıklar. İlerleme durduruldu.\n");
         return;
     }
 
@@ -43,7 +44,7 @@ void CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, co
     }
     analyzer.update_template_weights(target_intent, current_weights);
     
-    LOG(LogLevel::DEBUG, std::wcout, L"CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme tamamlandı.\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme tamamlandı.\n");
 }
 
 // Getter metodu tanımı
@@ -66,7 +67,7 @@ CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() {
 void CryptofigProcessor::process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner) {
     // Uzman kriptofiglerini IntentLearner'a işleme mantığı buraya gelecek
     // Örneğin, learner'a doğrudan bir feedback sağlayabilir veya niyet şablonlarını etkileyebilir.
-    LOG(LogLevel::DEBUG, std::wcout, L"[CryptofigProcessor] Uzman kriptofigi işleniyor. Boyut: " << expert_cryptofig.size());
+    LOG_DEFAULT(LogLevel::DEBUG, "[CryptofigProcessor] Uzman kriptofigi işleniyor. Boyut: " << expert_cryptofig.size());
     // Örnek: Learner'ın niyet şablonlarını doğrudan etkilemek için bir mekanizma
     // Bu kısım, AI'ın kendini geliştirmesinin ve meta-evrimin kritik bir parçası olacaktır.
     // Şimdilik sadece loglama yapabiliriz.
@@ -75,7 +76,7 @@ void CryptofigProcessor::process_expert_cryptofig(const std::vector<float>& expe
 std::vector<float> CryptofigProcessor::generate_cryptofig_from_signals(const DynamicSequence& sequence) {
     // DynamicSequence'den yeni bir kriptofig üretme mantığı buraya gelecek
     // Bu, Autoencoder.h'de tanımlanan encode metodunun çağrılmasıyla yapılabilir.
-    LOG(LogLevel::DEBUG, std::wcout, L"[CryptofigProcessor] Sinyallerden kriptofig üretiliyor.");
+    LOG_DEFAULT(LogLevel::DEBUG, "[CryptofigProcessor] Sinyallerden kriptofig üretiliyor.");
     // Örnek: Autoencoder kullanarak encode etme
     // return autoencoder.encode(sequence.statistical_features_vector);
     // Şu anki DynamicSequence'de statistical_features_vector yerine direk latent_cryptofig_vector var gibi.
@@ -84,4 +85,3 @@ std::vector<float> CryptofigProcessor::generate_cryptofig_from_signals(const Dyn
     // Varsayılan olarak boş bir vektör döndürelim, daha sonra uygun mantıkla doldururuz.
     return {0.0f, 0.0f, 0.0f}; // Placeholder
 }
-

@@ -5,32 +5,32 @@
 #include <fstream>
 #include <sstream>
 #include <mutex>
-#include <iostream> // std::wcout, std::wcerr için
+#include <iostream> // std::cout, std::cerr için
 #include "enums.h" // LogLevel için
+#include "utils.h" // convert_wstring_to_string için
 
 class Logger {
 public:
     static Logger& get_instance();
 
-    void init(LogLevel level, const std::wstring& log_file = L"");
+    void init(LogLevel level, const std::string& log_file = ""); // log_file artık string
     // Yeni log fonksiyonu: bir ostream referansı alır
-    void log(LogLevel level, std::wostream& os, const std::wstringstream& message_stream, const char* file, int line);
-    // Eski log fonksiyonu (varsayılan olarak std::wcout'a yazar)
-    void log(LogLevel level, const std::wstringstream& message_stream, const char* file, int line);
-
+    void log(LogLevel level, std::ostream& os, const std::stringstream& message_stream, const char* file, int line);
+    // Eski log fonksiyonu (varsayılan olarak std::cout'a yazar)
+    void log(LogLevel level, const std::stringstream& message_stream, const char* file, int line);
 
     Logger(const Logger&) = delete;
     LogLevel get_level() const;
 
     // LogLevel'ı string'e çevirmek için public bir metot
-    std::wstring level_to_string(LogLevel level) const;
+    std::string level_to_string(LogLevel level) const; // Artık string döndürüyor
 
 private:
     Logger() : level_(LogLevel::INFO) {}
     ~Logger();
 
     LogLevel level_;
-    std::wofstream file_stream_;
+    std::ofstream file_stream_;
     std::mutex mutex_;
 };
 
@@ -41,16 +41,16 @@ private:
 #define LOG(level, os, message_stream) \
     do { \
         if (Logger::get_instance().get_level() >= level) { \
-            std::wstringstream ss_log_stream; \
-            ss_log_stream << message_stream; /* message_stream ifadesinin etrafındaki parantezleri kaldırdık */ \
+            std::stringstream ss_log_stream; \
+            ss_log_stream << message_stream; \
             Logger::get_instance().log(level, os, ss_log_stream, __FILE__, __LINE__); \
         } \
     } while(0)
-    
-// Eski LOG makrosu (varsayılan olarak std::wcout'a yazar)
+
+// Eski LOG makrosu (varsayılan olarak std::cout'a yazar)
 #define LOG_DEFAULT(level, message_stream) \
     do { \
-        std::wstringstream log_ss_internal; \
+        std::stringstream log_ss_internal; \
         log_ss_internal << message_stream; \
         Logger::get_instance().log(level, log_ss_internal, __FILE__, __LINE__); \
     } while(0)

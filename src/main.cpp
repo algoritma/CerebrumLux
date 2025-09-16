@@ -1,17 +1,28 @@
 #include <iostream>
-#include <iomanip> 
-#include <locale>  
-#include <string> 
-#include <cmath> 
-#include <limits> 
-#include <cerrno> 
-#include <fstream> 
+#include <iomanip>
+#include <locale>
+#include <string>
+#include <cmath>
+#include <limits> // std::numeric_limits için
+#include <cerrno> // errno için
+#include <fstream> // std::ofstream için
+#include <vector>  // std::vector için
+#include <sstream> // std::stringstream için
+#include <numeric> // std::accumulate için
+#include <algorithm> // std::tolower için
+#include <cctype>    // std::tolower için (bazı derleyicilerde <algorithm> yeterli olmayabilir)
+
+#ifdef _WIN32
+#include <Windows.h> // SetConsoleOutputCP, SetConsoleCP için
+#include <io.h>      // _setmode için
+#include <fcntl.h>   // _O_U8TEXT için
+#endif
 
 // Cerebrum Lux modüllerinin başlık dosyaları
-#include "sensors/atomic_signal.h" // AtomicSignal için eklendi
+#include "sensors/atomic_signal.h"
 #include "core/enums.h"
-#include "core/utils.h"
-#include "core/logger.h"
+#include "core/utils.h" // intent_to_string, abstract_state_to_string, convert_wstring_to_string, log_level_to_string (eğer utils.h'de ise)
+#include "core/logger.h" // LOG_DEFAULT için
 #include "sensors/simulated_processor.h"
 #include "data_models/sequence_manager.h"
 #include "brain/intent_analyzer.h"
@@ -23,306 +34,295 @@
 #include "planning_execution/goal_manager.h"
 #include "planning_execution/planner.h"
 #include "communication/response_engine.h"
-#include "communication/suggestion_engine.h" // SuggestionEngine için eklendi
+#include "communication/suggestion_engine.h"
 
-#ifdef _WIN32
-#include <windows.h> 
-#include <fcntl.h>   
-#include <io.h>      
-#endif
 
-// Dosya isimleri (constants)
-const std::wstring AI_MEMORY_FILE = L"cerebrum_lux_memory.bin"; 
-const std::wstring AI_STATE_GRAPH_FILE = L"cerebrum_lux_state_graph.bin"; 
-const std::wstring AI_LOG_FILE = L"cerebrum_lux_log.txt"; 
-const std::wstring AI_AUTOENCODER_WEIGHTS_FILE = L"cerebrum_lux_autoencoder_weights.bin"; 
+// AI_LOG_FILE ve diğer sabitlerin tanımları (global alanda)
+const std::string AI_MEMORY_FILE = "cerebrum_lux_memory.bin";
+const std::string AI_STATE_GRAPH_FILE = "cerebrum_lux_state_graph.bin";
+const std::string AI_LOG_FILE = "cerebrum_lux_log.txt";
+const std::string AI_AUTOENCODER_WEIGHTS_FILE = "cerebrum_lux_autoencoder_weights.bin";
+
 
 int main() {
-    #ifdef _WIN32
+    // Konsol ve Yerel Ayar Başlatma (Kesin Çözüm - Türkçe Karakter ve Stabilite için)
+#ifdef _WIN32
+    // Konsolun kod sayfasını UTF-8'e ayarla
     SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    // C Runtime Library streamlerini UTF-8 moduna ayarla
+    // Bu, std::cout, std::cin, std::cerr için Türkçe karakter desteğini sağlamalıdır.
     _setmode(_fileno(stdout), _O_U8TEXT);
     _setmode(_fileno(stdin), _O_U8TEXT);
-    #endif
+    _setmode(_fileno(stderr), _O_U8TEXT);
+    
+    // C++ streamlerini hızlı ve bağımsız yap (Performans için, Türkçe karakterlerle doğrudan ilgili değil)
+    std::ios_base::sync_with_stdio(false);
+    std::cin.tie(nullptr);
 
-    std::locale::global(std::locale(""));
-    std::wcout.imbue(std::locale(""));
-    std::wcin.imbue(std::locale(""));
+#endif // _WIN32
 
     Logger::get_instance().init(LogLevel::INFO, AI_LOG_FILE);
-    LOG(LogLevel::INFO, std::wcout, L"Log dosyası açıldı: " << AI_LOG_FILE << L"\n");
+    LOG_DEFAULT(LogLevel::INFO, "Log dosyası açıldı: " << AI_LOG_FILE << "\n");
 
-    // AI bileşenlerini başlat
-    SimulatedAtomicSignalProcessor simulatedSignalProcessor;
-    SequenceManager sequenceManager;
+    try { // Start of try block for general stability
+        // AI bileşenlerini başlat
+        SimulatedAtomicSignalProcessor simulatedSignalProcessor;
+        SequenceManager sequenceManager;
 
-    IntentAnalyzer analyzer; // IntentAnalyzer nesnesi oluşturun
-    IntentLearner learner(analyzer); // IntentLearner nesnesini IntentAnalyzer ile oluşturun
+        IntentAnalyzer analyzer;
+        IntentLearner learner(analyzer);
 
-    PredictionEngine predictor(analyzer, sequenceManager);
-    SuggestionEngine suggester(analyzer); 
-    
-    // Autoencoder ve CryptofigProcessor başlatılıyor
-    CryptofigAutoencoder autoencoder;
-    autoencoder.load_weights(AI_AUTOENCODER_WEIGHTS_FILE); 
-    CryptofigProcessor cryptofig_processor(analyzer, autoencoder); 
+        PredictionEngine predictor(analyzer, sequenceManager);
+        SuggestionEngine suggester(analyzer);
 
-    // AIInsightsEngine başlatılıyor (diğer tüm bileşenlere bağımlı)
-    AIInsightsEngine insights_engine(analyzer, learner, predictor, autoencoder, cryptofig_processor);
+        CryptofigAutoencoder autoencoder;
+        autoencoder.load_weights(AI_AUTOENCODER_WEIGHTS_FILE);
+        CryptofigProcessor cryptofig_processor(analyzer, autoencoder); // CryptofigProcessor'ın autoencoder referansı aldığını varsayarak
 
-    // GoalManager başlatılıyor (insights_engine'a bağımlı)
-    GoalManager goal_manager(insights_engine);
-    
-    // Planner ve ResponseEngine doğru argümanlarla başlatılıyor
-    Planner planner(analyzer, suggester, goal_manager, predictor, insights_engine); 
-    ResponseEngine responder(analyzer, goal_manager, insights_engine); 
+        AIInsightsEngine insights_engine(analyzer, learner, predictor, autoencoder, cryptofig_processor);
 
-    // AI hafızalarını ve durum grafiklerini yükle
-    analyzer.load_memory(AI_MEMORY_FILE);
-    predictor.load_state_graph(AI_STATE_GRAPH_FILE);
+        GoalManager goal_manager(insights_engine); // GoalManager'ın AIInsightsEngine referansı aldığını varsayarak
 
-    // Sinyal yakalamayı başlat
-    simulatedSignalProcessor.start_capture();
+        Planner planner(analyzer, suggester, goal_manager, predictor, insights_engine); // Planner'ın AIInsightsEngine referansı aldığını varsayarak
+        ResponseEngine responder(analyzer, goal_manager, insights_engine); // ResponseEngine'ın AIInsightsEngine referansı aldığını varsayarak
 
-    // Kullanıcı arayüzü mesajları
-    std::wcout << L"\n--- Cerebrum Lux Baslatildi ---" << std::endl;
-    std::wcout << L"    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << std::endl;    std::wcout << L"  - Raporlama Seviyesini Degistirmek Icin 'L' tusuna basin." << std::endl;
-    std::wcout << L"    (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE)" << std::endl;
-    std::wcout << L"  - Durum Raporu Icin 'S' veya 'R' tusuna basin." << L" (Yeni satırda girilmelidir)" << std::endl;
-    std::wcout << L"  - Cikis Icin 'Q' tusuna basin." << L" (Yeni satırda girilmelidir)" << std::endl;
-    std::wcout << L"------------------------------" << std::endl;
+        // AI hafızalarını ve durum grafiklerini yükle
+        analyzer.load_memory(AI_MEMORY_FILE);
+        predictor.load_state_graph(AI_STATE_GRAPH_FILE);
+        // autoencoder.load_weights(AI_AUTOENCODER_WEIGHTS_FILE); // Zaten yukarıda yapıldı.
 
-    UserIntent last_predicted_intent = UserIntent::Unknown; 
-    AIAction last_suggested_action = AIAction::None; 
+        // Sinyal yakalamayı başlat
+        simulatedSignalProcessor.start_capture();
 
-    
-    while (true) {
-        
-        
+        // Kullanıcı arayüzü mesajları
+        std::cout << "\n--- Cerebrum Lux Başlatıldı ---\n";
+        std::cout << "    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << "\n";
+        std::cout << "  - Raporlama Seviyesini Değiştirmek İçin 'L' tuşuna basın. \n";
+        std::cout << "    (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE)\n";
+        std::cout << "  - Durum Raporu İçin 'S' veya 'R' tuşuna basın. (Yeni satırda girilmelidir)\n";
+        std::cout << "  - Çıkış İçin 'Q' tuşuna basın. (Yeni satırda girilmelidir)\n";
+        std::cout << "------------------------------\n";
 
-        if (last_suggested_action != AIAction::None) {
-            std::wcout << L"Onerilen eylem '" << suggester.action_to_string(last_suggested_action) << L"' basarili oldu mu? (E/H): ";
-            wchar_t feedback_char;
-            std::wcin >> feedback_char;
-            std::wcin.ignore(std::numeric_limits<std::streamsize>::max(), L'\n'); 
-            bool approved = (feedback_char == L'E' || feedback_char == L'e');
-            learner.process_explicit_feedback(last_predicted_intent, last_suggested_action, approved, *sequenceManager.current_sequence);
-            std::wcout << L"Geri bildirim kaydedildi. AI ogreniyor..." << std::endl;
-            last_suggested_action = AIAction::None; 
-        }
-        
-        std::wcout << L"Klavye Girisi (Q ile çikis): "; 
-        std::wstring user_input_line;
-        std::getline(std::wcin, user_input_line); 
+        UserIntent last_predicted_intent = UserIntent::Unknown;
+        AIAction last_suggested_action = AIAction::None;
 
-        if (user_input_line.empty() && std::wcin.eof()) { 
-            break;
-        } else if (user_input_line.empty()) { 
-            continue;
-        }
 
-        if (user_input_line.length() == 1) {
-            wchar_t ch = std::towlower(user_input_line[0]);
-            if (ch == L'q') {
-                break; 
-            } else if (ch == L's' || ch == L'r') { 
-                 std::wcout << L"\n--- CEREBRUM LUX: Durum Raporu ---" << std::endl; 
-                 std::wcout << L"    - Niyet Belirleme Esiği: " << std::fixed << std::setprecision(3) << analyzer.confidence_threshold_for_known_intent << std::endl;
-                 std::wcout << L"    - Ogrenme Orani: " << std::fixed << std::setprecision(5) << learner.get_learning_rate() << std::endl;
-                 std::wcout << L"    - Sensor Veri Carpani: " << std::fixed << std::setprecision(2) << learner.get_desired_other_signals_multiplier() << std::endl;
-                 
-                 float total_implicit_performance = 0.0f;
-                 int implicit_count = 0;
-                 const auto& history_map = learner.get_implicit_feedback_history(); 
-                 for (int i = static_cast<int>(UserIntent::FastTyping); i < static_cast<int>(UserIntent::Count); ++i) { 
-                     UserIntent intent_id = static_cast<UserIntent>(i);
-                     auto it = history_map.find(intent_id);
+        while (true) {
 
-                     if (it != history_map.end() && !it->second.empty()) { 
-                         float avg = std::accumulate(it->second.begin(), it->second.end(), 0.0f) / it->second.size();
-                         std::wcout << L"      - Niyet '" << intent_to_string(intent_id) << L"' Ort. Ortuk Performans: " << std::fixed << std::setprecision(3) << avg << std::endl;
-                         total_implicit_performance += avg;
-                         implicit_count++;
-                     }
-                 }
-                 if (implicit_count > 0) {
-                     std::wcout << L"    - Toplam Ort. Ortuk Performans (Bilinen Niyetler): " << std::fixed << std::setprecision(3) << total_implicit_performance / implicit_count << std::endl;
-                 } else {
-                     std::wcout << L"    - Henuz bilinen niyetler icin yeterli ortuk performans verisi yok." << std::endl;
-                 }                 
-                 std::wcout << L"    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << std::endl;
-                 std::wcout << L"    - AI, niyetleri basariyla tahmin etmeye baslamistir. Ogrenme devam ediyor." << std::endl;
-                 std::wcout << L"Rapor tamamlandi. Devam etmek icin herhangi bir tusa basin (yeni girdi): ";
-                 continue; 
-            } else if (ch == L'l') { 
-                std::wcout << L"Yeni Log Seviyesi Seçin (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE, Mevcut: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << L"): ";
-                int level_int;
-                std::wcin >> level_int;
-                if (std::wcin.fail() || level_int < static_cast<int>(LogLevel::SILENT) || level_int > static_cast<int>(LogLevel::TRACE)) {
-                    std::wcin.clear(); 
-                    std::wcout << L"Geçersiz log seviyesi. Mevcut seviye korunuyor." << std::endl;
-                } else {
-                    std::wcout << L"Log Seviyesi '" << Logger::get_instance().level_to_string(static_cast<LogLevel>(level_int)) << L"' olarak ayarlandi." << std::endl;
-                }
-                std::wcin.ignore(std::numeric_limits<std::streamsize>::max(), L'\n'); 
-                continue; 
+            if (last_suggested_action != AIAction::None) {
+                std::cout << "Önerilen eylem '" << suggester.action_to_string(last_suggested_action) << "' başarılı oldu mu? (E/H): ";
+                char feedback_char_raw;
+                std::cin >> feedback_char_raw;
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                char feedback_char = std::tolower(feedback_char_raw);
+                bool approved = (feedback_char == 'e' || feedback_char == 'E');
+                learner.process_explicit_feedback(last_predicted_intent, last_suggested_action, approved, *sequenceManager.current_sequence);
+                std::cout << "Geri bildirim kaydedildi. AI öğreniyor...\n";
+                last_suggested_action = AIAction::None;
             }
-        }
 
-        static std::random_device rd_main;
-        static std::mt19937 gen_main(rd_main());
+            std::cout << "Klavye Girişi (Q ile çıkış): ";
+            std::string user_input_line;
+            std::getline(std::cin, user_input_line);
 
-        int num_other_signals_to_simulate = static_cast<int>(std::round(learner.get_desired_other_signals_multiplier() * std::uniform_int_distribution<>(1, 3)(gen_main))); 
-        num_other_signals_to_simulate = std::max(1, num_other_signals_to_simulate); 
-
-        for (int i = 0; i < num_other_signals_to_simulate; ++i) {
-            AtomicSignal other_signal = simulatedSignalProcessor.capture_next_signal(); 
-            LOG(LogLevel::DEBUG, std::wcout, L"Diger sensor sinyali olusturuldu (tip: " << static_cast<int>(other_signal.sensor_type) << L"). Manager'a ekleniyor.\n"); 
-            sequenceManager.add_signal(other_signal, cryptofig_processor); 
-            LOG(LogLevel::DEBUG, std::wcout, L"Diger sensor sinyali manager'a eklendi.\n"); 
-        }
-
-        bool sequence_updated_in_this_line = false; 
-
-        for (wchar_t ch : user_input_line) {
-            AtomicSignal keyboard_signal = simulatedSignalProcessor.create_keyboard_signal(ch); 
-            LOG(LogLevel::DEBUG, std::wcout, L"Klavye sinyali manager'a ekleniyor (karakter: '" << ch << L").\n"); 
-            if (sequenceManager.add_signal(keyboard_signal, cryptofig_processor)) { 
-                sequence_updated_in_this_line = true; 
+            if (user_input_line.empty() && std::cin.eof()) {
+                break;
+            } else if (user_input_line.empty()) {
+                continue;
             }
-            LOG(LogLevel::DEBUG, std::wcout, L"Klavye sinyali manager'a eklendi. Sequence güncellendi mi? " << (sequence_updated_in_this_line ? L"Evet" : L"Hayir") << L".\n"); 
-        }
 
-        if (sequence_updated_in_this_line) { 
-            std::wcout << L"\n--- Cerebrum Lux: Anlik Dizi Ozeti ---" << std::endl;
-            std::wcout << std::fixed << std::setprecision(4);
+            if (user_input_line.length() == 1) {
+                char ch_raw = user_input_line[0]; // Tek karakter için user_input_line[0] kullanın
+                char ch = std::tolower(ch_raw);
+                if (ch == 'q') {
+                    break;
+                } else if (ch == 's' || ch == 'r') {
+                    std::cout << "\n--- CEREBRUM LUX: Durum Raporu ---\n";
+                    std::cout << std::fixed << std::setprecision(4);
 
-            std::wcout << L"Son Guncelleme Zamani: " << sequenceManager.current_sequence->last_updated_us << L" us" << std::endl;
-            std::wcout << L"Ort. Tus Araligi: " << sequenceManager.current_sequence->avg_keystroke_interval / 1000.0f << L" ms" << std::endl;
-            std::wcout << L"Tus Degiskenligi: " << sequenceManager.current_sequence->keystroke_variability / 1000.0f << L" ms" << std::endl;
-            std::wcout << L"Alfanumerik Oran: " << sequenceManager.current_sequence->alphanumeric_ratio << std::endl;
-            std::wcout << L"Kontrol Tusu Sikligi: " << sequenceManager.current_sequence->control_key_frequency << std::endl;
-            
-            std::wcout << L"Fare Hareketi Yogunlugu: " << sequenceManager.current_sequence->mouse_movement_intensity << L" (Piksel/Ornek)" << std::endl;
-            std::wcout << L"Fare Tiklama Sikligi: " << sequenceManager.current_sequence->mouse_click_frequency << L" (Tiklama/Ornek)" << std::endl;
-            std::wcout << L"Ort. Ekran Parlakligi: " << sequenceManager.current_sequence->avg_brightness << L" (0-255)" << std::endl;
-            std::wcout << L"Batarya Degisim Orani: " << sequenceManager.current_sequence->battery_status_change << L" (%)" << std::endl;
-            std::wcout << L"Ag Aktivite Seviyesi: " << sequenceManager.current_sequence->network_activity_level << L" (Kbps)" << std::endl;
-            
-            std::wcout << L"Aktif Uygulama Hash: " << sequenceManager.current_sequence->current_app_hash << std::endl;
-            
-            // İstatistiksel özellik vektörünü yazdır
-            std::wcout << L"İstatistiksel Ozellik Vektoru (Boyut " << sequenceManager.current_sequence->statistical_features_vector.size() << L"): [";
-            for (size_t i = 0; i < sequenceManager.current_sequence->statistical_features_vector.size(); ++i) {
-                std::wcout << sequenceManager.current_sequence->statistical_features_vector[i];
-                if (i < sequenceManager.current_sequence->statistical_features_vector.size() - 1) {
-                    std::wcout << L", ";
+                    std::cout << "    - Niyet Belirleme Eşiği: " << analyzer.confidence_threshold_for_known_intent << "\n";
+                    std::cout << "    - Öğrenme Oranı: " << learner.get_learning_rate() << "\n";
+
+                    float total_implicit_performance = 0.0f;
+                    int implicit_count = 0;
+                    const auto& history_map = learner.get_implicit_feedback_history();
+                    for (int i = static_cast<int>(UserIntent::FastTyping); i < static_cast<int>(UserIntent::Count); ++i) { // UserIntent::Count'a kadar döngü
+                        UserIntent intent_id = static_cast<UserIntent>(i);
+                        auto it = history_map.find(intent_id);
+
+                        if (it != history_map.end() && !it->second.empty()) {
+                            float avg = std::accumulate(it->second.begin(), it->second.end(), 0.0f) / it->second.size();
+                            std::cout << "      - Niyet '" << intent_to_string(intent_id) << "' Ort. Örtük Performans: " << avg << "\n";
+                            total_implicit_performance += avg;
+                            implicit_count++;
+                        }
+                    }
+                    if (implicit_count > 0) {
+                        std::cout << "    - Toplam Ort. Örtük Performans (Bilinen Niyetler): " << total_implicit_performance / implicit_count << "\n";
+                    } else {
+                        std::cout << "    - Henüz bilinen niyetler için yeterli örtük performans verisi yok.\n";
+                    }
+                    std::cout << "    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << "\n";
+                    std::cout << "    - AI, niyetleri başarıyla tahmin etmeye başlamıştır. Öğrenme devam ediyor.\n";
+                    std::cout << "Rapor tamamlandı. Devam etmek için herhangi bir tuşa basın (yeni girdi): ";
+                    continue;
+                } else if (ch == 'l') {
+                    std::cout << "Yeni Log Seviyesi Seçin (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE, Mevcut: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << "): ";
+                    int level_int;
+                    std::cin >> level_int;
+                    if (std::cin.fail() || level_int < static_cast<int>(LogLevel::SILENT) || level_int > static_cast<int>(LogLevel::TRACE)) {
+                        std::cin.clear();
+                        std::cout << "Geçersiz log seviyesi. Mevcut seviye korunuyor.\n";
+                    } else {
+                        Logger::get_instance().init(static_cast<LogLevel>(level_int), AI_LOG_FILE); // Re-init with new level
+                        std::cout << "Log Seviyesi '" << Logger::get_instance().level_to_string(static_cast<LogLevel>(level_int)) << "' olarak ayarlandı.\n";
+                    }
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                    continue;
                 }
             }
-            std::wcout << L"]" << std::endl;
 
-            // Latent kriptofig vektörünü yazdır
-            std::wcout << L"Latent Kriptofig Vektoru (Boyut " << sequenceManager.current_sequence->latent_cryptofig_vector.size() << L"): [";
-            for (size_t i = 0; i < sequenceManager.current_sequence->latent_cryptofig_vector.size(); ++i) {
-                std::wcout << sequenceManager.current_sequence->latent_cryptofig_vector[i];
-                if (i < sequenceManager.current_sequence->latent_cryptofig_vector.size() - 1) {
-                    std::wcout << L", ";
+            static std::random_device rd_main;
+            static std::mt19937 gen_main(rd_main());
+
+            int num_other_signals_to_simulate = static_cast<int>(std::round(learner.get_desired_other_signals_multiplier() * std::uniform_int_distribution<>(1, 3)(gen_main)));
+            num_other_signals_to_simulate = std::max(1, num_other_signals_to_simulate);
+
+            for (int i = 0; i < num_other_signals_to_simulate; ++i) {
+                AtomicSignal other_signal = simulatedSignalProcessor.capture_next_signal();
+                LOG_DEFAULT(LogLevel::DEBUG, "Diğer sensör sinyali oluşturuldu (tip: " << static_cast<int>(other_signal.sensor_type) << "). Manager'a ekleniyor.\n");
+                sequenceManager.add_signal(other_signal, cryptofig_processor); // Add cryptofig_processor to add_signal
+                LOG_DEFAULT(LogLevel::DEBUG, "Diğer sensör sinyali manager'a eklendi.\n");
+            }
+
+            bool sequence_updated_in_this_line = false;
+
+            for (char ch_raw : user_input_line) {
+                AtomicSignal keyboard_signal = simulatedSignalProcessor.create_keyboard_signal(ch_raw);
+                LOG_DEFAULT(LogLevel::DEBUG, "Klavye sinyali manager'a ekleniyor (karakter: '" << ch_raw << "').\n");
+                if (sequenceManager.add_signal(keyboard_signal, cryptofig_processor)) { // Add cryptofig_processor to add_signal
+                    sequence_updated_in_this_line = true;
                 }
-            }
-            std::wcout << L"]" << std::endl;
-            
-            // YENİ: Dinamik hedef belirleme
-            goal_manager.evaluate_and_set_goal(*sequenceManager.current_sequence); // Her döngüde hedefi güncelle
-            std::wcout << L"AI'ın Mevcut Hedefi: ";
-            switch (goal_manager.get_current_goal()) {
-                case AIGoal::OptimizeProductivity: std::wcout << L"Üretkenliği Optimize Etmek"; break;
-                case AIGoal::MaximizeBatteryLife:  std::wcout << L"Batarya Ömrünü Maksimuma Çıkarmak"; break;
-                case AIGoal::ReduceDistractions:   std::wcout << L"Dikkat Dağıtıcıları Azaltmak"; break;
-                case AIGoal::EnhanceCreativity:    std::wcout << L"Yaratıcılığı Artırmak"; break;
-                case AIGoal::ImproveGamingExperience: std::wcout << L"Oyun Deneyimini İyileştirmek"; break;
-                case AIGoal::FacilitateResearch:   std::wcout << L"Araştırmayı Kolaylaştırmak"; break;
-                case AIGoal::SelfImprovement:      std::wcout << L"Kendi Kendini Geliştirmek"; break;
-                case AIGoal::None:                 std::wcout << L"Yok"; break;
-                default:                           std::wcout << L"Bilinmiyor"; break;
-            }
-            std::wcout << std::endl;
-
-
-            UserIntent current_predicted_intent = analyzer.analyze_intent(*sequenceManager.current_sequence);
-            std::wcout << L"Tahmini Kullanici Niyeti: " << intent_to_string(current_predicted_intent) << std::endl; 
-
-            // current_abstract_state çıkarımı için IntentLearner'ı kullan
-            // DÜZELTME: SequenceManager'ın public unique_ptr'ına ve içindeki DynamicSequence'in recent_signals'ına erişim.
-            // Ancak DynamicSequence'de recent_signals YOK. Bu yeni bir problem olacak.
-            // Şimdilik SequenceManager'ın kendi signal_buffer'ını kullanalım,
-            // zira IntentLearner::infer_abstract_state bir std::deque<AtomicSignal> bekliyor.
-            AbstractState current_abstract_state = learner.infer_abstract_state(sequenceManager.get_signal_buffer_copy());            
-            
-            // veya eğer DynamicSequence'in kendisinde recent_signals tutuluyorsa:
-            // AbstractState current_abstract_state = learner.infer_abstract_state(sequenceManager.current_sequence->recent_signals);
-            std::wcout << L"Tahmini Soyut Durum: " << abstract_state_to_string(current_abstract_state) << std::endl;
-
-            learner.process_feedback(*sequenceManager.current_sequence, current_predicted_intent, sequenceManager.get_signal_buffer_copy());
-
-            if (last_predicted_intent != UserIntent::Unknown && last_predicted_intent != current_predicted_intent &&
-                last_predicted_intent != UserIntent::None && current_predicted_intent != UserIntent::None) { 
-                predictor.update_state_graph(last_predicted_intent, current_predicted_intent, *sequenceManager.current_sequence);
-            }
-            last_predicted_intent = current_predicted_intent;
-
-            UserIntent next_predicted_intent = predictor.predict_next_intent(last_predicted_intent, *sequenceManager.current_sequence); 
-            if (next_predicted_intent != UserIntent::Unknown && next_predicted_intent != current_predicted_intent && next_predicted_intent != UserIntent::None) {
-                std::wcout << L"Olasi Sonraki Niyet: " << intent_to_string(next_predicted_intent) << std::endl;
+                LOG_DEFAULT(LogLevel::DEBUG, "Klavye sinyali manager'a eklendi. Sequence güncellendi mi? " << (sequence_updated_in_this_line ? "Evet" : "Hayır") << ".\n");
             }
 
-            AIAction suggested_action = suggester.suggest_action(current_predicted_intent, *sequenceManager.current_sequence);
-            if (suggested_action != AIAction::None) {
-                std::wcout << L"AI Onerisi: " << suggester.action_to_string(suggested_action) << std::endl;
-                last_suggested_action = suggested_action; 
-            }
-            
-            std::vector<ActionPlanStep> current_plan = planner.create_action_plan(current_predicted_intent, current_abstract_state, goal_manager.get_current_goal(), *sequenceManager.current_sequence);
-            planner.execute_plan(current_plan);
+            if (sequence_updated_in_this_line) {
+                std::cout << "\n--- CEREBRUM LUX: Anlık Dizi Özeti ---\n";
+                std::cout << std::fixed << std::setprecision(4);
 
-            std::wstring ai_response = responder.generate_response(current_predicted_intent, current_abstract_state, goal_manager.get_current_goal(), *sequenceManager.current_sequence);
-            if (!ai_response.empty()) {
-                std::wcout << L"AI: " << ai_response << std::endl;
-            }
+                std::cout << "Son Güncelleme Zamanı: " << sequenceManager.current_sequence->last_updated_us << " us\n";
+                std::cout << "Ort. Tuş Aralığı: " << sequenceManager.current_sequence->avg_keystroke_interval / 1000.0f << " ms\n";
+                std::cout << "Tuş Değişkenliği: " << sequenceManager.current_sequence->keystroke_variability / 1000.0f << " ms\n";
+                std::cout << "Alfanumerik Oran: " << sequenceManager.current_sequence->alphanumeric_ratio << "\n";
+                std::cout << "Kontrol Tuşu Sıklığı: " << sequenceManager.current_sequence->control_key_frequency << "\n";
 
-            // Unknown niyet tespit edildiğinde bilgi transferi yerine Autoencoder'ı doğrudan besleme
-            if (current_predicted_intent == UserIntent::Unknown) {
-                LOG(LogLevel::DEBUG, std::wcout, L"Unknown niyet tespit edildi, Autoencoder'a istatistiksel özellikler ile öğrenme sinyali gönderiliyor.\n");
-                std::wcout << L"AI: (Algı belirsizliği. Autoencoder yeni desenleri öğreniyor!)" << std::endl;
-            }
+                std::cout << "Fare Hareketi Yoğunluğu: " << sequenceManager.current_sequence->mouse_movement_intensity << " (Piksel/Örnek)\n";
+                std::cout << "Fare Tıklama Sıklığı: " << sequenceManager.current_sequence->mouse_click_frequency << " (Tıklama/Örnek)\n";
+                std::cout << "Ort. Ekran Parlaklığı: " << sequenceManager.current_sequence->avg_brightness << " (0-255)\n";
+                std::cout << "Batarya Değişim Oranı: " << sequenceManager.current_sequence->battery_status_change << " (%)\n";
+                std::cout << "Ağ Aktivite Seviyesi: " << sequenceManager.current_sequence->network_activity_level << " (Kbps)\n";
 
-            // Anlık istatistiksel ve latent kriptofig çıktıları
-            std::wcout << L"AI: (Anlık İstatistiksel Özellikler: ";
-            for (size_t i = 0; i < sequenceManager.current_sequence->statistical_features_vector.size(); ++i) {
-                std::wcout << std::fixed << std::setprecision(2) << sequenceManager.current_sequence->statistical_features_vector[i];
-                if (i < sequenceManager.current_sequence->statistical_features_vector.size() - 1) {
-                    std::wcout << L", ";
+                std::cout << "Aktif Uygulama Hash: " << sequenceManager.current_sequence->current_app_hash << "\n";
+
+                std::cout << "İstatistiksel Özellik Vektörü (Boyut " << sequenceManager.current_sequence->statistical_features_vector.size() << "): [";
+                for (size_t i = 0; i < sequenceManager.current_sequence->statistical_features_vector.size(); ++i) {
+                    std::cout << sequenceManager.current_sequence->statistical_features_vector[i];
+                    if (i < sequenceManager.current_sequence->statistical_features_vector.size() - 1) {
+                        std::cout << ", ";
+                    }
                 }
-            }
-            std::wcout << L")" << std::endl;
+                std::cout << "]\n";
 
-            std::wcout << L"AI: (Anlık Latent Kriptofig: ";
-            for (size_t i = 0; i < sequenceManager.current_sequence->latent_cryptofig_vector.size(); ++i) {
-                std::wcout << std::fixed << std::setprecision(2) << sequenceManager.current_sequence->latent_cryptofig_vector[i];
-                if (i < sequenceManager.current_sequence->latent_cryptofig_vector.size() - 1) {
-                    std::wcout << L", ";
+                std::cout << "Latent Kriptofig Vektörü (Boyut " << sequenceManager.current_sequence->latent_cryptofig_vector.size() << "): [";
+                for (size_t i = 0; i < sequenceManager.current_sequence->latent_cryptofig_vector.size(); ++i) {
+                    std::cout << std::fixed << std::setprecision(2) << sequenceManager.current_sequence->latent_cryptofig_vector[i];
+                    if (i < sequenceManager.current_sequence->latent_cryptofig_vector.size() - 1) {
+                        std::cout << ", ";
+                    }
                 }
+                std::cout << "]\n";
+
+                goal_manager.evaluate_and_set_goal(*sequenceManager.current_sequence);
+                std::cout << "AI'ın Mevcut Hedefi: " << goal_to_string(goal_manager.get_current_goal()) << "\n";
+
+                UserIntent current_predicted_intent = analyzer.analyze_intent(*sequenceManager.current_sequence);
+                std::cout << "Tahmini Kullanıcı Niyeti: " << intent_to_string(current_predicted_intent) << "\n";
+
+                AbstractState current_abstract_state = learner.infer_abstract_state(sequenceManager.get_signal_buffer_copy());
+                std::cout << "Tahmini Soyut Durum: " << abstract_state_to_string(current_abstract_state) << "\n";
+
+                learner.process_feedback(*sequenceManager.current_sequence, current_predicted_intent, sequenceManager.get_signal_buffer_copy());
+
+                if (last_predicted_intent != UserIntent::Unknown && last_predicted_intent != current_predicted_intent &&
+                    last_predicted_intent != UserIntent::None && current_predicted_intent != UserIntent::None) {
+                    predictor.update_state_graph(last_predicted_intent, current_predicted_intent, *sequenceManager.current_sequence);
+                }
+                last_predicted_intent = current_predicted_intent;
+
+                UserIntent next_predicted_intent = predictor.predict_next_intent(last_predicted_intent, *sequenceManager.current_sequence);
+                if (next_predicted_intent != UserIntent::Unknown && next_predicted_intent != current_predicted_intent && next_predicted_intent != UserIntent::None) {
+                    std::cout << "Olası Sonraki Niyet: " << intent_to_string(next_predicted_intent) << "\n";
+                }
+
+                AIAction suggested_action = suggester.suggest_action(current_predicted_intent, *sequenceManager.current_sequence);
+                if (suggested_action != AIAction::None) {
+                    std::cout << "AI Önerisi: " << suggester.action_to_string(suggested_action) << "\n";
+                    last_suggested_action = suggested_action;
+                }
+
+                std::vector<ActionPlanStep> current_plan = planner.create_action_plan(current_predicted_intent, current_abstract_state, goal_manager.get_current_goal(), *sequenceManager.current_sequence);
+                planner.execute_plan(current_plan);
+
+                std::string ai_response = responder.generate_response(current_predicted_intent, current_abstract_state, goal_manager.get_current_goal(), *sequenceManager.current_sequence);
+                if (!ai_response.empty()) {
+                    std::cout << "AI: " << ai_response << "\n";
+                }
+
+                if (current_predicted_intent == UserIntent::Unknown) {
+                    LOG_DEFAULT(LogLevel::DEBUG, "Unknown niyet tespit edildi, Autoencoder'a istatistiksel özellikler ile öğrenme sinyali gönderiliyor.\n");
+                    std::cout << "AI: (Algı belirsizliği. Autoencoder yeni desenleri öğreniyor!)\n";
+                }
+
+                std::cout << "AI: (Anlık İstatistiksel Özellikler: ";
+                for (size_t i = 0; i < sequenceManager.current_sequence->statistical_features_vector.size(); ++i) {
+                    std::cout << std::fixed << std::setprecision(2) << sequenceManager.current_sequence->statistical_features_vector[i];
+                    if (i < sequenceManager.current_sequence->statistical_features_vector.size() - 1) {
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << ")\n";
+
+                std::cout << "AI: (Anlık Latent Kriptofig: ";
+                for (size_t i = 0; i < sequenceManager.current_sequence->latent_cryptofig_vector.size(); ++i) {
+                    std::cout << std::fixed << std::setprecision(2) << sequenceManager.current_sequence->latent_cryptofig_vector[i];
+                    if (i < sequenceManager.current_sequence->latent_cryptofig_vector.size() - 1) {
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << ")\n";
+
+                std::cout << "---------------------------------------------\n\n";
             }
-            std::wcout << L")" << std::endl;
-            
-            std::wcout << L"---------------------------------------------" << std::endl << std::endl;
         }
+
+        simulatedSignalProcessor.stop_capture();
+        analyzer.save_memory(AI_MEMORY_FILE);
+        predictor.save_state_graph(AI_STATE_GRAPH_FILE);
+        autoencoder.save_weights(AI_AUTOENCODER_WEIGHTS_FILE);
+
+    } catch (const std::exception& e) { // Catch standard exceptions
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Uygulama hatası: " << e.what() << "\n");
+        std::cerr << "Uygulama hatası: " << e.what() << "\n";
+    } catch (...) { // Catch all other exceptions
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Bilinmeyen bir uygulama hatası oluştu.\n");
+        std::cerr << "Bilinmeyen bir uygulama hatası oluştu.\n";
     }
 
-    simulatedSignalProcessor.stop_capture();
-    analyzer.save_memory(AI_MEMORY_FILE);
-    predictor.save_state_graph(AI_STATE_GRAPH_FILE);
-    autoencoder.save_weights(AI_AUTOENCODER_WEIGHTS_FILE); // Ağırlıkları kaydet
-
-    
+    std::cout << "Çıkmak için Enter'a basın...";
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Clear any leftover input
+    std::cin.get(); // Wait for a key press
 
     return 0;
 }

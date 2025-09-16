@@ -5,6 +5,7 @@
 #include <memory>
 #include <chrono>
 #include "../core/enums.h"      // Enumlar için
+#include "../core/utils.h"      // For convert_wstring_to_string (if needed elsewhere)
 #include "dynamic_sequence.h"   // DynamicSequence için
 #include "../sensors/atomic_signal.h" // AtomicSignal için
 #include "../brain/cryptofig_processor.h" // CryptofigProcessor için ileri bildirim (parametre olarak kullanılacak)

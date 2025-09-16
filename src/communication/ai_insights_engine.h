@@ -2,7 +2,7 @@
 #define CEREBRUM_LUX_AI_INSIGHTS_ENGINE_H
 
 #include <vector>  // For std::vector
-#include <string>  // For std::wstring
+#include <string>  // For std::string (was std::wstring)
 #include <numeric> // For std::accumulate
 #include "../core/enums.h"         // Enumlar için
 #include "../core/utils.h"         // LOG için
@@ -26,7 +26,7 @@ class CryptofigProcessor;
 
 // YENİ: AIInsight struct tanımı
 struct AIInsight {
-    std::wstring observation;
+    std::string observation; // std::wstring yerine std::string
     AIAction suggested_action = AIAction::None; // Gerekirse ilgili bir eylem önerisi
     float urgency = 0.0f; // Ne kadar acil olduğu (0.0f - 1.0f)
 };

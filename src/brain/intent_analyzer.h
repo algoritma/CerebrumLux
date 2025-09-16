@@ -3,9 +3,10 @@
 
 #include <vector>  // For std::vector
 #include <map>     // For std::map
-#include <string>  // For std::wstring
+#include <string>  // For std::string
 #include <limits>  // For std::numeric_limits
 #include "../core/enums.h"         // Enumlar için
+#include "../core/utils.h"         // For convert_wstring_to_string (if needed elsewhere)
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "intent_template.h"       // IntentTemplate için
 #include "autoencoder.h"           // CryptofigAutoencoder::LATENT_DIM için (sadece boyut için)
@@ -26,8 +27,8 @@ public:
     void update_action_success_score(UserIntent intent_id, AIAction action, float score_change); 
     std::vector<float> get_intent_weights(UserIntent intent_id) const; 
 
-    void save_memory(const std::wstring& filename) const;
-    void load_memory(const std::wstring& filename);
+    void save_memory(const std::string& filename) const;
+    void load_memory(const std::string& filename);
 
     void report_learning_performance(UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg);
 

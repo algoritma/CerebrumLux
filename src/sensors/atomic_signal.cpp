@@ -8,7 +8,7 @@ AtomicSignal::AtomicSignal() :
     timestamp_us(0),
     sensor_type(SensorType::Keyboard),
     virtual_key_code(0),
-    character(L'\0'),
+    character('\0'),
     key_type(KeyType::Other), 
     event_type(KeyEventType::Press),
     pressure_estimate(0),

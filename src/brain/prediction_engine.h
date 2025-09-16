@@ -3,7 +3,7 @@
 
 #include <vector>  // For std::vector
 #include <deque>   // For std::deque
-#include <string>  // For std::wstring
+#include <string>  // For std::string
 #include <limits>  // For std::numeric_limits
 #include <cmath>   // For std::exp
 #include "../core/enums.h"         // Enumlar için
@@ -49,8 +49,8 @@ public:
 
     void update_state_graph(UserIntent previous_intent, UserIntent current_intent, const DynamicSequence& sequence); // latent_cryptofig_vector kullanacak
     
-    void save_state_graph(const std::wstring& filename) const;
-    void load_state_graph(const std::wstring& filename);
+    void save_state_graph(const std::string& filename) const;
+    void load_state_graph(const std::string& filename);
 
     float query_intent_probability(UserIntent target_intent, const DynamicSequence& current_sequence) const;
     void learn_time_patterns(const std::deque<AtomicSignal>& signal_buffer, UserIntent current_intent);

@@ -3,9 +3,10 @@
 #include "../core/utils.h" // Diğer yardımcı fonksiyonlar için
 #include <cmath>     // std::exp, std::sqrt için
 #include <algorithm> // std::min/max için
-#include <fstream>   // For file operations (fwrite, fread, _wfopen)
-#include <limits>    // std::numeric_limits (errno için değil, min/max için)
-#include <iostream>  // std::wcerr için
+#include <cstdio>    // fopen, fwrite, fread, fclose için
+#include <limits>    // std::numeric_limits için
+#include <iostream>  // std::cerr için
+#include <sstream>   // std::stringstream için
 
 
 // Statik const int üyelerinin dış tanımları
@@ -13,8 +14,8 @@
 const int CryptofigAutoencoder::INPUT_DIM;
 const int CryptofigAutoencoder::LATENT_DIM;
 
-CryptofigAutoencoder::CryptofigAutoencoder() 
-    : gen(std::random_device()()), dist(-0.5f, 0.5f) { // Ağırlıkları -0.5 ile 0.5 arasında başlat
+CryptofigAutoencoder::CryptofigAutoencoder()
+    : gen(12345), dist(-0.5f, 0.5f) { // Ağırlıkları -0.5 ile 0.5 arasında başlat, sabit seed kullanıldı
     initialize_random_weights();
 }
 
@@ -29,7 +30,7 @@ void CryptofigAutoencoder::initialize_random_weights() {
     for (size_t i = 0; i < decoder_weights_1.size(); ++i) decoder_weights_1[i] = dist(gen);
     for (size_t i = 0; i < decoder_bias_1.size(); ++i) decoder_bias_1[i] = dist(gen);
 
-    LOG(LogLevel::INFO, std::wcout, L"CryptofigAutoencoder: Agirliklar rastgele baslatildi.\n");
+    LOG_DEFAULT(LogLevel::INFO, "CryptofigAutoencoder: Agirliklar rastgele baslatildi.\n");
 }
 
 float CryptofigAutoencoder::sigmoid(float x) const {
@@ -43,7 +44,7 @@ float CryptofigAutoencoder::sigmoid_derivative(float x) const {
 
 std::vector<float> CryptofigAutoencoder::encode(const std::vector<float>& input_features) const {
     if (input_features.size() != INPUT_DIM) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"CryptofigAutoencoder::encode: Girdi boyutu uyuşmuyor! Beklenen: " << INPUT_DIM << L", Gelen: " << input_features.size() << L"\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "CryptofigAutoencoder::encode: Girdi boyutu uyuşmuyor! Beklenen: " << INPUT_DIM << ", Gelen: " << input_features.size() << "\n");
         return std::vector<float>(LATENT_DIM, 0.0f); // Hata durumunda sıfır vektör döndür
     }
 
@@ -60,7 +61,7 @@ std::vector<float> CryptofigAutoencoder::encode(const std::vector<float>& input_
 
 std::vector<float> CryptofigAutoencoder::decode(const std::vector<float>& latent_features) const {
     if (latent_features.size() != LATENT_DIM) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"CryptofigAutoencoder::decode: Gizil boyut uyuşmuyor! Beklenen: " << LATENT_DIM << L", Gelen: " << latent_features.size() << L"\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "CryptofigAutoencoder::decode: Gizil boyut uyuşmuyor! Beklenen: " << LATENT_DIM << ", Gelen: " << latent_features.size() << "\n");
         return std::vector<float>(INPUT_DIM, 0.0f);
     }
 
@@ -82,7 +83,7 @@ std::vector<float> CryptofigAutoencoder::reconstruct(const std::vector<float>& i
 // Heuristik, tek adımlı ağırlık ayarlaması (meta-öğrenme esintili)
 void CryptofigAutoencoder::adjust_weights_on_error(const std::vector<float>& input_features, float learning_rate_ae) {
     if (input_features.size() != INPUT_DIM) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"CryptofigAutoencoder::adjust_weights_on_error: Girdi boyutu uyuşmuyor! Ayarlama yapılamıyor.\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "CryptofigAutoencoder::adjust_weights_on_error: Girdi boyutu uyuşmuyor! Ayarlama yapılamıyor.\n");
         return;
     }
 
@@ -130,14 +131,14 @@ void CryptofigAutoencoder::adjust_weights_on_error(const std::vector<float>& inp
                 encoder_weights_1[i * LATENT_DIM + j] = std::min(1.0f, std::max(-1.0f, encoder_weights_1[i * LATENT_DIM + j]));
             }
         }
-        LOG(LogLevel::DEBUG, std::wcout, L"CryptofigAutoencoder: Agirliklar hataya gore ayarlandi. Hata: " << std::fixed << std::setprecision(4) << total_error << L"\n");
+        LOG_DEFAULT(LogLevel::DEBUG, "CryptofigAutoencoder: Agirliklar hataya gore ayarlandi. Hata: " << total_error << "\n");
     }
 }
 
-void CryptofigAutoencoder::save_weights(const std::wstring& filename) const {
-    FILE* fp = _wfopen(filename.c_str(), L"wb"); // Binary modda yaz
+void CryptofigAutoencoder::save_weights(const std::string& filename) const {
+    FILE* fp = fopen(filename.c_str(), "wb"); // Binary modda yaz
     if (!fp) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Autoencoder agirlik dosyasi yazilamadi: " << filename << L" (errno: " << errno << L")\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: Autoencoder agirlik dosyasi yazilamadi: " << filename << " (errno: " << errno << ")\n");
         return;
     }
 
@@ -153,13 +154,13 @@ void CryptofigAutoencoder::save_weights(const std::wstring& filename) const {
     size = decoder_bias_1.size();    fwrite(&size, sizeof(size_t), 1, fp); fwrite(decoder_bias_1.data(), sizeof(float), size, fp);
 
     fclose(fp);
-    LOG(LogLevel::INFO, std::wcout, L"CryptofigAutoencoder agirliklari kaydedildi: " << filename << L"\n");
+    LOG_DEFAULT(LogLevel::INFO, "CryptofigAutoencoder agirliklari kaydedildi: " << filename << "\n");
 }
 
-void CryptofigAutoencoder::load_weights(const std::wstring& filename) {
-    FILE* fp = _wfopen(filename.c_str(), L"rb"); // Binary modda oku
+void CryptofigAutoencoder::load_weights(const std::string& filename) {
+    FILE* fp = fopen(filename.c_str(), "rb"); // Binary modda oku
     if (!fp) {
-        LOG(LogLevel::WARNING, std::wcout, L"Uyari: Autoencoder agirlik dosyasi bulunamadi, rastgele agirliklar kullaniliyor: " << filename << L" (errno: " << errno << L")\n");
+        LOG_DEFAULT(LogLevel::WARNING, "Uyari: Autoencoder agirlik dosyasi bulunamadi, rastgele agirliklar kullaniliyor: " << filename << " (errno: " << errno << ")\n");
         initialize_random_weights(); // Bulunamadıysa rastgele başlat
         return;
     }
@@ -169,7 +170,7 @@ void CryptofigAutoencoder::load_weights(const std::wstring& filename) {
     fread(&loaded_latent_dim, sizeof(int), 1, fp);
 
     if (loaded_input_dim != INPUT_DIM || loaded_latent_dim != LATENT_DIM) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"Hata: Autoencoder agirlik dosyasi boyutlari uyuşmuyor! Dosya: " << loaded_input_dim << L"x" << loaded_latent_dim << L", Beklenen: " << INPUT_DIM << L"x" << LATENT_DIM << L". Rastgele agirliklar kullaniliyor.\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: Autoencoder agirlik dosyasi boyutlari uyuşmuyor! Dosya: " << loaded_input_dim << "x" << loaded_latent_dim << ", Beklenen: " << INPUT_DIM << "x" << LATENT_DIM << ". Rastgele agirliklar kullaniliyor.\n");
         fclose(fp);
         initialize_random_weights();
         return;
@@ -180,9 +181,9 @@ void CryptofigAutoencoder::load_weights(const std::wstring& filename) {
     fread(&size, sizeof(size_t), 1, fp); encoder_bias_1.resize(size);    fread(encoder_bias_1.data(), sizeof(float), size, fp);
     fread(&size, sizeof(size_t), 1, fp); decoder_weights_1.resize(size); fread(decoder_weights_1.data(), sizeof(float), size, fp);
     fread(&size, sizeof(size_t), 1, fp); decoder_bias_1.resize(size);    fread(decoder_bias_1.data(), sizeof(float), size, fp);
-    
+
     fclose(fp);
-    LOG(LogLevel::INFO, std::wcout, L"CryptofigAutoencoder agirliklari yuklendi: " << filename << L"\n");
+    LOG_DEFAULT(LogLevel::INFO, "CryptofigAutoencoder agirliklari yuklendi: " << filename << "\n");
 }
 
 // Yeniden yapılandırma hatasını hesaplar

@@ -64,6 +64,7 @@
         "stop_token": "cpp",
         "thread": "cpp",
         "queue": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "codecvt": "cpp"
     }
 }

@@ -10,8 +10,9 @@
 #include <numeric>   // std::accumulate için
 #include <cmath>     // std::sqrt için
 #include <algorithm> // std::min/max için
-#include <iostream>  // std::wcout, std::wcerr için
+#include <iostream>  // std::cout, std::cerr için
 #include <iomanip>   // std::fixed, std::setprecision için
+#include <sstream>   // std::stringstream için
 
 
 // YENİ: AIInsightsEngine Implementasyonu
@@ -36,7 +37,7 @@ float AIInsightsEngine::calculate_average_feedback_score(UserIntent intent_id) c
 
 float AIInsightsEngine::calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const {
     if (statistical_features.empty() || statistical_features.size() != CryptofigAutoencoder::INPUT_DIM) {
-        LOG(LogLevel::ERR_CRITICAL, std::wcerr, L"AIInsightsEngine::calculate_autoencoder_reconstruction_error: İstatistiksel özellik vektörü boş veya boyut uyuşmuyor. Yüksek hata döndürülüyor.\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "AIInsightsEngine::calculate_autoencoder_reconstruction_error: İstatistiksel özellik vektörü boş veya boyut uyuşmuyor. Yüksek hata döndürülüyor.\n");
         return 1.0f; // Hata durumunda yüksek hata döndür
     }
     std::vector<float> reconstructed = autoencoder.reconstruct(statistical_features);
@@ -54,22 +55,22 @@ IntentAnalyzer& AIInsightsEngine::get_analyzer() const {
 
 
 std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence& current_sequence) {
-    LOG(LogLevel::DEBUG, std::wcout, L"AIInsightsEngine::generate_insights: Icgoru uretimi basladi.\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi basladi.\n");
     std::vector<AIInsight> insights;
 
     // 1. Niyet Analizörü Performansı Hakkında İçgörüler
     if (current_sequence.latent_cryptofig_vector.empty() || current_sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) {
-        insights.push_back({L"Latent kriptofig verisi eksik veya geçersiz. Niyetleri doğru analiz edemeyebilirim.", AIAction::SuggestSelfImprovement, 1.0f});
+        insights.push_back({"Latent kriptofig verisi eksik veya geçersiz. Niyetleri doğru analiz edemeyebilirim.", AIAction::SuggestSelfImprovement, 1.0f});
     } else {
         UserIntent current_predicted_intent = analyzer.analyze_intent(current_sequence);
         if (current_predicted_intent == UserIntent::Unknown) {
-            insights.push_back({L"Şu anki niyetinizi tam olarak algılamakta zorlanıyorum. Yeni öğrenme fırsatlarına ihtiyacım var.", AIAction::SuggestSelfImprovement, 0.8f});
+            insights.push_back({"Şu anki niyetinizi tam olarak algılamakta zorlanıyorum. Yeni öğrenme fırsatlarına ihtiyacım var.", AIAction::SuggestSelfImprovement, 0.8f});
         }
         
         // Örnek: Belirli niyetler için öğrenme performansı düşükse
         float fast_typing_feedback = calculate_average_feedback_score(UserIntent::FastTyping);
         if (fast_typing_feedback < -0.2f && learner.get_implicit_feedback_history().count(UserIntent::FastTyping) && learner.get_implicit_feedback_history().at(UserIntent::FastTyping).size() > learner.get_feedback_history_size() / 2) { 
-            insights.push_back({L"Hızlı yazım modunda kullanıcı geri bildirimlerim düşük seyrediyor. Bu niyet için şablon ağırlıklarımı gözden geçirmeliyim.", AIAction::SuggestSelfImprovement, 0.7f});
+            insights.push_back({"Hızlı yazım modunda kullanıcı geri bildirimlerim düşük seyrediyor. Bu niyet için şablon ağırlıklarımı gözden geçirmeliyim.", AIAction::SuggestSelfImprovement, 0.7f});
         }
     }
 
@@ -77,29 +78,29 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     if (!current_sequence.statistical_features_vector.empty()) {
         float reconstruction_error = calculate_autoencoder_reconstruction_error(current_sequence.statistical_features_vector);
         if (reconstruction_error > 0.3f) { // Yüksek yeniden yapılandırma hatası
-            insights.push_back({L"Kriptofig analizim, mevcut sensör verisindeki bazı desenleri tam olarak öğrenemiyor. Autoencoder'ın ağırlıklarını daha agresif ayarlamalıyım.", AIAction::SuggestSelfImprovement, 0.9f});
+            insights.push_back({"Kriptofig analizim, mevcut sensör verisindeki bazı desenleri tam olarak öğrenemiyor. Autoencoder'ın ağırlıklarını daha agresif ayarlamalıyım.", AIAction::SuggestSelfImprovement, 0.9f});
         } else if (reconstruction_error < 0.05f) { // Çok düşük hata, belki aşırı öğrenme veya latent uzay çok büyük
-            insights.push_back({L"Autoencoder'ım veriyi çok iyi yeniden yapılandırıyor. Belki latent uzayı daha da küçültebilirim?", AIAction::SuggestSelfImprovement, 0.2f});
+            insights.push_back({"Autoencoder'ım veriyi çok iyi yeniden yapılandırıyor. Belki latent uzayı daha da küçültebilirim?", AIAction::SuggestSelfImprovement, 0.2f});
         }
     } else {
-         insights.push_back({L"İstatistiksel özellik vektörü boş, Autoencoder performansı hakkında yorum yapamıyorum.", AIAction::None, 0.0f});
+         insights.push_back({"İstatistiksel özellik vektörü boş, Autoencoder performansı hakkında yorum yapamıyorum.", AIAction::None, 0.0f});
     }
 
 
     // 3. Genel Öğrenme Mekanizması Hakkında İçgörüler (Meta-Ayarlama)
     if (learner.get_learning_rate() > 0.05f && learner.get_implicit_feedback_history().size() > learner.get_feedback_history_size() / 2) { 
-        insights.push_back({L"Öğrenme hızım şu anda yüksek. Performansım stabil kalırsa biraz düşürmeyi düşünebilirim.", AIAction::SuggestSelfImprovement, 0.3f});
+        insights.push_back({"Öğrenme hızım şu anda yüksek. Performansım stabil kalırsa biraz düşürmeyi düşünebilirim.", AIAction::SuggestSelfImprovement, 0.3f});
     } else if (learner.get_learning_rate() < 0.005f && learner.get_implicit_feedback_history().size() > learner.get_feedback_history_size() / 2 && calculate_average_feedback_score(UserIntent::Unknown) < -0.5f) { 
-        insights.push_back({L"Niyet algılamamda sorun yaşıyorum ve öğrenme hızım düşük. Daha hızlı öğrenmek için öğrenme oranımı artırmalıyım.", AIAction::SuggestSelfImprovement, 0.9f});
+        insights.push_back({"Niyet algılamamda sorun yaşıyorum ve öğrenme hızım düşük. Daha hızlı öğrenmek için öğrenme oranımı artırmalıyım.", AIAction::SuggestSelfImprovement, 0.9f});
     }
     
     // 4. Tahmin Motoru Hakkında İçgörüler (Basit)
     // Gelecekteki niyet tahmininin sıkça yanlış çıkması gibi durumlar burada analiz edilebilir. 
     
     if (insights.empty()) {
-        insights.push_back({L"İç durumum stabil görünüyor. Yeni öğrenme fırsatları için hazırım.", AIAction::None, 0.0f});
+        insights.push_back({"İç durumum stabil görünüyor. Yeni öğrenme fırsatları için hazırım.", AIAction::None, 0.0f});
     }
 
-    LOG(LogLevel::DEBUG, std::wcout, L"AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << L"\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << "\n");
     return insights;
 }

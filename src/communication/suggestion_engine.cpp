@@ -1,34 +1,35 @@
 #include "suggestion_engine.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG için
+#include "../core/utils.h"       // LOG için (ve convert_wstring_to_string için)
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "../brain/intent_analyzer.h" // IntentAnalyzer için
 #include <algorithm> // std::max için
+#include <random> // std::random_device, std::mt19937, std::uniform_real_distribution için
 
 // === SuggestionEngine Implementasyonlari ===
 
 SuggestionEngine::SuggestionEngine(IntentAnalyzer& analyzer_ref) : analyzer(analyzer_ref) {}
 
-std::wstring SuggestionEngine::action_to_string(AIAction action) const {
+std::string SuggestionEngine::action_to_string(AIAction action) const {
     switch (action) {
-        case AIAction::DisableSpellCheck: return L"Yazim denetimini devre disi birak";
-        case AIAction::EnableCustomDictionary: return L"Ozel sozlügü etkinlestir";
-        case AIAction::ShowUndoHistory: return L"Geri alma geçmisini goster";
-        case AIAction::CompareVersions: return L"Versiyonlari karsilastir";
-        case AIAction::DimScreen: return L"Ekrani karart";
-        case AIAction::MuteNotifications: return L"Bildirimleri sessize al";
-        case AIAction::LaunchApplication: return L"Uygulama baslat";
-        case AIAction::OpenFile: return L"Dosya aç";
-        case AIAction::SetReminder: return L"Hatirlatici kur";
-        case AIAction::SimulateOSAction: return L"OS eylemi simule et"; 
-        case AIAction::SuggestBreak: return L"Ara vermeyi öner";
-        case AIAction::OptimizeForGaming: return L"Oyun performansı için optimize et";
-        case AIAction::EnableFocusMode: return L"Odaklanma modunu etkinleştir";
-        case AIAction::AdjustAudioVolume: return L"Ses seviyesini ayarla";
-        case AIAction::OpenDocumentation: return L"Dokümantasyon aç";
-        case AIAction::SuggestSelfImprovement: return L"Kendi kendini geliştirme önerisi"; 
-        case AIAction::None: return L"Hiçbir eylem önerisi yok"; 
-        case AIAction::Count: return L"Eylem Sayisi"; // Erişilmemeli, debug amaçlı
-        default: return L"Tanimlanmamis eylem"; 
+        case AIAction::DisableSpellCheck: return "Yazim denetimini devre disi birak";
+        case AIAction::EnableCustomDictionary: return "Ozel sozlügü etkinlestir";
+        case AIAction::ShowUndoHistory: return "Geri alma geçmisini goster";
+        case AIAction::CompareVersions: return "Versiyonlari karsilastir";
+        case AIAction::DimScreen: return "Ekrani karart";
+        case AIAction::MuteNotifications: return "Bildirimleri sessize al";
+        case AIAction::LaunchApplication: return "Uygulama baslat";
+        case AIAction::OpenFile: return "Dosya aç";
+        case AIAction::SetReminder: return "Hatirlatici kur";
+        case AIAction::SimulateOSAction: return "OS eylemi simule et"; 
+        case AIAction::SuggestBreak: return "Ara vermeyi öner";
+        case AIAction::OptimizeForGaming: return "Oyun performansı için optimize et";
+        case AIAction::EnableFocusMode: return "Odaklanma modunu etkinleştir";
+        case AIAction::AdjustAudioVolume: return "Ses seviyesini ayarla";
+        case AIAction::OpenDocumentation: return "Dokümantasyon aç";
+        case AIAction::SuggestSelfImprovement: return "Kendi kendini geliştirme önerisi"; 
+        case AIAction::None: return "Hiçbir eylem önerisi yok"; 
+        case AIAction::Count: return "Eylem Sayisi"; // Erişilmemeli, debug amaçlı
+        default: return "Tanimlanmamis eylem"; 
     }
 }
 

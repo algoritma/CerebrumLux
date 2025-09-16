@@ -4,6 +4,7 @@
 #include <chrono> // For timestamp_us
 #include <string> // For wchar_t
 #include "../core/enums.h" // Enum'lar için
+#include "../core/utils.h" // For convert_wstring_to_string (if needed elsewhere)
 
 // *** AtomicSignal: Kendi ozel 'bilgi atomumuz' ***
 struct AtomicSignal {
@@ -12,7 +13,7 @@ struct AtomicSignal {
     
     // Klavye olaylari icin
     unsigned int virtual_key_code;    
-    wchar_t character;                
+    char character;                
     KeyType key_type;                 
     KeyEventType event_type;          
     unsigned char pressure_estimate;  

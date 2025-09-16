@@ -1,0 +1,14 @@
+[2025-09-15 18:55:50] [INFO] ResponseEngine Test Başladı. (C:\Users\aib\CerebrumLux\tests\test_response_engine.cpp:105)
+[2025-09-15 18:59:53] [INFO] ResponseEngine Test Başladı. (C:\Users\aib\CerebrumLux\tests\test_response_engine.cpp:105)
+[2025-09-15 19:29:17] [INFO] ResponseEngine Test Başladı. (C:\Users\aib\CerebrumLux\tests\test_response_engine.cpp:92)
+[2025-09-15 19:29:17] [INFO] CryptofigAutoencoder: Agirliklar rastgele baslatildi.
+ (C:\Users\aib\CerebrumLux\src\brain\autoencoder.cpp:33)
+[2025-09-15 19:35:07] [INFO] ResponseEngine Test Başladı. (C:\Users\aib\CerebrumLux\tests\test_response_engine.cpp:92)
+[2025-09-15 19:35:07] [INFO] CryptofigAutoencoder: Agirliklar rastgele baslatildi.
+ (C:\Users\aib\CerebrumLux\src\brain\autoencoder.cpp:39)
+[2025-09-15 19:39:41] [INFO] ResponseEngine Test Başladı. (C:\Users\aib\CerebrumLux\tests\test_response_engine.cpp:92)
+[2025-09-15 19:39:41] [INFO] CryptofigAutoencoder: Agirliklar rastgele baslatildi.
+ (C:\Users\aib\CerebrumLux\src\brain\autoencoder.cpp:33)
+[2025-09-15 19:43:17] [INFO] ResponseEngine Test Başladı. (C:\Users\aib\CerebrumLux\tests\test_response_engine.cpp:92)
+[2025-09-15 19:43:17] [INFO] CryptofigAutoencoder: Agirliklar rastgele baslatildi.
+ (C:\Users\aib\CerebrumLux\src\brain\autoencoder.cpp:33)

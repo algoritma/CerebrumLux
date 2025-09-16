@@ -3,8 +3,9 @@
 
 #include <vector>  // For std::vector
 #include <map>     // For std::map
-#include <string>  // For std::wstring
+#include <string>  // For std::string
 #include "../core/enums.h" // UserIntent, AIAction enum'ları için
+#include "../core/utils.h" // For convert_wstring_to_string (if needed elsewhere)
 
 // İleri bildirim: Eğer IntentTemplate içinde CryptofigAutoencoder'dan bir boyut kullanılıyorsa, burada bildirilebilir.
 // Ancak IntentTemplate'ın kendisi CryptofigAutoencoder'ı doğrudan kullanmadığı için şimdilik gerek yok.
