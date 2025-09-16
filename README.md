@@ -135,7 +135,7 @@ Sorularınız, önerileriniz veya işbirliği teklifleriniz için lütfen [[algo
 
 ---
 
-
+## **EN:**
 # Cerebrum Lux (Light Brain)
 
 ![CerebrumLux](images/CerebrumLux_logo_150.png)
