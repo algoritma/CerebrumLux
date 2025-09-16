@@ -41,6 +41,8 @@
 #include "communication/response_engine.h"
 #include "communication/suggestion_engine.h"
 
+using namespace cerebrum;
+
 
 // Dosya isimleri (constants)
 const std::string AI_MEMORY_FILE = "cerebrum_lux_memory.bin";
@@ -137,12 +139,15 @@ int main(int argc, char **argv) {
 
         simulatedSignalProcessor.start_capture();
 
-        std::cout << "\n--- Cerebrum Lux Baslatildi ---\n";
+        // UI Mesajları
+        std::cout << "\n--- Cerebrum Lux Baslatildi ---\\n";
         std::cout << "    - Mevcut Log Seviyesi: " << Logger::get_instance().level_to_string(Logger::get_instance().get_level()) << "\n";
         std::cout << "  - Raporlama Seviyesini Degistirmek Icin 'L' tusuna basin.\n";
+        std::cout << "    (0=SILENT, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG, 5=TRACE)\n";
         std::cout << "  - Durum Raporu Icin 'S' veya 'R' tusuna basin. (Yeni satirda girin)\n";
         std::cout << "  - Cikis Icin 'Q' tusuna basin. (Yeni satirda girin)\n";
         std::cout << "------------------------------\n";
+
 
         UserIntent last_predicted_intent = UserIntent::Unknown;
         AIAction last_suggested_action = AIAction::None;
@@ -152,6 +157,8 @@ int main(int argc, char **argv) {
         static std::mt19937 gen_main(rd_main());
 
         while (true) {
+            std::cout << "Klavye Girisi (Q ile cikis): ";
+            
             if (last_suggested_action != AIAction::None) {
                 std::cout << "Onerilen eylem '" << suggester.action_to_string(last_suggested_action) << "' basarili oldu mu? (E/H): ";
                 char feedback_char_raw;
@@ -166,9 +173,9 @@ int main(int argc, char **argv) {
                     LOG_DEFAULT(LogLevel::WARNING, "Geri bildirim islenemedi: current_sequence null.\n");
                 }
                 last_suggested_action = AIAction::None;
+                continue; 
             }
 
-            std::cout << "Klavye Girisi (Q ile cikis): ";
             std::string user_input_line;
             if (!std::getline(std::cin, user_input_line)) break;
             if (user_input_line.empty()) continue;
@@ -178,7 +185,7 @@ int main(int argc, char **argv) {
                 char ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch_raw)));
                 if (ch == 'q') break;
                 if (ch == 's' || ch == 'r') {
-                    std::cout << "\n--- CEREBRUM LUX: Durum Raporu ---\n";
+                    std::cout << "\n--- CEREBRUM LUX: Durum Raporu ---\\n";
                     std::cout << std::fixed << std::setprecision(4);
                     std::cout << "    - Niyet Belirleme Esiği: " << analyzer.confidence_threshold_for_known_intent << "\n";
                     std::cout << "    - Ogrenme Orani: " << learner.get_learning_rate() << "\n";
@@ -245,7 +252,7 @@ int main(int argc, char **argv) {
             }
 
             if (sequence_updated_in_this_line && sequenceManager.current_sequence) {
-                std::cout << "\n--- Cerebrum LUX: Anlik Dizi Ozeti ---\n";
+                std::cout << "\n--- Cerebrum LUX: Anlik Dizi Ozeti ---\\n";
                 std::cout << std::fixed << std::setprecision(4);
 
                 std::cout << "Son Guncelleme Zamani: " << sequenceManager.current_sequence->last_updated_us << " us\n";

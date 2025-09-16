@@ -72,7 +72,7 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
     UserIntent best_intent = UserIntent::Unknown;
     float max_score = -std::numeric_limits<float>::max(); // Başlangıçta çok düşük bir değer
 
-    for (const auto& tmpl : intent_templates) {
+    for (auto& tmpl : intent_templates) {
         float score = 0.0f;
         // Ağırlık boyutu latent kriptofig boyutu ile eşleşmeli
         if (tmpl.weights.size() != sequence.latent_cryptofig_vector.size()) { 
@@ -83,6 +83,29 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
             score += tmpl.weights[i] * sequence.latent_cryptofig_vector[i]; // latent_cryptofig_vector kullanılıyor
         }
         
+        // --- YENİ: Bağlamsal Skor Ayarlama Mantığı ---
+        if (tmpl.id == UserIntent::Editing) {
+            if (sequence.avg_keystroke_interval > 1500.0f && sequence.control_key_frequency > 0.2f) {
+                score *= 1.5f; 
+                LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Editing skoru yavaş yazım ve kontrol tuşları nedeniyle artırıldı.\n");
+            }
+        }
+
+        if (tmpl.id == UserIntent::IdleThinking) {
+            if (sequence.avg_keystroke_interval > 5000.0f) { 
+                score *= 2.0f; 
+                LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: IdleThinking skoru çok yavaş yazım nedeniyle artırıldı.\n");
+            }
+        }
+
+        if (tmpl.id == UserIntent::Gaming) {
+            if (sequence.avg_keystroke_interval > 2000.0f) {
+                score *= 0.2f; 
+                LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Gaming skoru yavaş yazım nedeniyle düşürüldü.\n");
+            }
+        }
+        // --- YENİ MANTIK SONU ---
+
         if (score > max_score) {
             max_score = score;
             best_intent = tmpl.id;
@@ -90,6 +113,7 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
     }
     
     if (max_score < this->confidence_threshold_for_known_intent) { 
+        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: En yüksek skor (" << max_score << ") eşik değerinin (" << this->confidence_threshold_for_known_intent << ") altında. Niyet 'Unknown' olarak ayarlandı.\n");
         best_intent = UserIntent::Unknown;
     }
 

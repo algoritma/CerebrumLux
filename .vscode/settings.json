@@ -65,6 +65,7 @@
         "thread": "cpp",
         "queue": "cpp",
         "set": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "csignal": "cpp"
     }
 }

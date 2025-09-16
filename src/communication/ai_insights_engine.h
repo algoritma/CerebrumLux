@@ -1,17 +1,19 @@
 #ifndef CEREBRUM_LUX_AI_INSIGHTS_ENGINE_H
 #define CEREBRUM_LUX_AI_INSIGHTS_ENGINE_H
 
-#include <vector>  // For std::vector
-#include <string>  // For std::string (was std::wstring)
-#include <numeric> // For std::accumulate
-#include "../core/enums.h"         // Enumlar için
-#include "../core/utils.h"         // LOG için
-#include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
-#include "../brain/intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
-#include "../brain/intent_learner.h"        // IntentLearner için ileri bildirim
-#include "../brain/prediction_engine.h"     // PredictionEngine için ileri bildirim
-#include "../brain/autoencoder.h"           // CryptofigAutoencoder için ileri bildirim
-#include "../brain/cryptofig_processor.h"   // CryptofigProcessor için ileri bildirim
+#include <vector>
+#include <string>
+#include <numeric>
+#include <map>
+#include <chrono>
+#include "../core/enums.h"
+#include "../core/utils.h"
+#include "../data_models/dynamic_sequence.h"
+#include "../brain/intent_analyzer.h"
+#include "../brain/intent_learner.h"
+#include "../brain/prediction_engine.h"
+#include "../brain/autoencoder.h"
+#include "../brain/cryptofig_processor.h"
 
 #include "../brain/intent_learner.h"
 
@@ -26,9 +28,9 @@ class CryptofigProcessor;
 
 // YENİ: AIInsight struct tanımı
 struct AIInsight {
-    std::string observation; // std::wstring yerine std::string
-    AIAction suggested_action = AIAction::None; // Gerekirse ilgili bir eylem önerisi
-    float urgency = 0.0f; // Ne kadar acil olduğu (0.0f - 1.0f)
+    std::string observation;
+    AIAction suggested_action = AIAction::None;
+    float urgency = 0.0f;
 };
 
 // YENİ: AIInsightsEngine sınıfı tanımı
@@ -37,15 +39,12 @@ public:
     AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& learner_ref,
                      PredictionEngine& predictor_ref, CryptofigAutoencoder& autoencoder_ref,
                      CryptofigProcessor& cryptofig_processor_ref);
-    virtual std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence); // Eklendi: virtual
+    virtual std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence);
 
-    // AI'ın mevcut iç durumunu ve performansını analiz eder ve içgörüler üretir
     std::string generateResponse(UserIntent intent, const std::vector<float>& latent_cryptofig_vector);
 
-    // Bu metot public olacak (GoalManager tarafından erişim için)
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
     
-    // IntentAnalyzer üyesine erişim için getter metodu (GoalManager tarafından erişim için)
     virtual IntentAnalyzer& get_analyzer() const; 
 
 private:
@@ -54,6 +53,8 @@ private:
     PredictionEngine& predictor;
     CryptofigAutoencoder& autoencoder;
     CryptofigProcessor& cryptofig_processor;
+
+    mutable std::map<std::string, std::chrono::steady_clock::time_point> insight_cooldowns;
 
     // Yardımcı fonksiyonlar
     float calculate_average_feedback_score(UserIntent intent_id) const;

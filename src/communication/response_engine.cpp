@@ -26,6 +26,46 @@ static bool is_critical_action_suggestion(const std::string& suggestion) {
     return false;
 }
 
+// Yardımcı fonksiyon: Kritik eylem önerisi mesajından eylem açıklamasını çıkarır.
+static std::string extract_action_description(const std::string& full_suggestion) {
+    std::string description = full_suggestion;
+
+    // Önekleri ve baştaki boşlukları temizle
+    size_t start_pos = description.find_first_not_of(" \t\n\r");
+    if (std::string::npos != start_pos) {
+        description = description.substr(start_pos);
+    }
+
+    const std::string onerisi_prefix = "AI Onerisi: ";
+    if (description.rfind(onerisi_prefix, 0) == 0) {
+        description.erase(0, onerisi_prefix.length());
+    }
+
+    const std::string icgoru_prefix = "[AI-ICGORU]: ";
+    if (description.rfind(icgoru_prefix, 0) == 0) {
+        description.erase(0, icgoru_prefix.length());
+    }
+
+    // Yaygın soru kalıplarını ve fazlalıkları temizle
+    size_t pos;
+    if ((pos = description.find(" ister misiniz?")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" edebilirim.")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" sağlayabilirim.")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" kapatabilirim.")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" artırabilirim.")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" optimize edebilirim?")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" kesmemi ister misiniz?")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" edelim mi?")) != std::string::npos) description.erase(pos);
+    if ((pos = description.find(" öneririm.")) != std::string::npos) description.erase(pos); // Yeni ekledik
+    if ((pos = description.find(" olabilirim?")) != std::string::npos) description.erase(pos); // Yeni ekledik
+    
+    // Cümle sonundaki noktalama işaretlerini ve boşlukları temizle
+    while (!description.empty() && (description.back() == '.' || description.back() == '?' || description.back() == ' ' || description.back() == '\n')) {
+        description.pop_back();
+    }
+    return description;
+}
+
 // === ResponseEngine Implementasyonlari ===
 ResponseEngine::ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_manager_ref, AIInsightsEngine& insights_engine_ref) 
     : analyzer(analyzer_ref), goal_manager(goal_manager_ref), insights_engine(insights_engine_ref), gen(rd()) { 
@@ -333,7 +373,7 @@ std::string ResponseEngine::generate_response(UserIntent current_intent, Abstrac
                                           possible_responses[0].find("özel bir plan oluşturulamadı") != std::string::npos ||
                                           possible_responses[0].find("AI, ogrenmeye devam ediyor") != std::string::npos ||
                                           possible_responses[0].find("size nasil yardimci olabilirim?") != std::string::npos)
-        ))
+        )) 
     {
         switch (current_goal) {
             case AIGoal::OptimizeProductivity:
@@ -389,42 +429,7 @@ std::string ResponseEngine::generate_response(UserIntent current_intent, Abstrac
     }
 
     if (!critical_action_to_confirm.empty()) {
-        // Eylem açıklamasını temizle (örneğin, "Sistem performansınızı optimize etmek ister misiniz?" -> "Sistem performansınızı optimize etmek")
-        std::string action_description = critical_action_to_confirm;
-        size_t pos_question = action_description.find(" ister misiniz?");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" edebilirim.");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" sağlayabilirim.");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" kapatabilirim.");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" artırabilirim.");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" optimize edebilirim?");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" kesmemi ister misiniz?");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-        pos_question = action_description.find(" edelim mi?");
-        if (pos_question != std::string::npos) {
-            action_description = action_description.substr(0, pos_question);
-        }
-
-
+        std::string action_description = extract_action_description(critical_action_to_confirm); // Yeni yardımcı fonksiyonu kullan
         final_response_text = "Şu eylemi [" + action_description + "] yapmak istiyorum. Onaylıyor musunuz? (Evet/Hayır)";
         LOG_DEFAULT(LogLevel::DEBUG, "ResponseEngine::generate_response: Kritik eylem onayı istendi: " << final_response_text << "\n");
         return final_response_text;
