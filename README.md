@@ -1,6 +1,6 @@
 # Cerebrum Lux (Işık Beyin)
 
-![CerebrumLux](CerebrumLux_logo.png)
+![CerebrumLux](images/CerebrumLux_logo_150.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
