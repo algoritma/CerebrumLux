@@ -36,6 +36,18 @@ struct DynamicSequence {
     bool current_display_on;      // Ekran açık/kapalı durumu
     bool current_network_active;  // Ağ bağlantısı aktif/pasif durumu
 
+    // YENİ EKLENECEK SENSÖR VERİLERİ İÇİN ALANLAR
+    float avg_audio_level_db;
+    float avg_audio_frequency_hz;
+    float speech_detection_ratio; // buffer içinde konuşma algılanan sinyal oranı
+    unsigned short dominant_audio_environment_hash; // buffer içindeki en baskın ses ortamı
+
+    float avg_ambient_light_lux;
+    float face_detection_ratio; // buffer içinde yüz algılanan sinyal oranı
+    float motion_detection_ratio; // buffer içinde hareket algılanan sinyal oranı
+    unsigned short avg_object_count;
+    unsigned short dominant_emotion_hash; // buffer içindeki en baskın duygu
+
     DynamicSequence();
     // update_from_signals metodu CryptofigAutoencoder referansı alacak şekilde güncellendi
     void update_from_signals(const std::deque<AtomicSignal>& signal_buffer, long long current_time_us, unsigned short app_hash, CryptofigAutoencoder& autoencoder);

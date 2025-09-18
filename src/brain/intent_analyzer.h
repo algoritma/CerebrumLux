@@ -10,14 +10,18 @@
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
 #include "intent_template.h"       // IntentTemplate için
 #include "autoencoder.h"           // CryptofigAutoencoder::LATENT_DIM için (sadece boyut için)
+// #include "../communication/natural_language_processor.h" // KALDIRILDI: NaturalLanguageProcessor için başlık dosyası dahil edildi
+
 
 // İleri bildirimler
 struct DynamicSequence;
 struct IntentTemplate;
+// class NaturalLanguageProcessor; // KALDIRILDI: NaturalLanguageProcessor için ileri bildirim
 
 // *** IntentAnalyzer: Kullanici niyetlerini analiz eder ***
 class IntentAnalyzer {
 public:
+    // Kurucu parametresiz hale getirildi
     IntentAnalyzer(); 
     virtual UserIntent analyze_intent(const DynamicSequence& sequence); // Eklendi: virtual
     
@@ -34,6 +38,9 @@ public:
 
     float confidence_threshold_for_known_intent; 
     void set_confidence_threshold(float threshold); 
+
+private:
+    // NaturalLanguageProcessor& nlp; // KALDIRILDI: NaturalLanguageProcessor referansı
 };
 
 

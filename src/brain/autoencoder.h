@@ -12,7 +12,7 @@
 class CryptofigAutoencoder {
 public:
     // Yapılandırma parametreleri
-    static const int INPUT_DIM = 10;  // statistical_features_vector boyutu
+    static const int INPUT_DIM = 18;  // statistical_features_vector boyutu (10'dan 18'e güncellendi)
     static const int LATENT_DIM = 3;  // latent_cryptofig_vector boyutu
 
     CryptofigAutoencoder();

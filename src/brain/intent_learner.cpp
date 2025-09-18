@@ -3,7 +3,11 @@
 #include "../core/logger.h"      // LOG makrosu için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "intent_analyzer.h"     // IntentAnalyzer için
-#include "atomic_signal.h"       // AtomicSignal için
+#include "../sensors/atomic_signal.h"       // AtomicSignal için
+#include "../communication/suggestion_engine.h" // SuggestionEngine için eklendi
+#include "../brain/autoencoder.h" // CryptofigAutoencoder::LATENT_DIM için eklendi
+#include "../user/user_profile_manager.h" // UserProfileManager için eklendi
+// #include "../communication/natural_language_processor.h" // KALDIRILDI: NaturalLanguageProcessor için eklendi
 #include <numeric> // std::accumulate
 #include <algorithm> // std::min, std::max
 #include <cmath>     // std::abs
@@ -13,10 +17,14 @@
 
 // === IntentLearner Implementasyonlari ===
 
-IntentLearner::IntentLearner(IntentAnalyzer& analyzer_ref)
-    : analyzer(analyzer_ref), learning_rate(0.01f) {}
+// Kurucu güncellendi - NaturalLanguageProcessor referansı kaldırıldı
+IntentLearner::IntentLearner(IntentAnalyzer& analyzer_ref, SuggestionEngine& suggester_ref, UserProfileManager& user_profile_manager_ref)
+    : analyzer(analyzer_ref), suggester(suggester_ref), user_profile_manager(user_profile_manager_ref), learning_rate(0.01f) {}
 
 void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent predicted_intent, const std::deque<AtomicSignal>& recent_signals) {
+    // Kullanıcı profiline niyet geçmişi ekle
+    user_profile_manager.add_intent_history_entry(predicted_intent, sequence.last_updated_us);
+
     // Geri bildirim gücünü hesapla (örneğin, tahmin edilen niyetin güvenine göre)
     float feedback_strength = 0.0f; // Varsayılan olarak sıfır
 
@@ -25,9 +33,14 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
         UserIntent best_potential_known_intent = UserIntent::Unknown;
         float max_potential_score = -std::numeric_limits<float>::max();
 
-        for (const auto& tmpl : analyzer.intent_templates) { // Corrected access
+        for (const auto& tmpl : analyzer.intent_templates) {
             if (tmpl.id != UserIntent::Unknown) {
                 float score = 0.0f;
+                // CryptofigAutoencoder::LATENT_DIM kullanılarak weights boyutu kontrolü
+                if (tmpl.weights.size() != CryptofigAutoencoder::LATENT_DIM) {
+                    LOG_DEFAULT(LogLevel::ERR_CRITICAL, "IntentLearner::process_feedback: Niyet şablonu ağırlık boyutu latent kriptofig boyutuyla uyuşmuyor! Niyet: " << intent_to_string(tmpl.id) << ".\n");
+                    continue; // Bu şablonu atla
+                }
                 for (size_t i = 0; i < tmpl.weights.size(); ++i) {
                     score += tmpl.weights[i] * sequence.latent_cryptofig_vector[i];
                 }
@@ -38,15 +51,19 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
             }
         }
 
-        if (best_potential_known_intent != UserIntent::Unknown && max_potential_score > analyzer.confidence_threshold_for_known_intent) { // Corrected access
+        if (best_potential_known_intent != UserIntent::Unknown && max_potential_score > analyzer.confidence_threshold_for_known_intent) {
             LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] 'Bilinmiyor' olarak tahmin edildi, ancak güçlü potansiyel niyet '" << intent_to_string(best_potential_known_intent) << "' (geri bildirim: " << feedback_strength << ") bulundu. Bu niyet için ayar yapılıyor.\n");
             // Bu durumda, best_potential_known_intent için ağırlıkları ayarla
             std::vector<float> current_weights = analyzer.get_intent_weights(best_potential_known_intent);
-            for (size_t i = 0; i < current_weights.size(); ++i) {
-                current_weights[i] += learning_rate * (sequence.latent_cryptofig_vector[i] - current_weights[i]);
-                current_weights[i] = std::min(5.0f, std::max(-5.0f, current_weights[i]));
+            if (current_weights.size() != sequence.latent_cryptofig_vector.size()) { // Boyut kontrolü
+                 LOG_DEFAULT(LogLevel::ERR_CRITICAL, "IntentLearner::process_feedback: Current weights boyutu latent cryptofig boyutuyla uyuşmuyor! Ayarlama atlanıyor.\n");
+            } else {
+                for (size_t i = 0; i < current_weights.size(); ++i) {
+                    current_weights[i] += learning_rate * (sequence.latent_cryptofig_vector[i] - current_weights[i]);
+                    current_weights[i] = std::min(5.0f, std::max(-5.0f, current_weights[i]));
+                }
+                analyzer.update_template_weights(best_potential_known_intent, current_weights);
             }
-            analyzer.update_template_weights(best_potential_known_intent, current_weights);
         } else {
             // Gerçekten Unknown ise, öğrenme oranını düşür veya hiçbir şey yapma
             feedback_strength = 0.0f;
@@ -58,15 +75,20 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
         feedback_strength = 1.0f; // Pozitif geri bildirim
         LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Niyet '" << intent_to_string(predicted_intent) << "' için hesaplanan geri bildirim gucu: " << feedback_strength << "\n");
         std::vector<float> current_weights = analyzer.get_intent_weights(predicted_intent);
-        for (size_t i = 0; i < current_weights.size(); ++i) {
-            current_weights[i] += learning_rate * (sequence.latent_cryptofig_vector[i] - current_weights[i]);
-            current_weights[i] = std::min(5.0f, std::max(-5.0f, current_weights[i]));
+        if (current_weights.size() != sequence.latent_cryptofig_vector.size()) { // Boyut kontrolü
+             LOG_DEFAULT(LogLevel::ERR_CRITICAL, "IntentLearner::process_feedback: Current weights boyutu latent cryptofig boyutuyla uyuşmuyor! Ayarlama atlanıyor.\n");
+        } else {
+            for (size_t i = 0; i < current_weights.size(); ++i) {
+                current_weights[i] += learning_rate * (sequence.latent_cryptofig_vector[i] - current_weights[i]);
+                current_weights[i] = std::min(5.0f, std::max(-5.0f, current_weights[i]));
+            }
+            analyzer.update_template_weights(predicted_intent, current_weights);
         }
-        analyzer.update_template_weights(predicted_intent, current_weights);
     }
 
     // Implicit geri bildirim metriklerini topla ve işle
     AbstractState current_abstract_state = infer_abstract_state(recent_signals);
+    user_profile_manager.add_state_history_entry(current_abstract_state, sequence.last_updated_us); // Kullanıcı profiline durum geçmişi ekle
     evaluate_implicit_feedback(predicted_intent, current_abstract_state);
 }
 
@@ -208,45 +230,56 @@ void IntentLearner::adjust_learning_rate(float rate) {
     learning_rate = std::min(0.1f, std::max(0.001f, rate)); // Öğrenme oranını belirli sınırlar içinde tut
 }
 
-// Removed redefinition of get_learning_rate() as it's already defined in the header
-// float IntentLearner::get_learning_rate() const {
-//     return learning_rate;
-// }
+void IntentLearner::process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence, AbstractState current_abstract_state) {
+    float reward = approved ? 1.0f : -1.0f; // Onaylandıysa pozitif, reddedildiyse negatif ödül
 
-//undefined reference to IntentLearner::process_explicit_feedback hatasını gidermek için
-// IntentLearner::process_explicit_feedback fonksiyonunun tanımını eklemeliyiz. Bu fonksiyon, kullanıcının belirli bir eylemi onaylaması veya reddetmesi durumunda öğrenme oranlarını veya niyet güven puanlarını nasıl ayarlayacağını içermelidir.
+    // current_state için StateKey oluştur
+    StateKey state_key = {predicted_intent, current_abstract_state};
 
-void IntentLearner::process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence) {
-    // Bu fonksiyon, kullanıcının bir öneriyi/eylemi (action) onaylayıp onaylamamasına (approved) göre
-    // öğrenme mekanizmasını ayarlamalıdır.
+    // SuggestionEngine'ın Q-değerini güncelle
+    suggester.update_q_value(state_key, action, reward);
 
-    float feedback_value = 0.0f;
+    // Kullanıcı profiline açık geri bildirimi kaydet
+    // UserProfileManager'da bir metod (örn. add_explicit_action_feedback) ekleyebiliriz.
+    // Şimdilik, sadece IntentLearner'ın kendi explicit_feedback_history'sini güncelleyelim.
+    explicit_feedback_history[predicted_intent].push_back(reward); 
+    if (explicit_feedback_history[predicted_intent].size() > feedback_history_size) {
+        explicit_feedback_history[predicted_intent].pop_front();
+    }
+
     if (approved) {
-        feedback_value = 0.5f; // Onaylandıysa pozitif geri bildirim
         LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Kullanıcıdan açık geri bildirim: Niyet '" << intent_to_string(predicted_intent) <<
                              "', Eylem '" << static_cast<int>(action) << "' ONAYLANDI. Öğrenme güçlendiriliyor.");
     } else {
-        feedback_value = -0.5f; // Reddedildiyse negatif geri bildirim
         LOG_DEFAULT(LogLevel::INFO, "[AI-Ogrenen] Kullanıcıdan açık geri bildirim: Niyet '" << intent_to_string(predicted_intent) <<
                              "', Eylem '" << static_cast<int>(action) << "' REDDEDİLDİ. Öğrenme zayıflatılıyor.");
     }
 
-    // feedback_value'yu kullanarak ilgili niyetin ağırlıklarını veya güven puanlarını ayarla
-    // Bu kısım, IntentLearner'ın öğrenme modeline göre daha karmaşık olabilir.
-    // Şimdilik basitçe, ilgili niyetin ağırlıklarını cryptofig_vector'a doğru kaydıralım.
-    // Daha gelişmiş bir RL (Pekiştirmeli Öğrenme) entegrasyonu için burası genişletilecektir.
-    
-    std::vector<float> current_weights = analyzer.get_intent_weights(predicted_intent);
-    for (size_t i = 0; i < current_weights.size(); ++i) {
-        // Geri bildirim gücüne göre ağırlıkları hedef cryptofig_vector'a yaklaştır veya uzaklaştır
-        current_weights[i] += learning_rate * feedback_value * (sequence.latent_cryptofig_vector[i] - current_weights[i]);
-        current_weights[i] = std::min(5.0f, std::max(-5.0f, current_weights[i])); // Ağırlıkları belirli sınırlar içinde tut
-    }
-    analyzer.update_template_weights(predicted_intent, current_weights);
+}
 
-    // Açık geri bildirim geçmişini de tutabiliriz (explicit_feedback_history)
-    explicit_feedback_history[predicted_intent].push_back(feedback_value);
-    if (explicit_feedback_history[predicted_intent].size() > feedback_history_size) {
-        explicit_feedback_history[predicted_intent].pop_front();
-    }
+
+// --- EK METOTLAR (Boş bırakıldı veya daha sonra geliştirilecek) ---
+
+void IntentLearner::processMessages() {
+    // Mesaj kuyruğunu işleme mantığı buraya gelecek
+}
+
+void IntentLearner::update_action_success_score(UserIntent intent, AIAction next_action, float success_score) {
+    // Eylem başarı puanını güncelleme mantığı buraya gelecek
+}
+
+void IntentLearner::self_adjust_learning_rate(float adjustment_factor) {
+    // Öğrenme oranını otomatik ayarlama mantığı buraya gelecek
+}
+
+void IntentLearner::evaluate_and_meta_adjust() {
+    // Meta ayarlama mantığı buraya gelecek
+}
+
+void IntentLearner::adjust_template(UserIntent intent_id, const DynamicSequence& sequence, float feedback_strength) {
+    // Niyet şablonlarını ayarlama mantığı buraya gelecek
+}
+
+void IntentLearner::adjust_action_score(UserIntent intent_id, AIAction action, float score_change) {
+    // Eylem skorlarını ayarlama mantığı buraya gelecek
 }

@@ -47,41 +47,33 @@ void CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, co
     LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme tamamlandı.\n");
 }
 
-// Getter metodu tanımı
+// Getter metodu tanımı (const)
 const CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() const {
     return autoencoder;
 }
-/*
-CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() const { 
-    return autoencoder; 
-}
-*/
+// Getter metodu tanımı (non-const)
 CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() {
     return autoencoder;
 }
 
 
-
-// === CryptofigProcessor Implementasyonları (Eksik Metotlar) ===
+// === CryptofigProcessor Implementasyonları (Eksik Metotlar Güncellendi) ===
 
 void CryptofigProcessor::process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner) {
-    // Uzman kriptofiglerini IntentLearner'a işleme mantığı buraya gelecek
-    // Örneğin, learner'a doğrudan bir feedback sağlayabilir veya niyet şablonlarını etkileyebilir.
-    LOG_DEFAULT(LogLevel::DEBUG, "[CryptofigProcessor] Uzman kriptofigi işleniyor. Boyut: " << expert_cryptofig.size());
-    // Örnek: Learner'ın niyet şablonlarını doğrudan etkilemek için bir mekanizma
-    // Bu kısım, AI'ın kendini geliştirmesinin ve meta-evrimin kritik bir parçası olacaktır.
-    // Şimdilik sadece loglama yapabiliriz.
+    LOG_DEFAULT(LogLevel::DEBUG, "[CryptofigProcessor] Uzman kriptofigi işleniyor. Boyut: " << expert_cryptofig.size() << ". Bu, AI'nın meta-evrim sürecinin bir parçası olarak harici bilgi aktarımını temsil eder.\n");
+    // TODO: Bu kısım, AI'ın kendini geliştirmesinin ve meta-evrimin kritik bir parçası olacaktır.
+    // Gelecekte, bu expert_cryptofig'in hangi niyetle ilişkili olduğu belirlenecek ve
+    // IntentLearner'ın öğrenme algoritmaları bu bilgiyi sindirmek için kullanılacaktır.
+    // Örneğin, learner.assimilate_expert_knowledge(expert_cryptofig, inferred_target_intent); şeklinde bir çağrı yapılabilir.
+    // Şimdilik, sadece loglama yapıyoruz ve bir yapılacak notu bırakıyoruz.
 }
 
 std::vector<float> CryptofigProcessor::generate_cryptofig_from_signals(const DynamicSequence& sequence) {
-    // DynamicSequence'den yeni bir kriptofig üretme mantığı buraya gelecek
-    // Bu, Autoencoder.h'de tanımlanan encode metodunun çağrılmasıyla yapılabilir.
-    LOG_DEFAULT(LogLevel::DEBUG, "[CryptofigProcessor] Sinyallerden kriptofig üretiliyor.");
-    // Örnek: Autoencoder kullanarak encode etme
-    // return autoencoder.encode(sequence.statistical_features_vector);
-    // Şu anki DynamicSequence'de statistical_features_vector yerine direk latent_cryptofig_vector var gibi.
-    // Bu durumda, generate_cryptofig_from_signals direkt latent_cryptofig_vector'ı döndürebilir,
-    // veya DynamicSequence'den istatistiksel özellikleri çıkarıp onları encode edebilir.
-    // Varsayılan olarak boş bir vektör döndürelim, daha sonra uygun mantıkla doldururuz.
-    return {0.0f, 0.0f, 0.0f}; // Placeholder
+    LOG_DEFAULT(LogLevel::DEBUG, "[CryptofigProcessor] Sinyallerden kriptofig üretiliyor (Autoencoder kullanılarak).\n");
+    if (sequence.statistical_features_vector.empty() || sequence.statistical_features_vector.size() != CryptofigAutoencoder::INPUT_DIM) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "CryptofigProcessor::generate_cryptofig_from_signals: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Boş latent vektör döndürülüyor.\n");
+        return std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f); // Hata durumunda sıfır vektör döndür
+    }
+    // Autoencoder kullanarak istatistiksel özelliklerden latent kriptofig üretme
+    return autoencoder.encode(sequence.statistical_features_vector);
 }

@@ -25,6 +25,7 @@ std::string get_current_timestamp_str();
 std::string intent_to_string(UserIntent intent);
 std::string abstract_state_to_string(AbstractState state);
 std::string goal_to_string(AIGoal goal);
+std::string action_to_string(AIAction action); // YENİ: action_to_string bildirimi eklendi
 unsigned short hash_string(const std::string& s); // Artık std::string alıyor
 
 // std::wstring'den std::string'e dönüştürme yardımcı fonksiyonu

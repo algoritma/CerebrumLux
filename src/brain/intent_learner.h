@@ -9,15 +9,21 @@
 #include "../sensors/atomic_signal.h" // AtomicSignal için (evaluate_implicit_feedback içinde kullanılır)
 #include "intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
 #include "../core/utils.h"
+#include "../communication/suggestion_engine.h" // SuggestionEngine için eklendi
+#include "../user/user_profile_manager.h" // UserProfileManager için eklendi
 
 // İleri bildirimler
 struct DynamicSequence;
 class IntentAnalyzer;
+class SuggestionEngine;
+class UserProfileManager; // UserProfileManager için ileri bildirim eklendi
 
 // *** IntentLearner: Geri bildirim yoluyla niyet tahminlerini gelistirir ***
 class IntentLearner {
 public:
-    IntentLearner(IntentAnalyzer& analyzer_ref);
+    // Kurucuya SuggestionEngine ve UserProfileManager referansları eklendi
+    IntentLearner(IntentAnalyzer& analyzer_ref, SuggestionEngine& suggester_ref, UserProfileManager& user_profile_manager_ref); 
+    
     //mesaj kuyruğunu
     void adjust_learning_rate(float new_learning_rate);
     void processMessages();
@@ -27,7 +33,8 @@ public:
     void process_feedback(const DynamicSequence& sequence, UserIntent predicted_intent, 
                           const std::deque<AtomicSignal>& recent_signals);
 
-    virtual void process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence);
+    // current_abstract_state parametresi eklendi
+    virtual void process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence, AbstractState current_abstract_state);
 
     void self_adjust_learning_rate(float adjustment_factor);
 
@@ -53,6 +60,8 @@ public:
     
 private:
     IntentAnalyzer& analyzer; 
+    SuggestionEngine& suggester; 
+    UserProfileManager& user_profile_manager; // YENİ: UserProfileManager referansı eklendi
 
     float learning_rate = 0.1f; // Varsayılan öğrenme oranı
     //mesaj işleme metodu

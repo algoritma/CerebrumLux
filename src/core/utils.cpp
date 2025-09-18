@@ -105,6 +105,31 @@ std::string goal_to_string(AIGoal goal) {
     }
 }
 
+// YENİ: action_to_string fonksiyonunun tanımı
+std::string action_to_string(AIAction action) {
+    switch (action) {
+        case AIAction::DisableSpellCheck: return "Yazim denetimini devre disi birak";
+        case AIAction::EnableCustomDictionary: return "Ozel sozlügü etkinlestir";
+        case AIAction::ShowUndoHistory: return "Geri alma geçmisini goster";
+        case AIAction::CompareVersions: return "Versiyonlari karsilastir";
+        case AIAction::DimScreen: return "Ekrani karart";
+        case AIAction::MuteNotifications: return "Bildirimleri sessize al";
+        case AIAction::LaunchApplication: return "Uygulama baslat";
+        case AIAction::OpenFile: return "Dosya aç";
+        case AIAction::SetReminder: return "Hatirlatici kur";
+        case AIAction::SimulateOSAction: return "OS eylemi simule et"; 
+        case AIAction::SuggestBreak: return "Ara vermeyi öner";
+        case AIAction::OptimizeForGaming: return "Oyun performansı için optimize et";
+        case AIAction::EnableFocusMode: return "Odaklanma modunu etkinleştir";
+        case AIAction::AdjustAudioVolume: return "Ses seviyesini ayarla";
+        case AIAction::OpenDocumentation: return "Dokümantasyon aç";
+        case AIAction::SuggestSelfImprovement: return "Kendi kendini geliştirme önerisi"; 
+        case AIAction::None: return "Hiçbir eylem önerisi yok"; 
+        case AIAction::Count: return "Eylem Sayisi"; 
+        default: return "Tanimlanmamis eylem"; 
+    }
+}
+
 // Simülasyon amaçlı basit bir string hash fonksiyonu
 unsigned short hash_string(const std::string& s) {
     unsigned short hash = 0;

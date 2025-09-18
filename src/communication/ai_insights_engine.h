@@ -26,11 +26,15 @@ class PredictionEngine;
 class CryptofigAutoencoder;
 class CryptofigProcessor;
 
-// YENİ: AIInsight struct tanımı
+// YENİ: AIInsight struct tanımı (Constructor parametre sırası düzeltildi)
 struct AIInsight {
     std::string observation;
-    AIAction suggested_action = AIAction::None;
-    float urgency = 0.0f;
+    AIAction suggested_action = AIAction::None; // Suggested action'ı ikinci parametre yaptık
+    float urgency = 0.0f;                       // Urgency'i üçüncü parametre yaptık
+
+    // Constructor parametre sırası düzeltildi
+    AIInsight(std::string obs, AIAction action, float urg)
+        : observation(std::move(obs)), suggested_action(action), urgency(urg) {}
 };
 
 // YENİ: AIInsightsEngine sınıfı tanımı

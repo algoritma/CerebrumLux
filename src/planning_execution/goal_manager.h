@@ -17,6 +17,7 @@ class IntentAnalyzer;
 class GoalManager {
 public:
     GoalManager(AIInsightsEngine& insights_engine_ref); 
+    GoalManager(); // For tooling 
     virtual AIGoal get_current_goal() const; // Eklendi: virtual
     void set_current_goal(AIGoal goal);
     void evaluate_and_set_goal(const DynamicSequence& current_sequence); // Dinamik hedef belirleme

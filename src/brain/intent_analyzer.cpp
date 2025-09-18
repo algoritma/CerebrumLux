@@ -4,6 +4,7 @@
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "autoencoder.h"         // CryptofigAutoencoder::LATENT_DIM için
 #include "intent_template.h"     // IntentTemplate için
+// #include "../communication/natural_language_processor.h" // KALDIRILDI: NaturalLanguageProcessor için eklendi
 #include <algorithm>             // std::min/max için
 #include <cmath>                 // std::log10 için
 #include <fstream>               // Dosya G/Ç için
@@ -34,12 +35,15 @@ IntentTemplate::IntentTemplate(UserIntent intent_id, const std::vector<float>& i
 
 // === IntentAnalyzer Implementasyonlari ===
 
-IntentAnalyzer::IntentAnalyzer() : confidence_threshold_for_known_intent(0.1f) { 
+// Kurucu parametresiz hale getirildi
+IntentAnalyzer::IntentAnalyzer() 
+    : confidence_threshold_for_known_intent(0.1f) { 
+    
     // Ağırlıklar artık LATENT_DIM boyutunda olmalı
     intent_templates.emplace_back(UserIntent::FastTyping,    std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
     intent_templates.emplace_back(UserIntent::Editing,       std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
     intent_templates.emplace_back(UserIntent::IdleThinking,  std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    // YENİ NİYETLER İÇİN BAŞLANGIÇ AĞIRLIKLARI (varsayımsal ve LATENT_DIM boyutunda)
+    // YENİ NİYETLER
     intent_templates.emplace_back(UserIntent::Programming,    std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
     intent_templates.emplace_back(UserIntent::Gaming,         std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
     intent_templates.emplace_back(UserIntent::MediaConsumption,std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
@@ -47,6 +51,12 @@ IntentAnalyzer::IntentAnalyzer() : confidence_threshold_for_known_intent(0.1f) {
     intent_templates.emplace_back(UserIntent::Research,       std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
     intent_templates.emplace_back(UserIntent::Communication,  std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
     
+    // Yeni eklenen niyetler için başlangıç ağırlıkları
+    intent_templates.emplace_back(UserIntent::VideoEditing,   std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
+    intent_templates.emplace_back(UserIntent::Browsing,       std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
+    intent_templates.emplace_back(UserIntent::Reading,        std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
+    intent_templates.emplace_back(UserIntent::GeneralInquiry, std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
+
     // Varsayılan ağırlıkları daha anlamlı başlatma (latent uzaydaki temsili anlamlara göre)
     // Örn: latent_activity, latent_complexity, latent_engagement gibi
     intent_templates[0].weights = {-0.2f, -0.5f,  0.8f}; // FastTyping (Düşük karmaşıklık, yüksek etkileşim)
@@ -60,6 +70,12 @@ IntentAnalyzer::IntentAnalyzer() : confidence_threshold_for_known_intent(0.1f) {
     intent_templates[6].weights = { 0.7f,  0.8f,  0.7f}; // CreativeWork (orta aktiflik, yüksek karmaşıklık, etkileşim)
     intent_templates[7].weights = { 0.4f,  0.6f,  0.8f}; // Research (orta aktiflik, yüksek dış etkileşim)
     intent_templates[8].weights = { 0.7f,  0.3f,  0.9f}; // Communication (yüksek aktiflik, düşük karmaşıklık, yüksek etkileşim)
+    
+    // Yeni eklenen niyetler için daha iyi başlangıç ağırlıkları (devamı)
+    intent_templates[9].weights  = { 0.7f, 0.9f, 0.6f}; // VideoEditing (yüksek karmaşıklık, görsel odaklanma)
+    intent_templates[10].weights = { 0.5f, 0.4f, 0.7f}; // Browsing (orta aktiflik, düşük karmaşıklık, yüksek dış etkileşim)
+    intent_templates[11].weights = { 0.3f, 0.5f, 0.4f}; // Reading (düşük aktiflik, orta karmaşıklık, içsel odaklanma)
+    intent_templates[12].weights = { 0.4f, 0.6f, 0.5f}; // GeneralInquiry (orta aktiflik, orta karmaşıklık, bilgi arayışı)
 }
 
 UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
@@ -69,13 +85,13 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
         return UserIntent::Unknown;
     }
 
-    UserIntent best_intent = UserIntent::Unknown;
-    float max_score = -std::numeric_limits<float>::max(); // Başlangıçta çok düşük bir değer
+    UserIntent best_intent_from_crypto = UserIntent::Unknown;
+    float max_score_from_crypto = -std::numeric_limits<float>::max(); // Başlangıçta çok düşük bir değer
 
     for (auto& tmpl : intent_templates) {
         float score = 0.0f;
         // Ağırlık boyutu latent kriptofig boyutu ile eşleşmeli
-        if (tmpl.weights.size() != sequence.latent_cryptofig_vector.size()) { 
+        if (tmpl.weights.size() != CryptofigAutoencoder::LATENT_DIM) { 
             LOG_DEFAULT(LogLevel::ERR_CRITICAL, "IntentAnalyzer::analyze_intent: Niyet şablonu ağırlık boyutu latent kriptofig boyutuyla uyuşmuyor! Niyet: " << intent_to_string(tmpl.id) << ".\n");
             continue; // Bu şablonu atla
         }
@@ -83,7 +99,7 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
             score += tmpl.weights[i] * sequence.latent_cryptofig_vector[i]; // latent_cryptofig_vector kullanılıyor
         }
         
-        // --- YENİ: Bağlamsal Skor Ayarlama Mantığı ---
+        // --- Bağlamsal Skor Ayarlama Mantığı (önceden vardı) ---
         if (tmpl.id == UserIntent::Editing) {
             if (sequence.avg_keystroke_interval > 1500.0f && sequence.control_key_frequency > 0.2f) {
                 score *= 1.5f; 
@@ -104,20 +120,20 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
                 LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Gaming skoru yavaş yazım nedeniyle düşürüldü.\n");
             }
         }
-        // --- YENİ MANTIK SONU ---
+        // --- Bağlamsal Skor Ayarlama Mantığı Sonu ---
 
-        if (score > max_score) {
-            max_score = score;
-            best_intent = tmpl.id;
+        if (score > max_score_from_crypto) {
+            max_score_from_crypto = score;
+            best_intent_from_crypto = tmpl.id;
         }
     }
     
-    if (max_score < this->confidence_threshold_for_known_intent) { 
-        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: En yüksek skor (" << max_score << ") eşik değerinin (" << this->confidence_threshold_for_known_intent << ") altında. Niyet 'Unknown' olarak ayarlandı.\n");
-        best_intent = UserIntent::Unknown;
+    if (max_score_from_crypto < this->confidence_threshold_for_known_intent) { 
+        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: En yüksek kriptofig skoru (" << max_score_from_crypto << ") eşik değerinin (" << this->confidence_threshold_for_known_intent << ") altında. Niyet 'Unknown' olarak ayarlandı.\n");
+        best_intent_from_crypto = UserIntent::Unknown;
     }
 
-    return best_intent;
+    return best_intent_from_crypto;
 }
 
 void IntentAnalyzer::set_confidence_threshold(float threshold) {

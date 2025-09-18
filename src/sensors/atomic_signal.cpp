@@ -16,4 +16,15 @@ AtomicSignal::AtomicSignal() :
     display_brightness(0), display_on(false),
     battery_percentage(0), battery_charging(false),
     network_active(false), network_bandwidth_estimate(0),
+    // Mikrofon olayları için yeni alanlar EKLENDİ
+    audio_level_db(0.0f),
+    audio_frequency_hz(0.0f),
+    speech_detected(false),
+    audio_environment_hash(0),
+    // Kamera olayları için yeni alanlar EKLENDİ
+    ambient_light_lux(0.0f),
+    face_detected(false),
+    motion_detected(false),
+    object_count(0),
+    emotion_hash(0),
     active_app_id_hash(0) {}

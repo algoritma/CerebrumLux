@@ -36,6 +36,19 @@ struct AtomicSignal {
     bool network_active;
     unsigned short network_bandwidth_estimate; 
 
+    // Mikrofon olayları için EKLENDİ
+    float audio_level_db;              // Ses seviyesi (dB)
+    float audio_frequency_hz;          // Baskın ses frekansı (Hz)
+    bool speech_detected;              // Konuşma algılandı mı?
+    unsigned short audio_environment_hash; // Ses ortamının özeti (örn: sessiz, gürültülü, müzik)
+
+    // Kamera olayları için EKLENDİ
+    float ambient_light_lux;           // Ortam ışık seviyesi (Lux)
+    bool face_detected;                // Yüz algılandı mı?
+    bool motion_detected;              // Hareket algılandı mı?
+    unsigned short object_count;       // Algılanan nesne sayısı
+    unsigned short emotion_hash;       // Algılanan duygunun özeti
+
     // Genel baglam
     unsigned short active_app_id_hash; 
 

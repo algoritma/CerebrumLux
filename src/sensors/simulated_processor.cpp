@@ -15,9 +15,31 @@ static std::mt19937 s_gen([]() {
     return rd_local();
 }());
 
+// SENSOR_TYPE enum'ının tam aralığını kapsayacak şekilde dağıtım güncellendi
 static std::uniform_int_distribution<int> s_sensor_selection_distrib(0, static_cast<int>(SensorType::Count) - 1); 
 
-SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor() : last_key_press_time_us(0) {}
+// Mikrofon için ek dağılımlar
+static std::uniform_real_distribution<float> s_audio_level_distrib(-70.0f, -10.0f); // -70dB ile -10dB arası
+static std::uniform_real_distribution<float> s_audio_freq_distrib(80.0f, 8000.0f); // 80Hz ile 8kHz arası
+static std::uniform_int_distribution<> s_speech_distrib(0, 5); // %16 olasılıkla konuşma
+static std::uniform_int_distribution<unsigned short> s_audio_env_distrib(0, 3); // 0: Silent, 1: Talk, 2: Music, 3: Noise
+
+// Kamera için ek dağılımlar
+static std::uniform_real_distribution<float> s_ambient_light_distrib(10.0f, 1000.0f); // 10 Lux (karanlık) - 1000 Lux (parlak)
+static std::uniform_int_distribution<> s_face_motion_distrib(0, 10); // %10 olasılıkla algılama
+static std::uniform_int_distribution<unsigned short> s_object_count_distrib(0, 5); // 0-5 arası nesne
+static std::uniform_int_distribution<unsigned short> s_emotion_distrib(0, 5); // 0: Neutral, 1: Happy, 2: Sad, 3: Angry, etc. (örnek)
+
+
+SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor() 
+    : last_key_press_time_us(0),
+      current_mouse_x(0), current_mouse_y(0),
+      current_brightness(200),
+      current_battery(100), current_charging(true),
+      current_network_active(true), current_network_bandwidth(5000),
+      current_audio_level_db(-60.0f), current_audio_freq_hz(0.0f), current_speech_detected(false), current_audio_env_hash(0),
+      current_ambient_light_lux(200.0f), current_face_detected(false), current_motion_detected(false), current_object_count(0), current_emotion_hash(0)
+      {}
 
 bool SimulatedAtomicSignalProcessor::start_capture() {
     LOG_DEFAULT(LogLevel::INFO, "Simulasyon baslatildi. Tuslara basin (Q ile çikis).\n");
@@ -91,7 +113,16 @@ AtomicSignal SimulatedAtomicSignalProcessor::create_keyboard_signal(char ch) {
 AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
     AtomicSignal signal; 
 
-    std::uniform_int_distribution<> other_sensor_type_distrib(static_cast<int>(SensorType::Mouse), static_cast<int>(SensorType::Keyboard)); 
+    // Tüm SensorType enum'ını kapsayacak şekilde dağıtım güncellendi.
+    // SensorType::Count'u kullanmak yerine, belirli bir aralıkta rastgele seçim yapalım.
+    // Mikrofon ve Kamera enuma en son eklenenler olduğu için, dağıtım aralığını buna göre ayarlayalım.
+    // Şu anki durumda, Keyboard ve Mouse'tan sonraki sensörleri simüle ediyoruz.
+    // Enums.h'deki sıralamaya göre: Mouse, Display, Battery, Network, Microphone, Camera...
+    // Bu yüzden dağılımı SensorType::Mouse ile SensorType::Camera arasında yapalım (dahil).
+    std::uniform_int_distribution<> other_sensor_type_distrib(
+        static_cast<int>(SensorType::Mouse), 
+        static_cast<int>(SensorType::Camera)
+    );
     int chosen_sensor_type_for_sim = other_sensor_type_distrib(s_gen);
 
     LOG_DEFAULT(LogLevel::TRACE, "SimulatedAtomicSignalProcessor::capture_next_signal: Rastgele seçilen klavye dışı sensor tipi: " << chosen_sensor_type_for_sim << ".\n");
@@ -104,13 +135,20 @@ AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
         signal = simulate_battery_event();
     } else if (static_cast<SensorType>(chosen_sensor_type_for_sim) == SensorType::Network) { 
         signal = simulate_network_event();
+    } else if (static_cast<SensorType>(chosen_sensor_type_for_sim) == SensorType::Microphone) { // Yeni mikrofon simülasyonu
+        signal = simulate_microphone_event();
+    } else if (static_cast<SensorType>(chosen_sensor_type_for_sim) == SensorType::Camera) { // Yeni kamera simülasyonu
+        signal = simulate_camera_event();
     }
     else { 
-        signal.sensor_type = SensorType::Keyboard;
+        // Eğer rastgele seçilen tip yukarıdakiler değilse veya yeni bir sensör tipi eklenirse
+        // varsayılan olarak bir klavye sinyali (veya daha spesifik bir 'None' sinyali) döndürebiliriz
+        signal.sensor_type = SensorType::None; // Veya SensorType::Keyboard
         signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::high_resolution_clock::now().time_since_epoch()
         ).count();
         signal.active_app_id_hash = get_active_application_id_hash();
+        LOG_DEFAULT(LogLevel::WARNING, "SimulatedAtomicSignalProcessor::capture_next_signal: Bilinmeyen veya işlenmeyen sensor tipi secildi: " << chosen_sensor_type_for_sim << ". Varsayilan 'None' sinyali donduruluyor.\n");
     }
     
     return signal;
@@ -255,4 +293,57 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_network_event() {
     LOG_DEFAULT(LogLevel::DEBUG, "simulate_network_event: Bitti.\n");
     return signal;
 }
-//--------------------------------
+
+// Yeni: Mikrofon olaylarını simüle eder
+AtomicSignal SimulatedAtomicSignalProcessor::simulate_microphone_event() {
+    LOG_DEFAULT(LogLevel::DEBUG, "simulate_microphone_event: Basladi.\n");
+    AtomicSignal signal;
+    signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()
+    ).count();
+    signal.sensor_type = SensorType::Microphone;
+    signal.active_app_id_hash = get_active_application_id_hash();
+
+    // Rastgele değerler üret ve mevcut durumu güncelle
+    current_audio_level_db = s_audio_level_distrib(s_gen);
+    current_audio_freq_hz = s_audio_freq_distrib(s_gen);
+    current_speech_detected = (s_speech_distrib(s_gen) == 0);
+    current_audio_env_hash = s_audio_env_distrib(s_gen);
+
+    signal.audio_level_db = current_audio_level_db;
+    signal.audio_frequency_hz = current_audio_freq_hz;
+    signal.speech_detected = current_speech_detected;
+    signal.audio_environment_hash = current_audio_env_hash;
+
+    LOG_DEFAULT(LogLevel::DEBUG, "Microphone Sinyali Oluşturuldu: Level=" << signal.audio_level_db << "dB, Freq=" << signal.audio_frequency_hz << "Hz, Konuşma=" << (signal.speech_detected ? "Evet" : "Hayır") << ", Ortam=" << signal.audio_environment_hash << "\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "simulate_microphone_event: Bitti.\n");
+    return signal;
+}
+
+// Yeni: Kamera olaylarını simüle eder
+AtomicSignal SimulatedAtomicSignalProcessor::simulate_camera_event() {
+    LOG_DEFAULT(LogLevel::DEBUG, "simulate_camera_event: Basladi.\n");
+    AtomicSignal signal;
+    signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()
+    ).count();
+    signal.sensor_type = SensorType::Camera;
+    signal.active_app_id_hash = get_active_application_id_hash();
+
+    // Rastgele değerler üret ve mevcut durumu güncelle
+    current_ambient_light_lux = s_ambient_light_distrib(s_gen);
+    current_face_detected = (s_face_motion_distrib(s_gen) == 0);
+    current_motion_detected = (s_face_motion_distrib(s_gen) == 1); // Farklı bir olasılık için
+    current_object_count = s_object_count_distrib(s_gen);
+    current_emotion_hash = s_emotion_distrib(s_gen);
+
+    signal.ambient_light_lux = current_ambient_light_lux;
+    signal.face_detected = current_face_detected;
+    signal.motion_detected = current_motion_detected;
+    signal.object_count = current_object_count;
+    signal.emotion_hash = current_emotion_hash;
+
+    LOG_DEFAULT(LogLevel::DEBUG, "Camera Sinyali Oluşturuldu: Işık=" << signal.ambient_light_lux << "Lux, Yüz=" << (signal.face_detected ? "Evet" : "Hayır") << ", Hareket=" << (signal.motion_detected ? "Evet" : "Hayır") << ", Nesne=" << signal.object_count << ", Duygu=" << signal.emotion_hash << "\n");
+    LOG_DEFAULT(LogLevel::DEBUG, "simulate_camera_event: Bitti.\n");
+    return signal;
+}

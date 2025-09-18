@@ -13,23 +13,38 @@
 // İleri bildirim
 class CryptofigProcessor; 
 
+class DynamicSequence;
+
 // *** SequenceManager: Dinamik sinyal dizilerini yonetir ***
 class SequenceManager {
-private:
-    std::deque<AtomicSignal> signal_buffer; 
-    size_t max_buffer_size = 100;           
-    // update_current_sequence metodu CryptofigProcessor referansı alacak şekilde güncellendi
-    void update_current_sequence(CryptofigProcessor& cryptofig_processor); 
-    long long last_sequence_update_time_us = 0; 
-
 public:
-    std::unique_ptr<DynamicSequence> current_sequence; 
-    
+
+    SequenceManager();
+    ~SequenceManager();
+
     // add_signal fonksiyonu CryptofigProcessor referansı alacak şekilde güncellendi
     bool add_signal(const AtomicSignal& signal, CryptofigProcessor& cryptofig_processor); 
 
-    SequenceManager();
+    void step_simulation();
+
     std::deque<AtomicSignal> get_signal_buffer_copy() const; 
+
+    // YENİ: current_sequence'e erişim için getter metodu
+    DynamicSequence& get_current_sequence_ref() { return *current_sequence; }
+    const DynamicSequence& get_current_sequence_ref() const { return *current_sequence; }
+
+private:
+    // update_current_sequence metodu CryptofigProcessor referansı alacak şekilde güncellendi
+    void update_current_sequence(CryptofigProcessor& cryptofig_processor); 
+
+    std::deque<AtomicSignal> signal_buffer; 
+    size_t max_buffer_size = 100;           
+
+    std::unique_ptr<DynamicSequence> current_sequence;
+
+    uint64_t last_sequence_update_time_us;
+
 };
+
 
 #endif // CEREBRUM_LUX_SEQUENCE_MANAGER_H

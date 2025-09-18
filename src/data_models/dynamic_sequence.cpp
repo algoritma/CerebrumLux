@@ -9,6 +9,8 @@
 #include <iostream>  // std::cout, std::cerr için
 #include <iomanip>   // std::fixed, std::setprecision için
 #include <sstream>   // std::stringstream için
+#include <map>       // YENİ: std::map için eklendi
+
 
 // === DynamicSequence Implementasyonlari ===
 
@@ -21,7 +23,17 @@ DynamicSequence::DynamicSequence() :
     current_battery_percentage(0), 
     current_battery_charging(false),
     current_display_on(false), 
-    current_network_active(false) 
+    current_network_active(false),
+    // Yeni eklenen sensör verisi alanları başlatılıyor
+    avg_audio_level_db(0.0f),
+    avg_audio_frequency_hz(0.0f),
+    speech_detection_ratio(0.0f),
+    dominant_audio_environment_hash(0),
+    avg_ambient_light_lux(0.0f),
+    face_detection_ratio(0.0f),
+    motion_detection_ratio(0.0f),
+    avg_object_count(0),
+    dominant_emotion_hash(0)
     {}
 
 
@@ -35,6 +47,9 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
         LOG_DEFAULT(LogLevel::DEBUG, "DynamicSequence::update_from_signals: Buffer boş, sıfırlanıyor.\n");
         statistical_features_vector.clear();
         latent_cryptofig_vector.clear();
+        // Yeni eklenen alanları da sıfırla
+        avg_audio_level_db = 0.0f; avg_audio_frequency_hz = 0.0f; speech_detection_ratio = 0.0f; dominant_audio_environment_hash = 0;
+        avg_ambient_light_lux = 0.0f; face_detection_ratio = 0.0f; motion_detection_ratio = 0.0f; avg_object_count = 0; dominant_emotion_hash = 0;
         return;
     }
 
@@ -61,6 +76,20 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
 
     long long total_bandwidth_sum = 0; 
     int network_sample_count = 0;
+
+    // Mikrofon ve Kamera için yeni toplama değişkenleri
+    float total_audio_level_db_sum = 0.0f;
+    float total_audio_frequency_hz_sum = 0.0f;
+    int audio_sample_count = 0;
+    int speech_detected_count_total = 0;
+    std::map<unsigned short, int> audio_environment_counts; // dominant_audio_environment_hash için
+
+    float total_ambient_light_lux_sum = 0.0f;
+    int camera_sample_count = 0;
+    int face_detected_count_total = 0;
+    int motion_detected_count_total = 0;
+    unsigned short total_object_count_sum = 0;
+    std::map<unsigned short, int> emotion_counts; // dominant_emotion_hash için
 
 
     for (size_t i = 0; i < signal_buffer.size(); ++i) {
@@ -117,6 +146,25 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
             total_bandwidth_sum += current_sig.network_bandwidth_estimate;
             network_sample_count++;
             this->current_network_active = current_sig.network_active; // network_active bilgisini kaydet
+        } else if (current_sig.sensor_type == SensorType::Microphone) { // YENİ: Mikrofon sinyallerini işle
+            total_audio_level_db_sum += current_sig.audio_level_db;
+            total_audio_frequency_hz_sum += current_sig.audio_frequency_hz;
+            if (current_sig.speech_detected) {
+                speech_detected_count_total++;
+            }
+            audio_environment_counts[current_sig.audio_environment_hash]++;
+            audio_sample_count++;
+        } else if (current_sig.sensor_type == SensorType::Camera) { // YENİ: Kamera sinyallerini işle
+            total_ambient_light_lux_sum += current_sig.ambient_light_lux;
+            if (current_sig.face_detected) {
+                face_detected_count_total++;
+            }
+            if (current_sig.motion_detected) {
+                motion_detected_count_total++;
+            }
+            total_object_count_sum += current_sig.object_count;
+            emotion_counts[current_sig.emotion_hash]++;
+            camera_sample_count++;
         }
     } 
     LOG_DEFAULT(LogLevel::DEBUG, "DynamicSequence::update_from_signals: Sinyal işleme döngüsü bitti.\n");
@@ -153,10 +201,43 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
 
     network_activity_level = (network_sample_count > 0) ? static_cast<float>(total_bandwidth_sum) / network_sample_count : 0.0f;
 
+    // YENİ: Mikrofon ve Kamera metriklerinin hesaplanması
+    avg_audio_level_db = (audio_sample_count > 0) ? total_audio_level_db_sum / audio_sample_count : 0.0f;
+    avg_audio_frequency_hz = (audio_sample_count > 0) ? total_audio_frequency_hz_sum / audio_sample_count : 0.0f;
+    speech_detection_ratio = (audio_sample_count > 0) ? static_cast<float>(speech_detected_count_total) / audio_sample_count : 0.0f;
+    // En baskın ses ortamını bul
+    dominant_audio_environment_hash = 0;
+    int max_audio_env_count = 0;
+    for (const auto& pair : audio_environment_counts) {
+        if (pair.second > max_audio_env_count) {
+            max_audio_env_count = pair.second;
+            dominant_audio_environment_hash = pair.first;
+        }
+    }
+
+    avg_ambient_light_lux = (camera_sample_count > 0) ? total_ambient_light_lux_sum / camera_sample_count : 0.0f;
+    face_detection_ratio = (camera_sample_count > 0) ? static_cast<float>(face_detected_count_total) / camera_sample_count : 0.0f;
+    motion_detection_ratio = (camera_sample_count > 0) ? static_cast<float>(motion_detected_count_total) / camera_sample_count : 0.0f;
+    avg_object_count = (camera_sample_count > 0) ? static_cast<unsigned short>(static_cast<float>(total_object_count_sum) / camera_sample_count + 0.5f) : 0; // Yuvarlama
+    // En baskın duyguyu bul
+    dominant_emotion_hash = 0;
+    int max_emotion_count = 0;
+    for (const auto& pair : emotion_counts) {
+        if (pair.second > max_emotion_count) {
+            max_emotion_count = pair.second;
+            dominant_emotion_hash = pair.first;
+        }
+    }
+
 
     const float MAX_INTERVAL_LOG_BASE_MS = 10000.0f; 
     const float MAX_MOUSE_MOVEMENT_FOR_NORM = 500.0f; 
     const float MAX_NETWORK_BANDWIDTH_FOR_NORM = 15000.0f; 
+    const float MAX_AUDIO_LEVEL_DB_FOR_NORM = 90.0f; // -90dB (min) to 0dB (max)
+    const float MAX_AUDIO_FREQ_HZ_FOR_NORM = 20000.0f;
+    const float MAX_AMBIENT_LIGHT_LUX_FOR_NORM = 1000.0f; // İç/dış mekan için tipik bir üst limit
+    const float MAX_OBJECT_COUNT_FOR_NORM = 5.0f; // Max beklenen nesne sayısı
+
 
     float normalized_avg_interval = 0.0f;
     if (avg_keystroke_interval > 0) {
@@ -168,24 +249,50 @@ void DynamicSequence::update_from_signals(const std::deque<AtomicSignal>& signal
         normalized_variability = std::min(1.0f, static_cast<float>(std::log10(keystroke_variability / 1000.0f + 1)) / std::log10(MAX_INTERVAL_LOG_BASE_MS + 1));
     }
 
-    // statistical_features_vector dolduruluyor
+    // YENİ: Mikrofon ve Kamera metriklerinin normalize edilmesi
+    float normalized_audio_level = std::min(1.0f, (avg_audio_level_db + MAX_AUDIO_LEVEL_DB_FOR_NORM) / MAX_AUDIO_LEVEL_DB_FOR_NORM); // -90dB'yi 0'a, 0dB'yi 1'e çevir
+    float normalized_audio_freq = std::min(1.0f, avg_audio_frequency_hz / MAX_AUDIO_FREQ_HZ_FOR_NORM);
+    float normalized_ambient_light = std::min(1.0f, avg_ambient_light_lux / MAX_AMBIENT_LIGHT_LUX_FOR_NORM);
+    float normalized_object_count = std::min(1.0f, static_cast<float>(avg_object_count) / MAX_OBJECT_COUNT_FOR_NORM);
+    // Hash değerlerini 0-1 aralığına normalize et (maksimum unsigned short değeri 65535)
+    float normalized_audio_env_hash = static_cast<float>(dominant_audio_environment_hash) / 65535.0f;
+    float normalized_emotion_hash = static_cast<float>(dominant_emotion_hash) / 65535.0f;
+
+
+    // statistical_features_vector dolduruluyor (YENİ SENSÖR VERİLERİ EKLENDİ)
     statistical_features_vector.assign({
         normalized_avg_interval,                        // Klavye 0
         normalized_variability,                         // Klavye 1
         alphanumeric_ratio,                             // Klavye 2
         control_key_frequency,                          // Klavye 3
-        std::min(1.0f, mouse_movement_intensity / MAX_MOUSE_MOVEMENT_FOR_NORM), 
+        std::min(1.0f, mouse_movement_intensity / MAX_MOUSE_MOVEMENT_FOR_NORM), // Fare 4
         mouse_click_frequency,                          // Fare 5 (zaten 0-1 arasi)
         avg_brightness / 255.0f,                        // Ekran 6 (0-255'i 0-1'e normalize et)
         battery_status_change,                          // Batarya 7 (Zaten 0-1'e normalize edildi, tekrar bölme!)
-        std::min(1.0f, network_activity_level / MAX_NETWORK_BANDWIDTH_FOR_NORM), 
-        static_cast<float>(current_app_hash) / 65535.0f // Uygulama 9 (hash'i 0-1'e normalize et)
+        std::min(1.0f, network_activity_level / MAX_NETWORK_BANDWIDTH_FOR_NORM), // Ağ 8
+        static_cast<float>(current_app_hash) / 65535.0f, // Uygulama 9 (hash'i 0-1'e normalize et)
+        // YENİ MİKROFON ÖZELLİKLERİ (10, 11, 12, 13)
+        normalized_audio_level,                         // Mikrofon 10
+        normalized_audio_freq,                          // Mikrofon 11
+        speech_detection_ratio,                         // Mikrofon 12
+        normalized_audio_env_hash,                      // Mikrofon 13
+        // YENİ KAMERA ÖZELLİKLERİ (14, 15, 16, 17)
+        normalized_ambient_light,                       // Kamera 14
+        face_detection_ratio,                           // Kamera 15
+        motion_detection_ratio,                         // Kamera 16
+        normalized_object_count,                        // Kamera 17
+        normalized_emotion_hash                         // Kamera 18
     });
 
     // Autoencoder kullanılarak latent kriptofig üretiliyor
-    latent_cryptofig_vector = autoencoder.encode(statistical_features_vector);
-    // Hata durumunda Autoencoder'ın ağırlıklarını ayarla (heuristik öğrenme)
-    autoencoder.adjust_weights_on_error(statistical_features_vector, 0.01f); // Öğrenme oranı örnek
+    if (statistical_features_vector.size() != CryptofigAutoencoder::INPUT_DIM) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "DynamicSequence::update_from_signals: statistical_features_vector boyutu ( " << statistical_features_vector.size() << ") CryptofigAutoencoder::INPUT_DIM (" << CryptofigAutoencoder::INPUT_DIM << ") ile uyuşmuyor! Autoencoder işlemi atlanıyor.\n");
+        latent_cryptofig_vector.assign(CryptofigAutoencoder::LATENT_DIM, 0.0f); // Latent vektörü sıfırla
+    } else {
+        latent_cryptofig_vector = autoencoder.encode(statistical_features_vector);
+        // Hata durumunda Autoencoder'ın ağırlıklarını ayarla (heuristik öğrenme)
+        autoencoder.adjust_weights_on_error(statistical_features_vector, 0.01f); // Öğrenme oranı örnek
+    }
 
     LOG_DEFAULT(LogLevel::DEBUG, "DynamicSequence::update_from_signals: Bitti. Cryptofig vektoru olusturuldu.\n");
 }

@@ -92,6 +92,7 @@ enum class AIAction : unsigned char {
 
 // Yeni sensör tipleri
 enum class SensorType : unsigned char {
+    None,             // YENİ: Hiçbir sensör tipinin belirlenmediği varsayılan durum için
     Keyboard,
     Mouse,
     Display,
@@ -354,6 +355,3 @@ struct MessageData {
 };
 
 #endif // CEREBRUM_LUX_ENUMS_H
-
-
-

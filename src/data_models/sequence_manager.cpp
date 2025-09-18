@@ -9,8 +9,21 @@
 
 // === SequenceManager Implementasyonlari ===
 
-SequenceManager::SequenceManager() : last_sequence_update_time_us(0) {
-    current_sequence = std::make_unique<DynamicSequence>(); 
+
+SequenceManager::SequenceManager() 
+    : last_sequence_update_time_us(0),
+      current_sequence(std::make_unique<DynamicSequence>()) 
+{
+    LOG_DEFAULT(LogLevel::INFO, "SequenceManager başlatıldı.");
+}
+
+SequenceManager::~SequenceManager() {
+    LOG_DEFAULT(LogLevel::INFO, "SequenceManager sonlandırıldı.");
+}
+
+void SequenceManager::step_simulation() {
+    LOG_DEFAULT(LogLevel::DEBUG, "SequenceManager step_simulation çalıştı.");
+    // Adım simülasyonu buraya eklenebilir
 }
 
 // add_signal fonksiyonu Cryptofrocessor referansı alacak şekilde güncellendi
@@ -59,3 +72,5 @@ void SequenceManager::update_current_sequence(CryptofigProcessor& cryptofig_proc
 std::deque<AtomicSignal> SequenceManager::get_signal_buffer_copy() const {
     return signal_buffer;
 }
+
+
