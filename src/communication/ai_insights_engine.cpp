@@ -37,7 +37,7 @@ float AIInsightsEngine::calculate_average_feedback_score(UserIntent intent_id) c
 
 float AIInsightsEngine::calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const {
     if (statistical_features.empty() || statistical_features.size() != CryptofigAutoencoder::INPUT_DIM) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "AIInsightsEngine::calculate_autoencoder_reconstruction_error: İstatistiksel özellik vektörü boş veya boyut uyuşmuyor. Yüksek hata döndürülüyor.\n");
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "AIInsightsEngine::calculate_autoencoder_reconstruction_error: Istatistiksel ozellik vektoru bos veya boyut uyuşmuyor. Yuksek hata donduruluyor.\n");
         return 1.0f; // Hata durumunda yüksek hata döndür
     }
     std::vector<float> reconstructed = autoencoder.reconstruct(statistical_features);
@@ -73,14 +73,16 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     // 1. Niyet Analizörü Performansı Hakkında İçgörüler
     if (current_sequence.latent_cryptofig_vector.empty() || current_sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) {
         if (!is_on_cooldown("latent_data_missing", 300)) {
-            insights.push_back({"Latent kriptofig verisi eksik veya geçersiz. Niyetleri doğru analiz edemeyebilirim.", AIAction::SuggestSelfImprovement, 1.0f});
+            // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+            insights.push_back({"Latent kriptofig verisi eksik veya gecersiz. Niyetleri dogru analiz edemeyebilirim.", AIAction::SuggestSelfImprovement, 1.0f});
             insight_cooldowns["latent_data_missing"] = now;
         }
     } else {
         UserIntent current_predicted_intent = analyzer.analyze_intent(current_sequence);
         if (current_predicted_intent == UserIntent::Unknown) {
             if (!is_on_cooldown("unknown_intent_struggle", 120)) {
-                insights.push_back({"Şu anki niyetinizi tam olarak algılamakta zorlanıyorum. Yeni öğrenme fırsatlarına ihtiyacım var.", AIAction::SuggestSelfImprovement, 0.8f});
+                // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+                insights.push_back({"Su anki niyetinizi tam olarak algilamakta zorlaniyorum. Yeni ogrenme firsatlarina ihtiyacim var.", AIAction::SuggestSelfImprovement, 0.8f});
                 insight_cooldowns["unknown_intent_struggle"] = now;
             }
         }
@@ -88,7 +90,8 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         float fast_typing_feedback = calculate_average_feedback_score(UserIntent::FastTyping);
         if (fast_typing_feedback < -0.2f && learner.get_implicit_feedback_history().count(UserIntent::FastTyping) && learner.get_implicit_feedback_history().at(UserIntent::FastTyping).size() > learner.get_feedback_history_size() / 2) { 
             if (!is_on_cooldown("low_fast_typing_feedback", 180)) {
-                insights.push_back({"Hızlı yazım modunda kullanıcı geri bildirimlerim düşük seyrediyor. Bu niyet için şablon ağırlıklarımı gözden geçirmeliyim.", AIAction::SuggestSelfImprovement, 0.7f});
+                // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+                insights.push_back({"Hizli yazim modunda kullanici geri bildirimlerim dusuk seyrediyor. Bu niyet icin sablon agirliklarimi gozden gecirmeliyim.", AIAction::SuggestSelfImprovement, 0.7f});
                 insight_cooldowns["low_fast_typing_feedback"] = now;
             }
         }
@@ -99,18 +102,21 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         float reconstruction_error = calculate_autoencoder_reconstruction_error(current_sequence.statistical_features_vector);
         if (reconstruction_error > 0.3f) { 
             if (!is_on_cooldown("high_reconstruction_error", 60)) {
-                insights.push_back({"Kriptofig analizim, mevcut sensör verisindeki bazı desenleri tam olarak öğrenemiyor. Autoencoder'ın ağırlıklarını daha agresif ayarlamalıyım.", AIAction::SuggestSelfImprovement, 0.9f});
+                // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+                insights.push_back({"Kriptofig analizim, mevcut sensor verisindeki bazi desenleri tam olarak ogrenemiyor. Autoencoder'in agirliklarini daha agresif ayarlamaliyim.", AIAction::SuggestSelfImprovement, 0.9f});
                 insight_cooldowns["high_reconstruction_error"] = now;
             }
         } else if (reconstruction_error < 0.05f) { 
             if (!is_on_cooldown("low_reconstruction_error", 300)) {
-                insights.push_back({"Autoencoder'ım veriyi çok iyi yeniden yapılandırıyor. Belki latent uzayı daha da küçültebilirim? Bu, verimliliği artırabilir.", AIAction::SuggestSelfImprovement, 0.2f});
+                // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+                insights.push_back({"Autoencoder'im veriyi cok iyi yeniden yapilandiriyor. Belki latent uzayi daha da kucultebilirim? Bu, verimliligi artirabilir.", AIAction::SuggestSelfImprovement, 0.2f});
                 insight_cooldowns["low_reconstruction_error"] = now;
             }
         }
     } else {
         if (!is_on_cooldown("no_stats_vector", 300)) {
-             insights.push_back({"İstatistiksel özellik vektörü boş, Autoencoder performansı hakkında yorum yapamıyorum.", AIAction::None, 0.0f});
+             // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+             insights.push_back({"Istatistiksel ozellik vektoru bos, Autoencoder performansi hakkinda yorum yapamiyorum.", AIAction::None, 0.0f});
              insight_cooldowns["no_stats_vector"] = now;
         }
     }
@@ -118,19 +124,22 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     // 3. Genel Öğrenme Mekanizması Hakkında İçgörüler (Meta-Ayarlama)
     if (learner.get_learning_rate() > 0.05f && learner.get_implicit_feedback_history().size() > learner.get_feedback_history_size() / 2) { 
         if (!is_on_cooldown("high_learning_rate", 180)) {
-            insights.push_back({"Öğrenme hızım şu anda yüksek. Performansım stabil kalırsa biraz düşürmeyi düşünebilirim.", AIAction::SuggestSelfImprovement, 0.3f});
+            // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+            insights.push_back({"Ogrenme hizim su anda yuksek. Performansim stabil kalirsa biraz dusurmeye dusunebilirim.", AIAction::SuggestSelfImprovement, 0.3f});
             insight_cooldowns["high_learning_rate"] = now;
         }
     } else if (learner.get_learning_rate() < 0.005f && learner.get_implicit_feedback_history().size() > learner.get_feedback_history_size() / 2 && calculate_average_feedback_score(UserIntent::Unknown) < -0.5f) { 
         if (!is_on_cooldown("low_learning_rate_stuck", 120)) {
-            insights.push_back({"Niyet algılamamda sorun yaşıyorum ve öğrenme hızım düşük. Daha hızlı öğrenmek için öğrenme oranımı artırmalıyım.", AIAction::SuggestSelfImprovement, 0.9f});
+            // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+            insights.push_back({"Niyet algilamamda sorun yasiyorum ve ogrenme hizim dusuk. Daha hizli ogrenmek icin ogrenme oranimi artirmaliyim.", AIAction::SuggestSelfImprovement, 0.9f});
             insight_cooldowns["low_learning_rate_stuck"] = now;
         }
     }
     
     if (insights.empty()) {
         if (!is_on_cooldown("stable_state", 60)) {
-            insights.push_back({"İç durumum stabil görünüyor. Yeni öğrenme fırsatları için hazırım.", AIAction::None, 0.0f});
+            // Düzeltildi: Türkçe karakterler ASCII eşdeğerleriyle değiştirildi
+            insights.push_back({"Ic durumum stabil gorunuyor. Yeni ogrenme firsatlari icin hazirim.", AIAction::None, 0.0f});
             insight_cooldowns["stable_state"] = now;
         }
     }

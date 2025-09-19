@@ -10,10 +10,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/CerebrumLuxGUI.exe",
             "args": [],
-            "stopAtEntry": false,
-            "cwd": "C:/Qt/6.9.2/mingw_64/bin",
+            "stopAtEntry": true,
+            //"cwd": "C:/Qt/6.9.2/mingw_64/bin",
+            "cwd": "${workspaceFolder}/build", // <--- DÜZELTİLDİ: Uygulamanın yürütülebilir dosyasının bulunduğu dizin
             "environment": [],
-            "externalConsole": true,
+            "externalConsole": false, // <--- DÜZELTİLDİ: Dahili konsol kullanmak daha istikrarlı olabilir
             "MIMode": "gdb",
             "miDebuggerPath": "C:/Qt/tools/mingw1310_64/bin/gdb.exe"
         }

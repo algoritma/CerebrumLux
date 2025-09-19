@@ -7,15 +7,22 @@
 #include <mutex>
 #include <iostream> // std::cout, std::cerr için
 #include "enums.h" // LogLevel için
-// utils.h'yi burada include etmiyoruz, Logger kendi bağımsızlığını koruyor.
+
+// YENİ: LogPanel için ileri bildirim
+class LogPanel; 
 
 class Logger {
 public:
     static Logger& get_instance(); // Tekil (singleton) erişim
 
-    void init(LogLevel level, const std::string& log_file_path = ""); // Log dosya yolu artık std::string
-    void log(LogLevel level, std::ostream& os, const std::stringstream& message_stream, const char* file, int line);
-    void log(LogLevel level, const std::stringstream& message_stream, const char* file, int line); // Varsayılan olarak std::cout'a yazar
+    // YENİ: init metodu log_source parametresi aldı
+    void init(LogLevel level, const std::string& log_file_path = "", const std::string& log_source = "SYSTEM"); 
+    
+    // YENİ: log metotları stream yerine doğrudan string mesaj alıyor
+    void log(LogLevel level, const std::string& message, const char* file, int line);
+    // std::cerr için özel log metodu
+    void log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line);
+
 
     Logger(const Logger&) = delete; // Kopyalamayı engelle
     void operator=(const Logger&) = delete; // Atamayı engelle
@@ -23,39 +30,51 @@ public:
     LogLevel get_level() const;
     std::string level_to_string(LogLevel level) const; // LogLevel'ı std::string'e çevirir
 
+    // YENİ: LogPanel'i kaydetme metodu
+    void set_log_panel(LogPanel* panel);
+
 private:
-    Logger() : level_(LogLevel::INFO) {} // Kurucu
+    Logger() : level_(LogLevel::INFO), log_panel_(nullptr), log_counter_(0), log_source_("SYSTEM") {} // Kurucu güncellendi
     ~Logger(); // Yıkıcı
 
     LogLevel level_;
     std::ofstream file_stream_; // std::ofstream kullanıyoruz
     std::mutex mutex_; // Thread-safe loglama için
-
-    // Global log seviyesi ve dosya akışını Logger sınıfının içinde yönetiyoruz
-    // extern LogLevel g_current_log_level; // Bu artık sınıf üyesi olacak veya init ile ayarlanacak
-    // extern std::wofstream g_log_file_stream; // Bu da sınıf üyesi olacak
+    LogPanel* log_panel_; // LogPanel pointer'ı
+    unsigned long long log_counter_; // YENİ: Log sıra numarası
+    std::string log_source_; // YENİ: Log kaynağı (örn: SYSTEM, GUI, AI_CORE)
 };
 
-// LOG_INIT makrosu: Logger'ı başlangıçta yapılandırmak için
-#define LOG_INIT(log_file_name) Logger::get_instance().init(LogLevel::INFO, log_file_name)
+// LOG_INIT makrosu: Logger'ı başlangıçta yapılandırmak için (log_source parametresi eklendi)
+#define LOG_INIT(log_file_name, log_source_name) Logger::get_instance().init(LogLevel::INFO, log_file_name, log_source_name)
 
-// LOG makrosu: stream'i de belirtir (std::string tabanlı)
-#define LOG(level, os, message_stream) \
+// YENİ: LOG makrosu (doğrudan string mesaj alır)
+#define LOG(level, message) \
     do { \
         if (Logger::get_instance().get_level() >= level) { \
             std::stringstream ss_log_stream; \
-            ss_log_stream << message_stream; \
-            Logger::get_instance().log(level, os, ss_log_stream, __FILE__, __LINE__); \
+            ss_log_stream << message; \
+            Logger::get_instance().log(level, ss_log_stream.str(), __FILE__, __LINE__); \
         } \
     } while(0)
 
-// LOG_DEFAULT makrosu (varsayılan olarak std::cout'a yazar, std::string tabanlı)
-#define LOG_DEFAULT(level, message_stream) \
+// YENİ: LOG_DEFAULT makrosu (varsayılan olarak LogPanel'e veya dosyaya yazar)
+#define LOG_DEFAULT(level, message) \
     do { \
         if (Logger::get_instance().get_level() >= level) { \
             std::stringstream log_ss_internal; \
-            log_ss_internal << message_stream; \
-            Logger::get_instance().log(level, log_ss_internal, __FILE__, __LINE__); \
+            log_ss_internal << message; \
+            Logger::get_instance().log(level, log_ss_internal.str(), __FILE__, __LINE__); \
+        } \
+    } while(0)
+
+// YENİ: LOG_ERROR_CERR makrosu (std::cerr'e yazmak için özel)
+#define LOG_ERROR_CERR(level, message) \
+    do { \
+        if (Logger::get_instance().get_level() >= level) { \
+            std::stringstream log_ss_internal_err; \
+            log_ss_internal_err << message; \
+            Logger::get_instance().log_error_to_cerr(level, log_ss_internal_err.str(), __FILE__, __LINE__); \
         } \
     } while(0)
 

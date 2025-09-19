@@ -1,5 +1,7 @@
 #include "LogPanel.h"
 #include <QVBoxLayout>
+#include <QDebug> // QDebug kullanılıyorsa dahil edilmeli
+#include <QScrollBar> // YENİ: QScrollBar için eklendi
 
 LogPanel::LogPanel(QWidget* parent) : QWidget(parent)
 {
@@ -12,8 +14,11 @@ LogPanel::LogPanel(QWidget* parent) : QWidget(parent)
 
 void LogPanel::updatePanel(const QStringList& logs)
 {
-    logArea->clear();
+    // DÜZELTİLDİ: logArea->clear() çağrısı kaldırıldı.
+    // Artık her yeni log mesajı mevcut içeriğin sonuna eklenecek.
     for (const auto& log : logs) {
         logArea->append(log);
     }
+    // İsteğe bağlı: En alta kaydırma
+    logArea->verticalScrollBar()->setValue(logArea->verticalScrollBar()->maximum());
 }

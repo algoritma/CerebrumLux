@@ -5,7 +5,6 @@
 #include <vector>
 #include <map>
 #include <mutex>
-#include <random>
 #include "../core/enums.h"
 #include "../core/utils.h"
 #include "../planning_execution/goal_manager.h"
@@ -42,7 +41,6 @@ private:
     std::map<AbstractState, std::vector<std::string>> state_keyword_map;
     mutable std::map<UserIntent, std::vector<float>> intent_cryptofig_weights;
     float online_learning_rate = 0.05f;
-    mutable std::mt19937 gen;
     mutable std::mutex model_mutex;
 
     static std::string to_lower_copy(const std::string& s);

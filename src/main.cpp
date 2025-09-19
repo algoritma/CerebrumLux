@@ -45,7 +45,8 @@ int main(int argc, char *argv[])
     GoalManager goal_manager(insights_engine);
     NaturalLanguageProcessor nlp(goal_manager);
     Planner planner(analyzer, suggester, goal_manager, predictor, insights_engine);
-    ResponseEngine responder(analyzer, goal_manager, insights_engine, &nlp);
+    // ResponseEngine kurucusundaki NaturalLanguageProcessor parametresi pointer'a çevrildi
+    ResponseEngine responder(analyzer, goal_manager, insights_engine, &nlp); // DÜZELTİLDİ: &nlp eklendi
 
     // --- Learning Module ---
     KnowledgeBase kb;
@@ -53,7 +54,6 @@ int main(int argc, char *argv[])
     LearningModule learning_module(kb);
 
     // --- Meta Engine ---
-    // Kurucuya LearningModule referansı eklendi
     MetaEvolutionEngine meta_engine(
         analyzer,
         learner,
@@ -61,20 +61,18 @@ int main(int argc, char *argv[])
         goal_manager,
         cryptofig_processor,
         insights_engine,
-        learning_module // YENİ: LearningModule referansı eklendi
+        learning_module 
     );
 
     // --- GUI entegrasyonu ---
-    // Kurucuya LearningModule ve KnowledgeBase referansları eklendi
-    EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb); // YENİ
-    MainWindow window(integration, learning_module); // YENİ
+    EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb);
+    MainWindow window(integration, learning_module); 
     window.show();
 
     // --- Engine döngüsü ---
     QTimer engineTimer;
     QObject::connect(&engineTimer, &QTimer::timeout, [&](){
-        // get_current_sequence() yerine get_current_sequence_ref() kullanıldı
-        meta_engine.run_meta_evolution_cycle(sequenceManager.get_current_sequence_ref()); // DÜZELTİLDİ
+        meta_engine.run_meta_evolution_cycle(sequenceManager.get_current_sequence_ref()); 
     });
     engineTimer.start(1000);
 

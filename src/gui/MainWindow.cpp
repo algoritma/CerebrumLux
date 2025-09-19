@@ -3,6 +3,8 @@
 #include <iostream>
 #include <QStringList> 
 #include <QDebug> 
+#include "../core/logger.h" // YENİ: Logger için dahil edildi
+
 
 // YENİ: Capsule'dan SimulationData'ya basit bir dönüştürücü (gerekirse DataTypes.h'ye taşınabilir)
 // Bu fonksiyonun, Capsule ve SimulationData arasındaki veri modelini bildiği varsayılır.
@@ -36,6 +38,9 @@ MainWindow::MainWindow(EngineIntegration& eng, LearningModule& learn, QWidget* p
 
     setCentralWidget(tabWidget);
 
+    // YENİ: LogPanel'i Logger'a kaydet
+    Logger::get_instance().set_log_panel(logPanel); // DÜZELTİLDİ
+
     // GUI güncelleme timer
     connect(&update_timer, &QTimer::timeout, this, &MainWindow::updateGui);
     update_timer.start(500); // 500 ms'de bir güncelleme
@@ -60,16 +65,18 @@ void MainWindow::updateGui() {
     }
     simulationPanel->updatePanel(simulation_data_vec); // Düzeltildi
 
-    // Log panel güncellemesi
-    QStringList q_logs;
-    q_logs.append(QString::fromStdString(engine.getLatestLogs())); 
-    logPanel->updatePanel(q_logs); 
+    // Log panel güncellemesi: Artık Logger tarafından doğrudan LogPanel'e yazılıyor
+    // Buradaki manuel güncelleme kaldırıldı.
+    // QStringList q_logs; 
+    // q_logs.append(QString::fromStdString(engine.getLatestLogs())); 
+    // logPanel->updatePanel(q_logs); 
+
 
     // Graph panel güncelleme
     auto capsules_for_graph = learningModule.getCapsulesByTopic("StepSimulation"); // Düzeltildi
     graphPanel->updateGraph(capsules_for_graph.size()); 
 
-    std::cout << "[GUI] Güncelleme..." << std::endl;
+    std::cout << "[GUI] Güncelleme..." << std::endl; 
     qDebug() << "[Qt GUI] Güncelleme..."; 
 
     // Öğrenilen bilgileri test amaçlı alalım

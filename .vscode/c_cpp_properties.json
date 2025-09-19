@@ -1,0 +1,47 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                // YENİ: Qt6 include yolları eklendi
+                "C:/Qt/6.9.2/mingw_64/include",
+                "C:/Qt/6.9.2/mingw_64/include/QtCore",
+                "C:/Qt/6.9.2/mingw_64/include/QtGui",
+                "C:/Qt/6.9.2/mingw_64/include/QtWidgets",
+                "C:/Qt/6.9.2/mingw_64/include/QtCharts",
+                // Proje src alt dizinleri (glob ile kapsanıyor olabilir ama açıkça belirtmek iyi)
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/src/brain",
+                "${workspaceFolder}/src/communication",
+                "${workspaceFolder}/src/core",
+                "${workspaceFolder}/src/data_models",
+                "${workspaceFolder}/src/gui",
+                "${workspaceFolder}/src/gui/panels",
+                "${workspaceFolder}/src/meta",
+                "${workspaceFolder}/src/planning_execution",
+                "${workspaceFolder}/src/sensors",
+                "${workspaceFolder}/src/tools",
+                "${workspaceFolder}/src/user",
+                "${workspaceFolder}/src/learning",
+                "${workspaceFolder}/src/external" // nlohmann/json için
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                // Qt için gerekli olabilecek tanımlamalar
+                "QT_DEPRECATED_NO_WARNINGS",
+                "QT_WIDGETS_LIB",
+                "QT_GUI_LIB",
+                "QT_CORE_LIB",
+                "QT_CHARTS_LIB"
+            ],
+            "compilerPath": "C:\\msys64\\ucrt64\\bin\\gcc.exe",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}

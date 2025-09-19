@@ -66,6 +66,16 @@
         "queue": "cpp",
         "set": "cpp",
         "codecvt": "cpp",
-        "csignal": "cpp"
+        "csignal": "cpp",
+        "qscrollbar": "cpp",
+        "any": "cpp",
+        "cstring": "cpp",
+        "forward_list": "cpp",
+        "list": "cpp",
+        "unordered_set": "cpp",
+        "future": "cpp",
+        "ranges": "cpp",
+        "stdfloat": "cpp",
+        "valarray": "cpp"
     }
 }

@@ -3,9 +3,8 @@
 
 #include <vector>
 #include <string>  // For std::string
-#include <random>  // For std::random_device, std::mt19937, std::uniform_real_distribution
 #include "../core/enums.h" // LogLevel için
-#include "../core/utils.h" // LOG için (ileri bildirimden sonra)
+#include "../core/utils.h" // SafeRNG ve diğerleri için
 #include <cmath>   // std::exp için
 
 // *** CryptofigAutoencoder sınıfı tanımı ***
@@ -42,9 +41,6 @@ private:
 
     std::vector<float> decoder_weights_1; // LATENT_DIM * INPUT_DIM
     std::vector<float> decoder_bias_1;    // INPUT_DIM
-
-    mutable std::mt19937 gen; // const metotlarda random sayı üretebilmek için mutable
-    mutable std::uniform_real_distribution<float> dist;
 
     // Yardımcı fonksiyonlar
     float sigmoid(float x) const;

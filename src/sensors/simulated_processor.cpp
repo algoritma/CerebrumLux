@@ -1,5 +1,5 @@
 #include "simulated_processor.h" // Kendi başlık dosyasını dahil et
-#include "../core/utils.h"       // LOG ve hash_string için
+#include "../core/utils.h"       // LOG, hash_string ve SafeRNG için
 #include <iostream>              // std::cout, std::cerr için
 #include <numeric>               // std::accumulate için
 #include <cmath>                 // std::abs için
@@ -9,12 +9,7 @@
 #include "../core/logger.h"
 #include <sstream>   // std::stringstream için
 
-// Statik global değişkenler olarak başlatılması
-static std::mt19937 s_gen([]() {
-    std::random_device rd_local;
-    return rd_local();
-}());
-
+// Statik dağıtımlar burada kalabilir, çünkü bunlar sadece dağıtım aralığını tanımlar, state tutmazlar.
 // SENSOR_TYPE enum'ının tam aralığını kapsayacak şekilde dağıtım güncellendi
 static std::uniform_int_distribution<int> s_sensor_selection_distrib(0, static_cast<int>(SensorType::Count) - 1); 
 
@@ -28,7 +23,7 @@ static std::uniform_int_distribution<unsigned short> s_audio_env_distrib(0, 3); 
 static std::uniform_real_distribution<float> s_ambient_light_distrib(10.0f, 1000.0f); // 10 Lux (karanlık) - 1000 Lux (parlak)
 static std::uniform_int_distribution<> s_face_motion_distrib(0, 10); // %10 olasılıkla algılama
 static std::uniform_int_distribution<unsigned short> s_object_count_distrib(0, 5); // 0-5 arası nesne
-static std::uniform_int_distribution<unsigned short> s_emotion_distrib(0, 5); // 0: Neutral, 1: Happy, 2: Sad, 3: Angry, etc. (örnek)
+static std::uniform_int_distribution<unsigned short> s_emotion_distrib(0, 5); // 0: Neutral, 1: Happy, 2: Sad, 3: Angry, etc. (örnek) 
 
 
 SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor() 
@@ -55,12 +50,11 @@ void SimulatedAtomicSignalProcessor::stop_capture() {
 
 unsigned short SimulatedAtomicSignalProcessor::get_active_application_id_hash() {
     static int call_count = 0; 
-        static std::mt19937 app_gen([]() { std::random_device rd_local; return rd_local(); }());  
     
     call_count++;
     if (call_count % 5 == 0) { 
         std::uniform_int_distribution<> distrib_app_id(0, 5); 
-        int app_choice = distrib_app_id(app_gen); 
+        int app_choice = distrib_app_id(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
         if (app_choice == 0) return hash_string("Tarayici"); 
         else if (app_choice == 1) return hash_string("MetinEditoru");
         else if (app_choice == 2) return hash_string("Terminal");
@@ -113,17 +107,11 @@ AtomicSignal SimulatedAtomicSignalProcessor::create_keyboard_signal(char ch) {
 AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
     AtomicSignal signal; 
 
-    // Tüm SensorType enum'ını kapsayacak şekilde dağıtım güncellendi.
-    // SensorType::Count'u kullanmak yerine, belirli bir aralıkta rastgele seçim yapalım.
-    // Mikrofon ve Kamera enuma en son eklenenler olduğu için, dağıtım aralığını buna göre ayarlayalım.
-    // Şu anki durumda, Keyboard ve Mouse'tan sonraki sensörleri simüle ediyoruz.
-    // Enums.h'deki sıralamaya göre: Mouse, Display, Battery, Network, Microphone, Camera...
-    // Bu yüzden dağılımı SensorType::Mouse ile SensorType::Camera arasında yapalım (dahil).
     std::uniform_int_distribution<> other_sensor_type_distrib(
         static_cast<int>(SensorType::Mouse), 
         static_cast<int>(SensorType::Camera)
     );
-    int chosen_sensor_type_for_sim = other_sensor_type_distrib(s_gen);
+    int chosen_sensor_type_for_sim = other_sensor_type_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
 
     LOG_DEFAULT(LogLevel::TRACE, "SimulatedAtomicSignalProcessor::capture_next_signal: Rastgele seçilen klavye dışı sensor tipi: " << chosen_sensor_type_for_sim << ".\n");
 
@@ -141,9 +129,7 @@ AtomicSignal SimulatedAtomicSignalProcessor::capture_next_signal() {
         signal = simulate_camera_event();
     }
     else { 
-        // Eğer rastgele seçilen tip yukarıdakiler değilse veya yeni bir sensör tipi eklenirse
-        // varsayılan olarak bir klavye sinyali (veya daha spesifik bir 'None' sinyali) döndürebiliriz
-        signal.sensor_type = SensorType::None; // Veya SensorType::Keyboard
+        signal.sensor_type = SensorType::None;
         signal.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::high_resolution_clock::now().time_since_epoch()
         ).count();
@@ -168,17 +154,17 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
     std::uniform_int_distribution<> coord_change_distrib_large(-100, 100); 
     std::uniform_int_distribution<> button_distrib(0, 2); 
 
-    signal.mouse_event_type = event_distrib(s_gen); 
+    signal.mouse_event_type = event_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
     
-    if (signal.mouse_event_type == 0 || signal.mouse_event_type == 3 || signal.mouse_event_type == 4) {
+    if (signal.mouse_event_type == 0 || signal.mouse_event_type == 3 || signal.mouse_event_type == 4) { 
         LOG_DEFAULT(LogLevel::DEBUG, "simulate_mouse_event: Hareket olayı tespit edildi.\n"); 
         signal.mouse_event_type = 0; 
         
-        int delta_x_val = coord_change_distrib_large(s_gen);
-        int delta_y_val = coord_change_distrib_large(s_gen);
+        int delta_x_val = coord_change_distrib_large(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
+        int delta_y_val = coord_change_distrib_large(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
 
         if (delta_x_val == 0 && delta_y_val == 0) { 
-            delta_x_val = (s_gen() % 2 == 0 ? 1 : -1) * (coord_change_distrib_min(s_gen) + 1); 
+            delta_x_val = (SafeRNG::get_instance().get_generator()() % 2 == 0 ? 1 : -1) * (coord_change_distrib_min(SafeRNG::get_instance().get_generator()) + 1); // DEĞİŞTİRİLDİ
         }
         
         current_mouse_x += delta_x_val;
@@ -191,7 +177,7 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
         LOG_DEFAULT(LogLevel::DEBUG, "Mouse Hareket Sinyali Oluşturuldu: x=" << signal.mouse_x << ", y=" << signal.mouse_y << ", delta=(" << delta_x_val << "," << delta_y_val << ")\n"); 
     } else if (signal.mouse_event_type == 1) { 
         LOG_DEFAULT(LogLevel::DEBUG, "simulate_mouse_event: Tiklama olayı tespit edildi.\n"); 
-        signal.mouse_button_state = (button_distrib(s_gen) == 0) ? 1 : 2; 
+        signal.mouse_button_state = (button_distrib(SafeRNG::get_instance().get_generator()) == 0) ? 1 : 2; // DEĞİŞTİRİLDİ
         signal.mouse_x = current_mouse_x; 
         signal.mouse_y = current_mouse_y;
         LOG_DEFAULT(LogLevel::DEBUG, "Mouse Tiklama Sinyali Oluşturuldu: x=" << signal.mouse_x << ", y=" << signal.mouse_y << ", button=" << static_cast<int>(signal.mouse_button_state) << "\n"); 
@@ -199,10 +185,10 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
         LOG_DEFAULT(LogLevel::DEBUG, "simulate_mouse_event: Kaydırma olayı tespit edildi.\n"); 
         signal.mouse_button_state = 0; 
         
-        int delta_x_scroll = coord_change_distrib_min(s_gen);
-        int delta_y_scroll = coord_change_distrib_min(s_gen);
+        int delta_x_scroll = coord_change_distrib_min(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
+        int delta_y_scroll = coord_change_distrib_min(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
         if (std::abs(delta_x_scroll) < 1 && std::abs(delta_y_scroll) < 1) { 
-            delta_y_scroll = (s_gen() % 2 == 0 ? 1 : -1) * (coord_change_distrib_min(s_gen) + 1); 
+            delta_y_scroll = (SafeRNG::get_instance().get_generator()() % 2 == 0 ? 1 : -1) * (coord_change_distrib_min(SafeRNG::get_instance().get_generator()) + 1); // DEĞİŞTİRİLDİ
         }
         current_mouse_x += delta_x_scroll;
         current_mouse_y += delta_y_scroll;
@@ -228,12 +214,12 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_display_event() {
     std::uniform_int_distribution<> brightness_distrib(50, 255); 
     std::uniform_int_distribution<> on_off_distrib(0, 20); 
 
-    if (on_off_distrib(s_gen) == 0) { 
+    if (on_off_distrib(SafeRNG::get_instance().get_generator()) == 0) { // DEĞİŞTİRİLDİ
         signal.display_on = false;
         current_brightness = 0;
     } else {
         signal.display_on = true;
-        current_brightness = brightness_distrib(s_gen);
+        current_brightness = brightness_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
     }
     signal.display_brightness = current_brightness;
     LOG_DEFAULT(LogLevel::DEBUG, "simulate_display_event: Parlaklik=" << static_cast<int>(signal.display_brightness) << ", Acik=" << (signal.display_on ? "Evet" : "Hayir") << "\n");
@@ -253,11 +239,11 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_battery_event() {
     std::uniform_int_distribution<> charge_change_distrib(-2, 2); 
     std::uniform_int_distribution<> charging_change_distrib(0, 10); 
 
-    if (charging_change_distrib(s_gen) == 0) { 
+    if (charging_change_distrib(SafeRNG::get_instance().get_generator()) == 0) { // DEĞİŞTİRİLDİ
         current_charging = !current_charging;
     }
     
-    current_battery += charge_change_distrib(s_gen); 
+    current_battery += charge_change_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
     current_battery = std::max(0, std::min(100, static_cast<int>(current_battery))); 
 
     signal.battery_percentage = current_battery;
@@ -280,14 +266,14 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_network_event() {
     std::uniform_int_distribution<> bandwidth_distrib(1000, 10000); 
     std::uniform_int_distribution<> idle_bandwidth_distrib(0, 500); 
 
-    if (active_distrib(s_gen) == 0) {
+    if (active_distrib(SafeRNG::get_instance().get_generator()) == 0) { // DEĞİŞTİRİLDİ
         current_network_active = !current_network_active;
     }
     signal.network_active = current_network_active;
     if (current_network_active) {
-        signal.network_bandwidth_estimate = bandwidth_distrib(s_gen);
+        signal.network_bandwidth_estimate = bandwidth_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
     } else {
-        signal.network_bandwidth_estimate = idle_bandwidth_distrib(s_gen); 
+        signal.network_bandwidth_estimate = idle_bandwidth_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
     }
     LOG_DEFAULT(LogLevel::DEBUG, "simulate_network_event: Ag aktif=" << (signal.network_active ? "Evet" : "Hayir") << ", Bant genisliği=" << signal.network_bandwidth_estimate << " Kbps\n");
     LOG_DEFAULT(LogLevel::DEBUG, "simulate_network_event: Bitti.\n");
@@ -305,10 +291,10 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_microphone_event() {
     signal.active_app_id_hash = get_active_application_id_hash();
 
     // Rastgele değerler üret ve mevcut durumu güncelle
-    current_audio_level_db = s_audio_level_distrib(s_gen);
-    current_audio_freq_hz = s_audio_freq_distrib(s_gen);
-    current_speech_detected = (s_speech_distrib(s_gen) == 0);
-    current_audio_env_hash = s_audio_env_distrib(s_gen);
+    current_audio_level_db = s_audio_level_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
+    current_audio_freq_hz = s_audio_freq_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
+    current_speech_detected = (s_speech_distrib(SafeRNG::get_instance().get_generator()) == 0); // DEĞİŞTİRİLDİ
+    current_audio_env_hash = s_audio_env_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
 
     signal.audio_level_db = current_audio_level_db;
     signal.audio_frequency_hz = current_audio_freq_hz;
@@ -331,11 +317,11 @@ AtomicSignal SimulatedAtomicSignalProcessor::simulate_camera_event() {
     signal.active_app_id_hash = get_active_application_id_hash();
 
     // Rastgele değerler üret ve mevcut durumu güncelle
-    current_ambient_light_lux = s_ambient_light_distrib(s_gen);
-    current_face_detected = (s_face_motion_distrib(s_gen) == 0);
-    current_motion_detected = (s_face_motion_distrib(s_gen) == 1); // Farklı bir olasılık için
-    current_object_count = s_object_count_distrib(s_gen);
-    current_emotion_hash = s_emotion_distrib(s_gen);
+    current_ambient_light_lux = s_ambient_light_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
+    current_face_detected = (s_face_motion_distrib(SafeRNG::get_instance().get_generator()) == 0); // DEĞİŞTİRİLDİ
+    current_motion_detected = (s_face_motion_distrib(SafeRNG::get_instance().get_generator()) == 1); // DEĞİŞTİRİLDİ
+    current_object_count = s_object_count_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
+    current_emotion_hash = s_emotion_distrib(SafeRNG::get_instance().get_generator()); // DEĞİŞTİRİLDİ
 
     signal.ambient_light_lux = current_ambient_light_lux;
     signal.face_detected = current_face_detected;

@@ -1,6 +1,6 @@
 #include "autoencoder.h" // Kendi başlık dosyasını dahil et
 #include "../core/logger.h" // LOG makrosu için
-#include "../core/utils.h" // Diğer yardımcı fonksiyonlar için
+#include "../core/utils.h" // SafeRNG ve diğer yardımcı fonksiyonlar için
 #include <cmath>     // std::exp, std::sqrt için
 #include <algorithm> // std::min/max için
 #include <cstdio>    // fopen, fwrite, fread, fclose için
@@ -10,25 +10,27 @@
 
 
 // Statik const int üyelerinin dış tanımları
-// Bu satırların yalnızca bir kez (genellikle .cpp dosyasında) tanımlanması gerekir.
 const int CryptofigAutoencoder::INPUT_DIM;
 const int CryptofigAutoencoder::LATENT_DIM;
 
-CryptofigAutoencoder::CryptofigAutoencoder()
-    : gen(12345), dist(-0.5f, 0.5f) { // Ağırlıkları -0.5 ile 0.5 arasında başlat, sabit seed kullanıldı
+CryptofigAutoencoder::CryptofigAutoencoder() {
     initialize_random_weights();
 }
 
 void CryptofigAutoencoder::initialize_random_weights() {
+    // Dağıtım nesnesi artık yerel olarak burada oluşturuluyor.
+    std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
+
     encoder_weights_1.resize(INPUT_DIM * LATENT_DIM);
     encoder_bias_1.resize(LATENT_DIM);
     decoder_weights_1.resize(LATENT_DIM * INPUT_DIM);
     decoder_bias_1.resize(INPUT_DIM);
 
-    for (size_t i = 0; i < encoder_weights_1.size(); ++i) encoder_weights_1[i] = dist(gen);
-    for (size_t i = 0; i < encoder_bias_1.size(); ++i) encoder_bias_1[i] = dist(gen);
-    for (size_t i = 0; i < decoder_weights_1.size(); ++i) decoder_weights_1[i] = dist(gen);
-    for (size_t i = 0; i < decoder_bias_1.size(); ++i) decoder_bias_1[i] = dist(gen);
+    // Tüm çağrılar SafeRNG kullanacak şekilde değiştirildi.
+    for (size_t i = 0; i < encoder_weights_1.size(); ++i) encoder_weights_1[i] = dist(SafeRNG::get_instance().get_generator());
+    for (size_t i = 0; i < encoder_bias_1.size(); ++i) encoder_bias_1[i] = dist(SafeRNG::get_instance().get_generator());
+    for (size_t i = 0; i < decoder_weights_1.size(); ++i) decoder_weights_1[i] = dist(SafeRNG::get_instance().get_generator());
+    for (size_t i = 0; i < decoder_bias_1.size(); ++i) decoder_bias_1[i] = dist(SafeRNG::get_instance().get_generator());
 
     LOG_DEFAULT(LogLevel::INFO, "CryptofigAutoencoder: Agirliklar rastgele baslatildi.\n");
 }
@@ -80,7 +82,6 @@ std::vector<float> CryptofigAutoencoder::reconstruct(const std::vector<float>& i
     return decode(encode(input_features));
 }
 
-// Heuristik, tek adımlı ağırlık ayarlaması (meta-öğrenme esintili)
 void CryptofigAutoencoder::adjust_weights_on_error(const std::vector<float>& input_features, float learning_rate_ae) {
     if (input_features.size() != INPUT_DIM) {
         LOG_DEFAULT(LogLevel::ERR_CRITICAL, "CryptofigAutoencoder::adjust_weights_on_error: Girdi boyutu uyuşmuyor! Ayarlama yapılamıyor.\n");
@@ -97,27 +98,20 @@ void CryptofigAutoencoder::adjust_weights_on_error(const std::vector<float>& inp
     }
     total_error = std::sqrt(total_error / INPUT_DIM); // RMSE
 
-    // Sadece hata belirli bir eşiğin üzerindeyse ayar yap
-    if (total_error > 0.1f) { // Örnek eşik değeri
-        float adjustment_magnitude = learning_rate_ae * total_error; // Hata ne kadar büyükse, ayar o kadar büyük
+    if (total_error > 0.1f) { 
+        float adjustment_magnitude = learning_rate_ae * total_error; 
 
-        // Decoder ağırlıklarını ve bias'larını ayarla
         for (int j = 0; j < INPUT_DIM; ++j) {
             float output_error = input_features[j] - reconstructed_features[j];
             decoder_bias_1[j] += adjustment_magnitude * output_error;
-            decoder_bias_1[j] = std::min(1.0f, std::max(-1.0f, decoder_bias_1[j])); // Ağırlık/bias sınırlandırması
+            decoder_bias_1[j] = std::min(1.0f, std::max(-1.0f, decoder_bias_1[j]));
 
             for (int i = 0; i < LATENT_DIM; ++i) {
-                // Basit gradyan esintili ayar (decoder'ı orijinal girişe yaklaştırmaya çalış)
                 decoder_weights_1[i * INPUT_DIM + j] += adjustment_magnitude * output_error * latent_features[i];
                 decoder_weights_1[i * INPUT_DIM + j] = std::min(1.0f, std::max(-1.0f, decoder_weights_1[i * INPUT_DIM + j]));
             }
         }
 
-        // Encoder ağırlıklarını ve bias'larını ayarla (latent uzayın daha iyi temsil etmesini sağlamak için)
-        // Bu kısım daha karmaşık bir geri yayılım gerektirse de, heuristik bir yaklaşım uygulayacağız:
-        // Yeniden yapılandırma hatasını azaltacak şekilde latent gösterimi etkileyen encoder ağırlıklarını ayarla.
-        // Bu basit bir "error_signal * input_feature" kuralı ile yapılabilir.
         for (int j = 0; j < LATENT_DIM; ++j) {
             float latent_error_signal = 0.0f;
             for (int k = 0; k < INPUT_DIM; ++k) {
@@ -136,17 +130,15 @@ void CryptofigAutoencoder::adjust_weights_on_error(const std::vector<float>& inp
 }
 
 void CryptofigAutoencoder::save_weights(const std::string& filename) const {
-    FILE* fp = fopen(filename.c_str(), "wb"); // Binary modda yaz
+    FILE* fp = fopen(filename.c_str(), "wb");
     if (!fp) {
         LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: Autoencoder agirlik dosyasi yazilamadi: " << filename << " (errno: " << errno << ")\n");
         return;
     }
 
-    // Boyutları yaz
     fwrite(&INPUT_DIM, sizeof(int), 1, fp);
     fwrite(&LATENT_DIM, sizeof(int), 1, fp);
 
-    // Vektörleri yaz
     size_t size;
     size = encoder_weights_1.size(); fwrite(&size, sizeof(size_t), 1, fp); fwrite(encoder_weights_1.data(), sizeof(float), size, fp);
     size = encoder_bias_1.size();    fwrite(&size, sizeof(size_t), 1, fp); fwrite(encoder_bias_1.data(), sizeof(float), size, fp);
@@ -158,10 +150,10 @@ void CryptofigAutoencoder::save_weights(const std::string& filename) const {
 }
 
 void CryptofigAutoencoder::load_weights(const std::string& filename) {
-    FILE* fp = fopen(filename.c_str(), "rb"); // Binary modda oku
+    FILE* fp = fopen(filename.c_str(), "rb");
     if (!fp) {
         LOG_DEFAULT(LogLevel::WARNING, "Uyari: Autoencoder agirlik dosyasi bulunamadi, rastgele agirliklar kullaniliyor: " << filename << " (errno: " << errno << ")\n");
-        initialize_random_weights(); // Bulunamadıysa rastgele başlat
+        initialize_random_weights();
         return;
     }
 
@@ -186,15 +178,14 @@ void CryptofigAutoencoder::load_weights(const std::string& filename) {
     LOG_DEFAULT(LogLevel::INFO, "CryptofigAutoencoder agirliklari yuklendi: " << filename << "\n");
 }
 
-// Yeniden yapılandırma hatasını hesaplar
 float CryptofigAutoencoder::calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const {
     if (original.size() != reconstructed.size() || original.empty()) {
-        return std::numeric_limits<float>::max(); // Hatalı giriş için yüksek hata değeri
+        return std::numeric_limits<float>::max();
     }
     float error_sum_sq = 0.0f;
     for (size_t i = 0; i < original.size(); ++i) {
         float diff = original[i] - reconstructed[i];
         error_sum_sq += diff * diff;
     }
-    return std::sqrt(error_sum_sq / original.size()); // RMSE (Kök Ortalama Kare Hata) olarak döndürülebilir
+    return std::sqrt(error_sum_sq / original.size());
 }

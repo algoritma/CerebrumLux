@@ -10,6 +10,7 @@
 #include <algorithm> // std::tolower (char versiyonu için)
 #include <locale>    // std::locale için (sadece convert_wstring_to_string'de kullanılacak)
 #include <codecvt>   // std::wstring_convert için (convert_wstring_to_string'de kullanılacak)
+#include <random>    // YENİ: std::random_device, std::mt19937 için
 #ifdef _WIN32
 #include <stringapiset.h> // WideCharToMultiByte için (Windows'a özel)
 #endif
@@ -19,6 +20,20 @@
 #include <mutex>
 #include <condition_variable>
 #include "enums.h" // MessageData, MessageType, UserIntent, AbstractState, AIGoal, LogLevel için
+
+// YENİ: SafeRNG sınıfı tanımı (tekil rastgele sayı üreteci)
+class SafeRNG {
+public:
+    static SafeRNG& get_instance(); // Tekil (singleton) erişim
+    std::mt19937& get_generator(); // Rastgele sayı üreteci nesnesini döndürür
+
+    SafeRNG(const SafeRNG&) = delete; // Kopyalamayı engelle
+    void operator=(const SafeRNG&) = delete; // Atamayı engelle
+
+private:
+    SafeRNG(); // Kurucunun implementasyonu utils.cpp'ye taşındı
+    std::mt19937 generator; // Rastgele sayı üreteci
+};
 
 // Yardımcı fonksiyon bildirimleri (tümü std::string tabanlı)
 std::string get_current_timestamp_str();
@@ -30,7 +45,7 @@ unsigned short hash_string(const std::string& s); // Artık std::string alıyor
 
 // std::wstring'den std::string'e dönüştürme yardımcı fonksiyonu
 // Bu, sadece harici std::wstring'ler geldiğinde veya bir std::wstring literalini dönüştürmek gerektiğinde kullanılacaktır.
-// Mümkün olduğunca doğrudan std::string kullanmayı hedefliyoruz.
+// Mümkün olduğunca doğrudan std::string kullanmayı hedefiyoruz.
 std::string convert_wstring_to_string(const std::wstring& wstr);
 
 // MessageQueue sınıfının bildirimi (eğer utils.h içinde ise)

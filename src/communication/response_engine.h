@@ -4,10 +4,10 @@
 #include <string> // std::string
 #include <vector> // std::vector
 #include <map>    // std::map
-#include <random> // std::random_device, std::mt19937
+// #include <random> // KALDIRILDI: Artık SafeRNG kullanılıyor
 
 #include "../core/enums.h" // UserIntent, AbstractState, AIGoal, AIAction, LogLevel
-#include "../core/utils.h" // intent_to_string, abstract_state_to_string, action_to_string
+#include "../core/utils.h" // intent_to_string, abstract_state_to_string, action_to_string, YENİ: SafeRNG için
 #include "../data_models/dynamic_sequence.h"
 #include "../brain/intent_analyzer.h"
 #include "../planning_execution/goal_manager.h"
@@ -47,8 +47,8 @@ private:
     // Niyet ve durum kombinasyonlarına göre yanıt şablonları
     std::map<UserIntent, std::map<AbstractState, ResponseTemplate>> response_templates;
 
-    mutable std::mt19937 gen; // Rastgele sayı üreteci
-    mutable std::random_device rd; 
+    // KALDIRILDI: mutable std::mt19937 gen; // Rastgele sayı üreteci
+    // KALDIRILDI: mutable std::random_device rd; 
 };
 
 // === Yardımcı fonksiyonlar ===

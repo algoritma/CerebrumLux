@@ -1,5 +1,6 @@
 #include "natural_language_processor.h"
 #include "../core/logger.h"
+#include "../core/utils.h"
 #include <sstream>
 #include <algorithm>
 #include <cmath>
@@ -7,7 +8,7 @@
 
 // Default constructor for tooling
 NaturalLanguageProcessor::NaturalLanguageProcessor()
-    : goal_manager(nullptr), gen(std::chrono::high_resolution_clock::now().time_since_epoch().count()) {
+    : goal_manager(nullptr) { // KALDIRILDI: gen(...) ilklendirmesi
 
     // intent keyword map (küçük ve dikkatli seçilmiş ilk set)
     intent_keyword_map[UserIntent::Programming] = {"kod", "compile", "derle", "debug", "hata", "function", "class", "stack"};
@@ -26,9 +27,9 @@ NaturalLanguageProcessor::NaturalLanguageProcessor()
     state_keyword_map[AbstractState::Focused] = {"odak", "focus", "konsantre", "akış"};
 }
 
-// Constructor: initialize keyword maps and RNG
+// Constructor: initialize keyword maps
 NaturalLanguageProcessor::NaturalLanguageProcessor(GoalManager& goal_manager_ref)
-    : goal_manager(&goal_manager_ref), gen(std::chrono::high_resolution_clock::now().time_since_epoch().count()) {
+    : goal_manager(&goal_manager_ref) { // KALDIRILDI: gen(...) ilklendirmesi
 
     // intent keyword map (küçük ve dikkatli seçilmiş ilk set)
     intent_keyword_map[UserIntent::Programming] = {"kod", "compile", "derle", "debug", "hata", "function", "class", "stack"};

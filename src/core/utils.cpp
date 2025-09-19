@@ -3,7 +3,29 @@
 #include <numeric>   // std::accumulate için
 #include <cmath>     // std::sqrt, std::log10, std::fabs, std::exp için
 #include <algorithm> // std::min, std::max, std::tolower için
+#include "../core/logger.h" // LOG_DEFAULT için
 // <locale>, <codecvt>, <stringapiset.h> utils.h'de dahil edildiği için burada tekrar gerekmez
+
+// === SafeRNG Implementasyonları ===
+
+// Kurucu: Doğrudan sistem saatini seed olarak kullan (random_device kaldırıldı)
+SafeRNG::SafeRNG() {
+    generator.seed(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    // LOG_DEFAULT burada kullanılamaz çünkü Logger henüz başlatılmamış olabilir.
+    // main'de Logger başlatıldıktan sonra SafeRNG'nin başlatıldığından emin olunmalı.
+}
+
+// Tekil (singleton) erişim
+SafeRNG& SafeRNG::get_instance() {
+    static SafeRNG instance;
+    return instance;
+}
+
+// Rastgele sayı üreteci nesnesini döndürür
+std::mt19937& SafeRNG::get_generator() {
+    return generator;
+}
+
 
 // === Yardımcı Fonksiyon Implementasyonları (tümü std::string tabanlı) ===
 /* 
