@@ -1,48 +1,42 @@
 #include "engine_integration.h"
-#include "../core/logger.h" // Logger'a erişim için
-#include "../learning/LearningModule.h" // Öğrenme modülü için
-#include "../learning/KnowledgeBase.h" // YENİ: Bilgi tabanı için (nokta hatası düzeltildi)
-#include "../meta/meta_evolution_engine.h" // YENİ: MetaEvolutionEngine'ın tam tanımı için eklendi
+#include "../core/logger.h" // Loglama için
+// AI Core bağımlılıkları (gerekirse buraya dahil edilebilir, şimdilik sadece Logger ile logluyoruz)
+// Örneğin, eğer startCoreSimulation, SequenceManager'dan bir metot çağıracaksa
+// #include "../data_models/sequence_manager.h"
 
-
-// Constructor güncellendi
-EngineIntegration::EngineIntegration(MetaEvolutionEngine& meta, SequenceManager& seq, LearningModule& learner_ref, KnowledgeBase& kb_ref)
-    : metaEngine(meta), sequenceManager(seq), learningModule(learner_ref), knowledgeBase(kb_ref)
+// Kurucu
+EngineIntegration::EngineIntegration(MetaEvolutionEngine& meta_engine_ref, SequenceManager& sequence_manager_ref,
+                                     LearningModule& learning_module_ref, KnowledgeBase& kb_ref)
+    : meta_engine(meta_engine_ref), sequence_manager(sequence_manager_ref),
+      learning_module(learning_module_ref), kb(kb_ref)
 {
+    LOG(LogLevel::INFO, "EngineIntegration: Initialized.");
 }
 
-// Fonksiyon implementasyonları
-void EngineIntegration::runSelfSimulation(int steps) {
-    // Simülasyon kodları
-    // Örneğin, metaEngine.run_meta_evolution_cycle() çağrılabilir
-    (void)steps; // Kullanılmayan parametre uyarısını engelle
-    LOG_DEFAULT(LogLevel::INFO, "[EngineIntegration] runSelfSimulation cagrildi.\n");
+// YENİ: Simülasyonu başlatma metodu
+void EngineIntegration::startCoreSimulation() {
+    LOG(LogLevel::INFO, "EngineIntegration: Core simulation started.");
+    // TODO: Burada Cerebrum Lux'ın ana simülasyon döngüsünü başlatan gerçek mantık gelecek.
+    // Örneğin: meta_engine.run_meta_evolution_cycle(); (zaten QTimer ile çağrılıyor, belki farklı bir başlatma mekanizması)
+    // veya sequence_manager.startCollectingData(); gibi.
 }
 
-std::string EngineIntegration::getLatestLogs() {
-    // Logger'dan en son logları alacak bir mekanizma burada olmalıydı.
-    // Şimdilik sadece bir placeholder döndürüyoruz.
-    // Gerçek implementasyon için Logger sınıfının logları bir buffer'da tutması gerekir.
-    LOG_DEFAULT(LogLevel::TRACE, "[EngineIntegration] getLatestLogs cagrildi, bos string donduruluyor.\n");
-    return "Simulasyon loglari..."; // Örnek bir log
+// YENİ: Simülasyonu durdurma metodu
+void EngineIntegration::stopCoreSimulation() {
+    LOG(LogLevel::INFO, "EngineIntegration: Core simulation stopped.");
+    // TODO: Burada Cerebrum Lux'ın ana simülasyon döngüsünü durduran gerçek mantık gelecek.
+    // Örneğin: meta_engine.stopMetaEvolution(); veya sequence_manager.stopCollectingData(); gibi.
 }
 
-float EngineIntegration::getCurrentAdherenceScore() {
-    // MetaEvolutionEngine'dan prensip bağlılık skorunu döndür
-    return metaEngine.calculate_overall_adherence(); 
-}
-
-std::vector<SimulationData> EngineIntegration::getSimulationData() {
-    // Gerçek simülasyon verilerini döndür
-    return {}; // Örnek
-}
-
-std::vector<LogData> EngineIntegration::getLogData() {
-    // Gerçek log verilerini döndür (LogPanel'in beklediği formatta)
-    return {}; // Örnek
-}
-
-std::vector<GraphData> EngineIntegration::getGraphData() {
-    // Gerçek grafik verilerini döndür
-    return {}; // Örnek
+// YENİ: Kullanıcı komutunu işleme metodu
+void EngineIntegration::processUserCommand(const std::string& command) {
+    LOG(LogLevel::INFO, "EngineIntegration: Processing user command: '" << command << "'");
+    // TODO: Burada gelen komutu analiz edip Cerebrum Lux'ın ilgili modüllerine yönlendirme mantığı gelecek.
+    // Örneğin:
+    // if (command == "optimize performance") {
+    //     meta_engine.set_meta_goal(AIGoal::OptimizePerformance);
+    // } else if (command == "learn faster") {
+    //     learning_module.adjustLearningRate(0.1f);
+    // }
+    // NlpProcessor veya IntentAnalyzer gibi modüller de burada kullanılabilir.
 }

@@ -10,6 +10,7 @@
 #include "panels/SimulationPanel.h"
 #include "panels/LogPanel.h" 
 #include "panels/GraphPanel.h" 
+#include "../gui/engine_integration.h" // YENİ: EngineIntegration için include
 
 
 // Capsule'dan SimulationData'ya basit bir dönüştürücü (gerekirse DataTypes.h'ye taşınabilir)
@@ -37,14 +38,11 @@ MainWindow::MainWindow(EngineIntegration& eng, LearningModule& learn, QWidget* p
 
     setCentralWidget(tabWidget);
 
-    // Logger'a LogPanel'in QTextEdit'ini set etme, main.cpp'de yapılacak.
-    // main.cpp'de window.show() çağrıldıktan sonra, Logger::get_instance().set_log_panel_text_edit(guiLogTextEdit); çağrılacak.
-
     // GUI güncelleme timer
     connect(&update_timer, &QTimer::timeout, this, &MainWindow::updateGui);
     update_timer.start(500); 
 
-    // YENİ: SimulationPanel sinyallerini MainWindow'daki slot'lara bağla
+    // SimulationPanel sinyallerini MainWindow'daki slot'lara bağla
     connect(simulationPanel, &SimulationPanel::commandEntered, this, &MainWindow::onSimulationCommandEntered);
     connect(simulationPanel, &SimulationPanel::startSimulation, this, &MainWindow::onStartSimulationTriggered);
     connect(simulationPanel, &SimulationPanel::stopSimulation, this, &MainWindow::onStopSimulationTriggered);
@@ -86,21 +84,21 @@ void MainWindow::updateGui() {
     }
 }
 
-// YENİ: SimulationPanel sinyalleri için slot implementasyonları
+// SimulationPanel sinyalleri için slot implementasyonları
 void MainWindow::onSimulationCommandEntered(const QString& command) {
     LOG(LogLevel::INFO, "MainWindow: Received simulation command: " << command.toStdString());
-    // TODO: Bu komutu EngineIntegration'a veya doğrudan AI Core'a iletme mantığı buraya gelecek.
-    // Örneğin: engine.executeCommand(command.toStdString());
+    // YENİ: EngineIntegration'a komutu ilet
+    engine.processUserCommand(command.toStdString());
 }
 
 void MainWindow::onStartSimulationTriggered() {
     LOG(LogLevel::INFO, "MainWindow: Received start simulation signal.");
-    // TODO: EngineIntegration üzerinden simülasyonu başlatma mantığı buraya gelecek.
-    // Örneğin: engine.startCoreSimulation();
+    // YENİ: EngineIntegration üzerinden simülasyonu başlat
+    engine.startCoreSimulation();
 }
 
 void MainWindow::onStopSimulationTriggered() {
     LOG(LogLevel::INFO, "MainWindow: Received stop simulation signal.");
-    // TODO: EngineIntegration üzerinden simülasyonu durdurma mantığı buraya gelecek.
-    // Örneğin: engine.stopCoreSimulation();
+    // YENİ: EngineIntegration üzerinden simülasyonu durdur
+    engine.stopCoreSimulation();
 }
