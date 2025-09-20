@@ -3,29 +3,28 @@
 #include <iostream>
 #include <QStringList> 
 #include <QDebug> 
-#include "../core/logger.h" // YENİ: Logger için dahil edildi
+#include "../core/logger.h" 
+#include "../learning/capsule.h" 
+
+// Panel başlık dosyalarını burada dahil ediyoruz, çünkü tanımlamalarına burada ihtiyacımız var.
+#include "panels/SimulationPanel.h"
+#include "panels/LogPanel.h" 
+#include "panels/GraphPanel.h" 
 
 
-// YENİ: Capsule'dan SimulationData'ya basit bir dönüştürücü (gerekirse DataTypes.h'ye taşınabilir)
-// Bu fonksiyonun, Capsule ve SimulationData arasındaki veri modelini bildiği varsayılır.
+// Capsule'dan SimulationData'ya basit bir dönüştürücü (gerekirse DataTypes.h'ye taşınabilir)
 SimulationData convertCapsuleToSimulationData(const Capsule& capsule) {
     SimulationData data;
-    // Örnek dönüşüm: Capsule'ın içeriğini veya ID'sini kullan
-    // Gerçek bir senaryoda, Capsule'ın ilgili alanları SimulationData'nın alanlarına eşlenir.
     data.id = capsule.id; 
     data.value = capsule.confidence; 
-    // data.label = QString::fromStdString(capsule.topic); // Veya başka bir alan
     return data;
 }
 
 
 // Constructor
 MainWindow::MainWindow(EngineIntegration& eng, LearningModule& learn, QWidget* parent)
-    : QMainWindow(parent), engine(eng), learningModule(learn) // learningModule referans olarak başlatıldı
+    : QMainWindow(parent), engine(eng), learningModule(learn)
 {
-    // LearningModule artık dışarıdan referans olarak geliyor, bu yüzden burada new kullanmıyoruz.
-    // engine.setLearningModule(learningModule); // EngineIntegration'da setLearningModule kaldırıldı/değiştirildi
-
     // Paneller
     tabWidget = new QTabWidget(this);
     simulationPanel = new SimulationPanel(this);
@@ -38,51 +37,70 @@ MainWindow::MainWindow(EngineIntegration& eng, LearningModule& learn, QWidget* p
 
     setCentralWidget(tabWidget);
 
-    // YENİ: LogPanel'i Logger'a kaydet
-    Logger::get_instance().set_log_panel(logPanel); // DÜZELTİLDİ
+    // Logger'a LogPanel'in QTextEdit'ini set etme, main.cpp'de yapılacak.
+    // main.cpp'de window.show() çağrıldıktan sonra, Logger::get_instance().set_log_panel_text_edit(guiLogTextEdit); çağrılacak.
 
     // GUI güncelleme timer
     connect(&update_timer, &QTimer::timeout, this, &MainWindow::updateGui);
-    update_timer.start(500); // 500 ms'de bir güncelleme
-    // Not: İki farklı QTimer tanımlanmış, bir tanesi gereksiz olabilir. İkincisi kaldırıldı.
+    update_timer.start(500); 
+
+    // YENİ: SimulationPanel sinyallerini MainWindow'daki slot'lara bağla
+    connect(simulationPanel, &SimulationPanel::commandEntered, this, &MainWindow::onSimulationCommandEntered);
+    connect(simulationPanel, &SimulationPanel::startSimulation, this, &MainWindow::onStartSimulationTriggered);
+    connect(simulationPanel, &SimulationPanel::stopSimulation, this, &MainWindow::onStopSimulationTriggered);
+
+    LOG(LogLevel::INFO, "MainWindow: SimulationPanel signals connected.");
 }
 
 // Yıkıcı
 MainWindow::~MainWindow() {
-    // learningModule artık referans olduğu için delete kullanılmaz.
-    // Panelleri silme (eğer parent'ı this ise Qt otomatik yönetir)
-    // tabWidget, simulationPanel, logPanel, graphPanel delete edilmiyor çünkü QObject hiyerarşisi onları yönetiyor.
+    // Paneller QObject hiyerarşisi tarafından otomatik yönetilir.
 }
 
 // GUI güncelleme metodu
 void MainWindow::updateGui() {
-    // Simulation panel güncellemesi
-    // getCapsulesByTopic'ten dönen Capsule'ları SimulationData'ya dönüştür
     std::vector<Capsule> capsules_for_sim = engine.getKnowledgeBase().getCapsulesByTopic("StepSimulation");
     std::vector<SimulationData> simulation_data_vec;
     for (const auto& cap : capsules_for_sim) {
-        simulation_data_vec.push_back(convertCapsuleToSimulationData(cap)); // Dönüşüm fonksiyonu kullanıldı
+        simulation_data_vec.push_back(convertCapsuleToSimulationData(cap)); 
     }
-    simulationPanel->updatePanel(simulation_data_vec); // Düzeltildi
+    simulationPanel->updatePanel(simulation_data_vec);
 
-    // Log panel güncellemesi: Artık Logger tarafından doğrudan LogPanel'e yazılıyor
-    // Buradaki manuel güncelleme kaldırıldı.
-    // QStringList q_logs; 
-    // q_logs.append(QString::fromStdString(engine.getLatestLogs())); 
-    // logPanel->updatePanel(q_logs); 
+    auto capsules_for_graph = learningModule.getCapsulesByTopic("StepSimulation");
+    if (!capsules_for_graph.empty()) {
+        double latestValue = capsules_for_graph.back().confidence; 
+        graphPanel->updateGraph(static_cast<size_t>(latestValue));
+        LOG_DEFAULT(LogLevel::DEBUG, "MainWindow: GraphPanel updated with value: " << latestValue);
+    } else {
+        LOG_DEFAULT(LogLevel::DEBUG, "MainWindow: No 'StepSimulation' capsules found for GraphPanel. Setting value to 0.");
+        graphPanel->updateGraph(0); 
+    }
 
-
-    // Graph panel güncelleme
-    auto capsules_for_graph = learningModule.getCapsulesByTopic("StepSimulation"); // Düzeltildi
-    graphPanel->updateGraph(capsules_for_graph.size()); 
-
-    std::cout << "[GUI] Güncelleme..." << std::endl; 
+    LOG_DEFAULT(LogLevel::DEBUG, "[GUI] Güncelleme..."); 
     qDebug() << "[Qt GUI] Güncelleme..."; 
 
-    // Öğrenilen bilgileri test amaçlı alalım
-    auto results = learningModule.getKnowledgeBase().findSimilar("Qt6", 2); // Düzeltildi
+    auto results = learningModule.getKnowledgeBase().findSimilar("Qt6", 2);
     if (!results.empty()) {
-        std::cout << "[GUI] Hatırlanan bilgi: " << results[0].content << std::endl;
+        LOG_DEFAULT(LogLevel::INFO, "[GUI] Hatırlanan bilgi: " << results[0].content);
         qDebug() << "[Qt GUI] Hatırlanan bilgi: " << QString::fromStdString(results[0].content);
     }
+}
+
+// YENİ: SimulationPanel sinyalleri için slot implementasyonları
+void MainWindow::onSimulationCommandEntered(const QString& command) {
+    LOG(LogLevel::INFO, "MainWindow: Received simulation command: " << command.toStdString());
+    // TODO: Bu komutu EngineIntegration'a veya doğrudan AI Core'a iletme mantığı buraya gelecek.
+    // Örneğin: engine.executeCommand(command.toStdString());
+}
+
+void MainWindow::onStartSimulationTriggered() {
+    LOG(LogLevel::INFO, "MainWindow: Received start simulation signal.");
+    // TODO: EngineIntegration üzerinden simülasyonu başlatma mantığı buraya gelecek.
+    // Örneğin: engine.startCoreSimulation();
+}
+
+void MainWindow::onStopSimulationTriggered() {
+    LOG(LogLevel::INFO, "MainWindow: Received stop simulation signal.");
+    // TODO: EngineIntegration üzerinden simülasyonu durdurma mantığı buraya gelecek.
+    // Örneğin: engine.stopCoreSimulation();
 }

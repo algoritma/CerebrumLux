@@ -28,7 +28,8 @@ file(GLOB_RECURSE CEREBRUML_LUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/sensors/*.cpp"
     "${PROJECT_SRC_DIR}/tools/*.cpp"
     "${PROJECT_SRC_DIR}/user/*.cpp"
-    "${PROJECT_SRC_DIR}/learning/*.cpp" # YENİ: LearningModule ve KnowledgeBase için
+    "${PROJECT_SRC_DIR}/learning/*.cpp"
+    "${PROJECT_SRC_DIR}/gui/qtextedit_stream_buf.cpp" # YENİ: QTextEditStreamBuf için eklendi
 )
 
 # CerebrumLuxCore kütüphanesini oluştur
@@ -47,8 +48,8 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}/sensors"
     "${PROJECT_SRC_DIR}/tools"
     "${PROJECT_SRC_DIR}/user"
-    "${PROJECT_SRC_DIR}/learning"  # YENİ: LearningModule ve KnowledgeBase için
-    "${PROJECT_SRC_DIR}/external" # YENİ: nlohmann/json.hpp için
+    "${PROJECT_SRC_DIR}/learning"
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
 )
 
 # Qt6 ve Charts ile linkle
@@ -71,8 +72,8 @@ target_include_directories(CerebrumLuxGUI PRIVATE
     "${PROJECT_SRC_DIR}/sensors"
     "${PROJECT_SRC_DIR}/tools"
     "${PROJECT_SRC_DIR}/user"
-    "${PROJECT_SRC_DIR}/learning"  # YENİ: LearningModule ve KnowledgeBase için
-    "${PROJECT_SRC_DIR}/external" # YENİ: nlohmann/json.hpp için
+    "${PROJECT_SRC_DIR}/learning"
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
 )
 
 # Test yürütülebilir dosyası
@@ -93,6 +94,6 @@ target_include_directories(test_response_engine PRIVATE
     "${PROJECT_SRC_DIR}/tools"
     "${PROJECT_SRC_DIR}/user"
     "${PROJECT_TESTS_DIR}"
-    "${PROJECT_SRC_DIR}/learning"  # YENİ: LearningModule ve KnowledgeBase için
-    "${PROJECT_SRC_DIR}/external" # YENİ: nlohmann/json.hpp için
+    "${PROJECT_SRC_DIR}/learning"
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
 )

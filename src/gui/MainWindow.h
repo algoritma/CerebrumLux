@@ -5,39 +5,37 @@
 #include <QMainWindow>
 #include <QTabWidget>
 #include <QTimer>
-// #include "EngineIntegration.h" // Tekrarlanan dahil etme kaldırıldı
-#include "panels/SimulationPanel.h"
-#include "panels/LogPanel.h"
-#include "panels/GraphPanel.h"
-// #include "learning/LearningModule.h" // Tekrarlanan dahil etme kaldırıldı
 
 // İleri bildirimler
-class EngineIntegration; // YENİ: EngineIntegration için ileri bildirim
-class LearningModule;    // YENİ: LearningModule için ileri bildirim (eğer sadece referans tutuluyorsa)
+class SimulationPanel; 
+class LogPanel;      
+class GraphPanel;    
 
-// YENİ: Sadece bir kez dahil etme
-#include "../src/gui/engine_integration.h" // Doğru yol ve tek dahil etme
-#include "../src/learning/LearningModule.h" // Doğru yol ve tek dahil etme
+// Diğer ileri bildirimler ve include'lar
+class EngineIntegration; 
+class LearningModule;    
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 public:
-    // Kurucu imzası düzeltildi
     MainWindow(EngineIntegration& engine, LearningModule& learner, QWidget* parent = nullptr);
     ~MainWindow();
 
+    // LogPanel'e erişim için getter metodu
+    LogPanel* getLogPanel() const { return logPanel; }
+
 private slots:
     void updateGui();
+    // YENİ: SimulationPanel'den gelen sinyalleri işlemek için slot'lar
+    void onSimulationCommandEntered(const QString& command);
+    void onStartSimulationTriggered();
+    void onStopSimulationTriggered();
 
 private:
     EngineIntegration& engine;
-    LearningModule& learningModule; // Pointer yerine referans tutulduğu varsayıldı
-                                    // Eğer MainWindow LearningModule'ü sahipleniyorsa pointer kalabilir
-                                    // Mevcut kodunuzda LearningModule* learningModule; idi,
-                                    // ancak kurucuda LearningModule& learner alıyorsunuz.
-                                    // Bu bir tutarsızlık. Referansla devam edelim.
-
+    LearningModule& learningModule; 
+                                    
     QTabWidget* tabWidget;
     SimulationPanel* simulationPanel;
     LogPanel* logPanel;

@@ -1,17 +1,18 @@
 #include "logger.h"
 #include "utils.h"       // get_current_timestamp_str için
-#include "../gui/panels/LogPanel.h" // YENİ: LogPanel'in tam tanımı için dahil edildi
+// #include "../gui/panels/LogPanel.h" // Artık Logger doğrudan LogPanel'e erişmiyor, QTextEdit* kullanıyor
 #include <chrono>
 #include <ctime>
 #include <iomanip> // std::put_time
 #include <string>  // For std::string
 #include <locale>  // std::locale
 #include <cerrno>  // errno
-
+#include <QMetaObject> // QMetaObject::invokeMethod için (QTextEdit::append için kullanmıyoruz ama genel QObject çağrıları için durabilir)
+#include <QString> // QString conversion için
+#include <QTextEdit> // QTextEdit için
 
 // === Logger Sınıfı Implementasyonları ===
 
-// LogLevel'ı string'e çeviren yardımcı fonksiyon (Logger sınıfının üyesi)
 std::string Logger::level_to_string(LogLevel level) const {
     switch (level) {
         case LogLevel::SILENT: return "SILENT";
@@ -29,16 +30,15 @@ Logger& Logger::get_instance() {
     return instance;
 }
 
-// YENİ: init metodu log_source parametresi aldı
 void Logger::init(LogLevel level, const std::string& log_file_path, const std::string& log_source) {
+    std::lock_guard<std::mutex> lock(mutex_); 
     level_ = level;
-    log_source_ = log_source; // YENİ: log_source başlatıldı
+    log_source_ = log_source; 
     if (!log_file_path.empty()) {
-        // Eğer dosya zaten açıksa kapat
         if (file_stream_.is_open()) {
             file_stream_.close();
         }
-        file_stream_.open(log_file_path, std::ios_base::app); // std::string ile aç
+        file_stream_.open(log_file_path, std::ios_base::app); 
         if (!file_stream_.is_open()) {
             std::cerr << "Hata: Log dosyası açılamadı: " << log_file_path << " (errno: " << errno << ")\n";
         }
@@ -55,63 +55,65 @@ LogLevel Logger::get_level() const {
     return level_;
 }
 
-// YENİ: LogPanel'i kaydetme metodu implementasyonu
-void Logger::set_log_panel(LogPanel* panel) {
-    log_panel_ = panel;
-    if (log_panel_) {
-        LOG(LogLevel::INFO, "Logger: LogPanel entegrasyonu sağlandı.");
-    } else {
-        LOG(LogLevel::WARNING, "Logger: LogPanel null olarak ayarlandı.");
+// YENİ: QTextEdit pointer'ını set etme metodu
+void Logger::set_log_panel_text_edit(QTextEdit* textEdit) {
+    std::lock_guard<std::mutex> lock(buffer_mutex); // Protect buffer and panel pointer access
+    m_guiLogTextEdit = textEdit;
+    if (m_guiLogTextEdit) {
+        // Flush all buffered logs to the GUI by directly appending
+        for (const std::string& buffered_log : initial_log_buffer) {
+            // QTextEdit'in append metodunu doğrudan GUI thread'inde güvenli bir şekilde çağır.
+            // Bu, QMetaObject::invokeMethod'dan daha doğrudan bir yaklaşımdır.
+            QMetaObject::invokeMethod(m_guiLogTextEdit, "append", Qt::QueuedConnection, Q_ARG(QString, QString::fromStdString(buffered_log)));
+        }
+        initial_log_buffer.clear(); // Clear the buffer after flushing
     }
 }
 
-// YENİ: log metodu: doğrudan string mesaj alır, sıra numarası ve kaynak ekler
+// log metodu
 void Logger::log(LogLevel level, const std::string& message, const char* file, int line) {
     if (level > level_) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_); 
 
-    // Log sayacını artır
     log_counter_++;
 
-    // Zamanı formatla
     std::string time_str = get_current_timestamp_str();
-
-    // Dosya ve satır bilgisini ekle
     std::stringstream file_line_ss;
     file_line_ss << " (" << file << ":" << line << ")";
 
-    // Oluşturulan tam log mesajı (Sıra numarası ve kaynak eklendi)
     std::string full_log_message = "[" + time_str + "] [" + level_to_string(level) + "] [" + log_source_ + ":" + std::to_string(log_counter_) + "] " +
                                    message + file_line_ss.str();
 
-    // Konsol çıktısı (sadece LogPanel ayarlı değilse)
-    if (!log_panel_) {
-        std::cout << full_log_message << std::endl;
+    {
+        std::lock_guard<std::mutex> buffer_lock(buffer_mutex); 
+        if (m_guiLogTextEdit) {
+            // Doğrudan QTextEdit'in append metodunu çağır (güvenli bir şekilde).
+            QMetaObject::invokeMethod(m_guiLogTextEdit, "append", Qt::QueuedConnection,
+                                      Q_ARG(QString, QString::fromStdString(full_log_message)));
+        } else {
+            // YALNIZCA dahili buffera yaz, std::cout veya std::cerr'e YAZMA.
+            initial_log_buffer.push_back(full_log_message);
+        }
     }
     
-    // Dosya çıktısı
+    // Dosya çıktısı - her zaman yapılır.
     if (file_stream_.is_open()) {
         file_stream_ << full_log_message << std::endl;
     }
-
-    // LogPanel çıktısı (eğer LogPanel ayarlıysa)
-    if (log_panel_) {
-        log_panel_->updatePanel(QStringList() << QString::fromStdString(full_log_message));
-    }
 }
 
-// YENİ: log_error_to_cerr metodu implementasyonu (std::cerr'e özel)
+// log_error_to_cerr metodu
 void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line) {
     if (level > level_) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_); 
 
-    log_counter_++; // Sayacı artır
+    log_counter_++; 
 
     std::string time_str = get_current_timestamp_str();
     std::stringstream file_line_ss;
@@ -120,30 +122,20 @@ void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const
     std::string full_log_message = "[" + time_str + "] [" + level_to_string(level) + "] [" + log_source_ + ":" + std::to_string(log_counter_) + "] " +
                                    message + file_line_ss.str();
 
-    std::cerr << full_log_message << std::endl; // Her zaman std::cerr'e yaz
+    {
+        std::lock_guard<std::mutex> buffer_lock(buffer_mutex); 
+        if (m_guiLogTextEdit) {
+            // Doğrudan QTextEdit'in append metodunu çağır (güvenli bir şekilde).
+            QMetaObject::invokeMethod(m_guiLogTextEdit, "append", Qt::QueuedConnection,
+                                      Q_ARG(QString, QString::fromStdString(full_log_message)));
+        } else {
+            // YALNIZCA dahili buffera yaz, std::cerr'e YAZMA.
+            initial_log_buffer.push_back(full_log_message);
+        }
+    }
 
+    // Dosya çıktısı - her zaman yapılır.
     if (file_stream_.is_open()) {
         file_stream_ << full_log_message << std::endl;
     }
-
-    if (log_panel_) {
-        log_panel_->updatePanel(QStringList() << QString::fromStdString(full_log_message));
-    }
 }
-
-// ESKİ: std::ostream referansı alan log metodu - KALDIRILIYOR veya yeniden düzenleniyor
-// Bu metodu kaldırmak, LOG makrosunun yeni log metodunu kullanmasını zorlayacak.
-/*
-void Logger::log(LogLevel level, std::ostream& os, const std::stringstream& message_stream, const char* file, int line) {
-    // Bu metodun implementasyonu, artık doğrudan string mesaj alan log metoduna yönlendirilecek.
-    log(level, message_stream.str(), file, line);
-}
-*/
-
-// ESKİ: Varsayılan olarak std::cout'a yazar - KALDIRILIYOR veya yeniden düzenleniyor
-/*
-void Logger::log(LogLevel level, const std::stringstream& message_stream, const char* file, int line) {
-    // Bu metodun implementasyonu, artık doğrudan string mesaj alan log metoduna yönlendirilecek.
-    log(level, message_stream.str(), file, line);
-}
-*/
