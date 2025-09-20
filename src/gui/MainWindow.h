@@ -6,12 +6,10 @@
 #include <QTabWidget>
 #include <QTimer>
 
-// İleri bildirimler
 class SimulationPanel; 
 class LogPanel;      
 class GraphPanel;    
 
-// Diğer ileri bildirimler ve include'lar
 class EngineIntegration; 
 class LearningModule;    
 
@@ -22,12 +20,10 @@ public:
     MainWindow(EngineIntegration& engine, LearningModule& learner, QWidget* parent = nullptr);
     ~MainWindow();
 
-    // LogPanel'e erişim için getter metodu
     LogPanel* getLogPanel() const { return logPanel; }
 
 private slots:
     void updateGui();
-    // YENİ: SimulationPanel'den gelen sinyalleri işlemek için slot'lar
     void onSimulationCommandEntered(const QString& command);
     void onStartSimulationTriggered();
     void onStopSimulationTriggered();

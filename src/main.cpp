@@ -1,14 +1,16 @@
 #include <QApplication>
 #include <QTimer>
-#include <iostream>   
+#include <iostream>   // std::cout, std::cerr için (shell'e yazmaya devam edecekler)
 #include <memory>     
 #include <fstream>    
+#include <QDebug>     
 
 #include "gui/MainWindow.h"
 #include "gui/engine_integration.h"
+// #include "gui/qtextedit_stream_buf.h" // TAMAMEN KALDIRILDI: Bu dosya artık kullanılmayacak
 #include "gui/panels/LogPanel.h" 
 
-#ifdef _WIN32 // Sadece Windows için
+#ifdef _WIN32 
 #include <Windows.h>
 #include <io.h>
 #include <fcntl.h>
@@ -37,18 +39,46 @@
 #include "learning/KnowledgeBase.h"
 #include "learning/LearningModule.h"
 
+// KALDIRILDI: std::cout/cerr yönlendirmesi için static unique_ptr'lar ve mutex
+// static std::unique_ptr<QTextEditStreamBuf> g_coutRedirector;
+// static std::unique_ptr<QTextEditStreamBuf> g_cerrRedirector;
+// static QMutex g_streamMutex; 
+
+// Qt'nin debug mesajlarını Logger'a yönlendirecek özel mesaj işleyici
+void customQtMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    std::string source_file = context.file ? context.file : "unknown";
+    int source_line = context.line;
+
+    switch (type) {
+    case QtDebugMsg:
+        Logger::get_instance().log(LogLevel::DEBUG, msg.toStdString(), source_file.c_str(), source_line);
+        break;
+    case QtInfoMsg:
+        Logger::get_instance().log(LogLevel::INFO, msg.toStdString(), source_file.c_str(), source_line);
+        break;
+    case QtWarningMsg:
+        Logger::get_instance().log(LogLevel::WARNING, msg.toStdString(), source_file.c_str(), source_line);
+        break;
+    case QtCriticalMsg:
+        Logger::get_instance().log_error_to_cerr(LogLevel::ERR_CRITICAL, msg.toStdString(), source_file.c_str(), source_line);
+        break;
+    case QtFatalMsg:
+        Logger::get_instance().log_error_to_cerr(LogLevel::ERR_CRITICAL, msg.toStdString(), source_file.c_str(), source_line);
+        abort(); 
+    }
+}
+
 
 int main(int argc, char *argv[])
 {
-    #ifdef _WIN32 // YENİ: Windows konsolunu UTF-8 olarak ayarla
+    #ifdef _WIN32 
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    // std::cout ve std::cerr'in de UTF-8'i desteklemesini sağlamak için
     _setmode(_fileno(stdout), _O_U8TEXT);
     _setmode(_fileno(stderr), _O_U8TEXT);
     #endif
 
-    // En erken teşhis loglaması (hala main'in ilk satırı)
     std::ofstream early_diagnostic_log("cerebrum_lux_early_diagnostic.log", std::ios_base::app);
     if (early_diagnostic_log.is_open()) {
         early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] main function entered." << std::endl;
@@ -59,9 +89,8 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
 
-    // Logger init'i ilk burada çağrılıyor. GUI'ye yönlendirme test için devre dışı.
     Logger::get_instance().init(LogLevel::INFO, "cerebrum_lux_gui_log.txt", "MAIN_APP"); 
-    LOG(LogLevel::INFO, "Application starting up. Direct GUI logging is not active yet. Logs are buffered internally.");
+    LOG(LogLevel::INFO, "Application starting up. Standard streams (cout/cerr) will output to console. Qt logs and custom logs go to GUI.");
     early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] QApplication initialized. Logger ready (buffered)." << std::endl;
     early_diagnostic_log.flush();
 
@@ -108,12 +137,11 @@ int main(int argc, char *argv[])
     // --- GUI entegrasyonu ---
     EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb);
     MainWindow window(integration, learning_module);
-    window.show(); // Pencereyi göster
+    window.show(); 
 
     early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] MainWindow created and shown." << std::endl;
     early_diagnostic_log.flush();
 
-    // GUI tamamen başlatıldıktan sonra Logger'a LogPanel'in QTextEdit'ini doğrudan bildir.
     QTextEdit* guiLogTextEdit = nullptr;
     if (window.getLogPanel()) {
         guiLogTextEdit = window.getLogPanel()->getLogTextEdit(); 
@@ -122,10 +150,19 @@ int main(int argc, char *argv[])
     if (guiLogTextEdit) {
         Logger::get_instance().set_log_panel_text_edit(guiLogTextEdit); 
         LOG(LogLevel::INFO, "Logger: Direct GUI QTextEdit link established. Buffered logs flushed to GUI.");
+        early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Logger linked directly to GUI QTextEdit." << std::endl;
 
-        early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Logger linked directly to GUI QTextEdit. Standard streams NOT redirected." << std::endl;
+        // KALDIRILDI: std::cout ve std::cerr'i GUI'ye yönlendirme girişimleri.
+        // Bu, önceki denemelerde "giriş noktası bulunamadı" hatasına yol açtı.
+        early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Standard streams NOT redirected to GUI (intentionally). They will appear in console." << std::endl;
+
+        // Qt'nin kendi loglama makrolarını Logger'a yönlendir. Bu kısım stabil çalışıyor.
+        qInstallMessageHandler(customQtMessageHandler);
+        LOG(LogLevel::INFO, "Qt message handler installed for redirecting qDebug() etc. to Logger.");
+        early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Qt message handler installed." << std::endl;
+
     } else {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "ERROR: GUI LogPanel's QTextEdit could not be found for direct linking. Logs will ONLY go to file.");
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "ERROR: GUI LogPanel's QTextEdit could not be found for direct linking. Logs will ONLY go to file and console.");
         early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] ERROR: GUI LogPanel's QTextEdit not found for direct linking." << std::endl;
     }
     early_diagnostic_log.flush();
