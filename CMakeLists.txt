@@ -26,7 +26,8 @@ file(GLOB_RECURSE CEREBRUML_LUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/tools/*.cpp"
     "${PROJECT_SRC_DIR}/user/*.cpp"
     "${PROJECT_SRC_DIR}/learning/*.cpp"
-    # KALDIRILDI: "${PROJECT_SRC_DIR}/gui/qtextedit_stream_buf.cpp"
+    "${PROJECT_SRC_DIR}/learning/UnicodeSanitizer.cpp" # YENİ
+    "${PROJECT_SRC_DIR}/learning/StegoDetector.cpp"    # YENİ
 )
 
 add_library(CerebrumLuxCore STATIC ${CEREBRUML_LUX_CORE_SOURCES})
