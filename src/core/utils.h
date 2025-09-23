@@ -11,6 +11,11 @@
 #include <locale>    // std::locale için (sadece convert_wstring_to_string'de kullanılacak)
 #include <codecvt>   // std::wstring_convert için (convert_wstring_to_string'de kullanılacak)
 #include <random>    // YENİ: std::random_device, std::mt19937 için
+
+// OpenSSL Başlıkları (utils.h içinde dahil ediliyor)
+#include <openssl/crypto.h>
+#include <openssl/buffer.h>
+
 #ifdef _WIN32
 #include <stringapiset.h> // WideCharToMultiByte için (Windows'a özel)
 #endif
@@ -20,6 +25,10 @@
 #include <mutex>
 #include <condition_variable>
 #include "enums.h" // MessageData, MessageType, UserIntent, AbstractState, AIGoal, LogLevel için
+
+// YENİ: Base64 encode/decode prototipleri (global fonksiyonlar olarak)
+std::string base64_encode(const std::string& in);
+std::string base64_decode(const std::string& in);
 
 // YENİ: SafeRNG sınıfı tanımı (tekil rastgele sayı üreteci)
 class SafeRNG {
@@ -45,7 +54,7 @@ unsigned short hash_string(const std::string& s); // Artık std::string alıyor
 
 // std::wstring'den std::string'e dönüştürme yardımcı fonksiyonu
 // Bu, sadece harici std::wstring'ler geldiğinde veya bir std::wstring literalini dönüştürmek gerektiğinde kullanılacaktır.
-// Mümkün olduğunca doğrudan std::string kullanmayı hedefiyoruz.
+// Mümkün olduğunca doğrudan std::string kullanmayı hedefliyoruz.
 std::string convert_wstring_to_string(const std::wstring& wstr);
 
 // MessageQueue sınıfının bildirimi (eğer utils.h içinde ise)

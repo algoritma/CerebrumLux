@@ -3,11 +3,11 @@
 
 #include <string>
 #include <vector> 
-#include <map> // YENİ: IngestReport içinde kullanılabileceği için
-#include <chrono> // YENİ: IngestReport içinde zaman damgası için
+#include <map> 
+#include <chrono> 
 
 #include "KnowledgeBase.h"
-#include "../communication/ai_insights_engine.h" // AIInsight için dahil edildi
+#include "../communication/ai_insights_engine.h" 
 
 // YENİ: Kapsül işleme sonucunu belirten enum
 enum class IngestResult {
@@ -38,49 +38,69 @@ struct IngestReport {
 class UnicodeSanitizer;
 class StegoDetector;
 
+// Geçici olarak Ed25519 sabitleri tanımlanıyor, OpenSSL bulunana kadar
+#define DUMMY_ED25519_PRIVKEY_LEN 64 
+#define DUMMY_ED25519_PUBKEY_LEN 32  
+#define DUMMY_ED25519_SIG_LEN   64   
+
 class LearningModule {
 public:
-    // Kurucuya yeni modüller için referanslar eklenebilir, şimdilik sadece KnowledgeBase
     LearningModule(KnowledgeBase& kb);
-    ~LearningModule(); // YENİ: Yıkıcı eklendi
+    ~LearningModule(); 
 
     void learnFromText(const std::string& text,
                        const std::string& source,
                        const std::string& topic,
                        float confidence = 1.0f);
 
-    void learnFromWeb(const std::string& query); // placeholder
+    void learnFromWeb(const std::string& query); 
 
-    std::vector<Capsule> getCapsulesByTopic(const std::string& topic) {
-        return knowledgeBase.getCapsulesByTopic(topic);
-    }
+    virtual std::vector<Capsule> search_by_topic(const std::string& topic) const; 
 
     void process_ai_insights(const std::vector<AIInsight>& insights);
 
-    KnowledgeBase& getKnowledgeBase() { return knowledgeBase; }
-    const KnowledgeBase& getKnowledgeBase() const { return knowledgeBase; }
+    virtual KnowledgeBase& getKnowledgeBase(); 
+    virtual const KnowledgeBase& getKnowledgeBase() const; 
 
-    // YENİ: Güvenli kapsül işleme pipeline'ı
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
+
+    virtual std::vector<float> compute_embedding(const std::string& text) const; 
+    virtual std::string cryptofig_encode(const std::vector<float>& cryptofig_vector) const; 
+    virtual std::vector<float> cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const; 
+    virtual std::string aes_gcm_encrypt(const std::string& plaintext, const std::string& key, const std::string& iv) const; 
+    virtual std::string aes_gcm_decrypt(const std::string& ciphertext, const std::string& key, const std::string& iv) const; 
+    // virtual std::string ed25519_sign(const std::string& message, const std::string& private_key) const; 
+    // virtual bool ed25519_verify(const std::string& message, const std::string& signature, const std::string& public_key) const; 
+    virtual std::string generate_random_bytes(size_t length) const; 
+
+    virtual std::string get_aes_key_for_peer(const std::string& peer_id) const;
+    virtual std::string get_public_key_for_peer(const std::string& peer_id) const; 
+    virtual std::string get_my_private_key() const;                               
+    virtual std::string get_my_public_key() const;                                
+
+    // YENİ: String için public Base64 encode/decode metotları
+    virtual std::string base64_encode_string(const std::string& data) const; // YENİ PUBLIC VIRTUAL METOT
+    virtual std::string base64_decode_string(const std::string& data) const; // YENİ PUBLIC VIRTUAL METOT
 
 private:
     KnowledgeBase& knowledgeBase;
 
-    // YENİ: Güvenli kapsül işleme için yardımcı sınıfların pointer'ları
-    // LearningModule bu nesnelerin ömrünü yönetmeyebilir, dışarıdan referans olarak alabilir
-    // Ancak basitleştirmek adına şimdilik doğrudan oluşturulmuş gibi düşünebiliriz
-    std::unique_ptr<UnicodeSanitizer> unicodeSanitizer; // YENİ
-    std::unique_ptr<StegoDetector> stegoDetector;       // YENİ
+    std::unique_ptr<UnicodeSanitizer> unicodeSanitizer;
+    std::unique_ptr<StegoDetector> stegoDetector;       
 
-    // YENİ: ingest_envelope pipeline'ı içindeki özel metodlar (stub implementasyonlar)
-    bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id);
-    Capsule decrypt_payload(const Capsule& encrypted_capsule);
-    bool schema_validate(const Capsule& capsule);
-    Capsule sanitize_unicode(const Capsule& capsule);
-    bool run_steganalysis(const Capsule& capsule);
-    bool sandbox_analysis(const Capsule& capsule);
-    bool corroboration_check(const Capsule& capsule);
-    void audit_log_append(const IngestReport& report);
+    // ingest_envelope pipeline'ı içindeki özel metodlar
+    bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
+    Capsule decrypt_payload(const Capsule& encrypted_capsule) const;
+    bool schema_validate(const Capsule& capsule) const;
+    Capsule sanitize_unicode(const Capsule& capsule) const;
+    bool run_steganalysis(const Capsule& capsule) const;
+    bool sandbox_analysis(const Capsule& capsule) const;
+    bool corroboration_check(const Capsule& capsule) const;
+    void audit_log_append(const IngestReport& report) const; 
+
+    // Base64 kodlama/kod çözme fonksiyonları LearningModule'ün private üyeleri
+    std::string base64_encode_internal(const std::string& in) const; 
+    std::string base64_decode_internal(const std::string& in) const; 
 };
 
 #endif // LEARNINGMODULE_H

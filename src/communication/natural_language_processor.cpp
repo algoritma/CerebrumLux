@@ -8,7 +8,7 @@
 
 // Default constructor for tooling
 NaturalLanguageProcessor::NaturalLanguageProcessor()
-    : goal_manager(nullptr) { // KALDIRILDI: gen(...) ilklendirmesi
+    : goal_manager(nullptr) { 
 
     // intent keyword map (küçük ve dikkatli seçilmiş ilk set)
     intent_keyword_map[UserIntent::Programming] = {"kod", "compile", "derle", "debug", "hata", "function", "class", "stack"};
@@ -29,7 +29,7 @@ NaturalLanguageProcessor::NaturalLanguageProcessor()
 
 // Constructor: initialize keyword maps
 NaturalLanguageProcessor::NaturalLanguageProcessor(GoalManager& goal_manager_ref)
-    : goal_manager(&goal_manager_ref) { // KALDIRILDI: gen(...) ilklendirmesi
+    : goal_manager(&goal_manager_ref) { 
 
     // intent keyword map (küçük ve dikkatli seçilmiş ilk set)
     intent_keyword_map[UserIntent::Programming] = {"kod", "compile", "derle", "debug", "hata", "function", "class", "stack"};
@@ -140,7 +140,7 @@ std::string NaturalLanguageProcessor::generate_response_text(
     const std::vector<std::string>& relevant_keywords
 ) const {
     std::stringstream ss;
-    if (goal_manager) { // Null check for tooling
+    if (goal_manager) { 
         AIGoal gm_goal = goal_manager->get_current_goal();
         if (gm_goal != AIGoal::None && gm_goal != current_goal) {
             ss << "Benim güncel hedefim: " << goal_to_string(gm_goal) << ". ";
@@ -205,6 +205,41 @@ void NaturalLanguageProcessor::trainIncremental(const std::string& input, const 
     else if (expected_intent == "FastTyping") true_intent = UserIntent::FastTyping;
     else if (expected_intent == "GeneralInquiry") true_intent = UserIntent::GeneralInquiry;
 
-    std::vector<float> dummy_cryptofig = {1.0f};
+    // latent_cryptofig normalde DynamicSequence'den gelmeli, burada bir dummy oluşturalım
+    std::vector<float> dummy_cryptofig(CryptofigAutoencoder::LATENT_DIM, 0.5f); 
     update_model(input, true_intent, dummy_cryptofig);
+}
+
+// YENİ: load_model implementasyonu
+void NaturalLanguageProcessor::load_model(const std::string& path) {
+    std::lock_guard<std::mutex> lock(model_mutex);
+    LOG_DEFAULT(LogLevel::INFO, "NLP: Model yüklendi (placeholder): " << path);
+    // TODO: Gerçek model yükleme mantığı buraya gelecek
+    // Örneğin, intent_cryptofig_weights haritasını dosyadan yükle
+}
+
+// YENİ: save_model implementasyonu
+void NaturalLanguageProcessor::save_model(const std::string& path) const {
+    std::lock_guard<std::mutex> lock(model_mutex);
+    LOG_DEFAULT(LogLevel::INFO, "NLP: Model kaydedildi (placeholder): " << path);
+    // TODO: Gerçek model kaydetme mantığı buraya gelecek
+    // Örneğin, intent_cryptofig_weights haritasını dosyaya kaydet
+}
+
+// YENİ: predict_intent implementasyonu
+std::string NaturalLanguageProcessor::predict_intent(const std::string& input) {
+    std::string lower = to_lower_copy(input);
+    UserIntent intent = infer_intent_from_text(lower); // Mevcut kural tabanlı çıkarım
+    
+    // Daha sofistike bir tahmin için intent_cryptofig_weights kullanılabilir.
+    // Şimdilik sadece kural tabanlı tahmini döndürüyoruz.
+    LOG_DEFAULT(LogLevel::INFO, "NLP: Tahmin edilen intent (placeholder): " << intent_to_string(intent));
+    return intent_to_string(intent);
+}
+
+// YENİ: fallback_response_for_intent implementasyonu
+std::string NaturalLanguageProcessor::fallback_response_for_intent(UserIntent intent, AbstractState state, const DynamicSequence& sequence) const {
+    (void)state; // Kullanılmadı
+    (void)sequence; // Kullanılmadı
+    return "Anladığım kadarıyla niyetiniz: " + intent_to_string(intent) + ". Size nasıl yardımcı olabilirim?";
 }

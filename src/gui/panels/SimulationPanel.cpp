@@ -28,7 +28,7 @@ SimulationPanel::SimulationPanel(QWidget* parent) : QWidget(parent)
 
     table = new QTableWidget(this);
     table->setColumnCount(2);
-    table->setHorizontalHeaderLabels(QStringList() << "Step" << "Value");
+    table->setHorizontalHeaderLabels(QStringList() << "ID" << "Value"); // "Step" yerine "ID" yapıldı
     layout->addWidget(table);
     setLayout(layout);
 
@@ -61,7 +61,7 @@ void SimulationPanel::updatePanel(const std::vector<SimulationData>& data)
 {
     table->setRowCount(static_cast<int>(data.size()));
     for (size_t i = 0; i < data.size(); ++i) {
-        table->setItem(i, 0, new QTableWidgetItem(QString::number(data[i].id))); 
+        table->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(data[i].id))); // Artık string ataması doğru
         table->setItem(i, 1, new QTableWidgetItem(QString::number(data[i].value)));
     }
 }

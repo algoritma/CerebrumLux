@@ -4,7 +4,11 @@
 #include <vector>
 #include <map>
 #include <deque>
-#include <fstream> // KnowledgeBase dosya işlemleri için
+#include <fstream> 
+#include <optional> 
+
+// OpenSSL Başlıkları (Sadece EVP_CIPHER_iv_length için gerekli olanı bırakıldı)
+#include <openssl/evp.h> 
 
 // Project headers (use relative path from tests/)
 #include "../src/communication/response_engine.h"
@@ -20,21 +24,25 @@
 #include "../src/data_models/sequence_manager.h" 
 #include "../src/user/user_profile_manager.h"
 #include "../src/planning_execution/goal_manager.h"
-#include "../src/core/logger.h" 
-#include "../src/core/utils.h" // action_to_string, intent_to_string, abstract_state_to_string vb. için
+#include "../src/core/logger.h"
+#include "../src/core/utils.h" // utils.h'de artık global base64 fonksiyonları yok
 #include "../src/learning/KnowledgeBase.h" 
 #include "../src/learning/LearningModule.h" 
 #include "../src/learning/Capsule.h" 
 #include "../src/learning/WebFetcher.h" 
 
 // Rastgele sayı üreteci (random_device hatasını önlemek için sabit seed ile)
-// BU SATIR TESTLERİN TEKRARLANABİLİRLİĞİ İÇİN KASITLI OLARAK BIRAKILMIŞTIR.
-#include <random> // std::mt19937 için
 static std::mt19937 gen_test(12345); 
+
+// Geçici olarak Ed25519 sabitleri tanımlanıyor, OpenSSL bulunana kadar
+#define DUMMY_ED25519_PRIVKEY_LEN 64 
+#define DUMMY_ED25519_PUBKEY_LEN 32  
+#define DUMMY_ED25519_SIG_LEN   64   
 
 // === Dummy implementations for testing ===
 
 // Dummy SequenceManager
+// HATA DÜZELTME: Base class metodları virtual olmadığı için 'override' kaldırıldı.
 class DummySequenceManager : public SequenceManager {
 public:
     DummySequenceManager() : SequenceManager() {}
@@ -83,6 +91,7 @@ public:
 };
 
 // DummyUserProfileManager
+// HATA DÜZELTME: Base class metodları virtual olmadığı için 'override' kaldırıldı.
 class DummyUserProfileManager : public UserProfileManager {
 public:
     DummyUserProfileManager() : UserProfileManager() {}
@@ -107,6 +116,8 @@ public:
 };
 
 // Dummy IntentLearner
+// HATA DÜZELTME: Sadece IntentLearner base class'ındaki virtual metodlar override edildi. 
+// LearningModule'e ait olan ve override hatası veren metodlar bu dummy class'tan kaldırıldı.
 class DummyIntentLearner : public IntentLearner {
 public:
     DummyIntentLearner(IntentAnalyzer& analyzer_ref, SuggestionEngine& suggester_ref, UserProfileManager& user_profile_manager_ref)
@@ -127,6 +138,7 @@ public:
 };
 
 // Dummy PredictionEngine
+// HATA DÜZELTME: Base class'ta virtual olmayan metodlardan 'override' kaldırıldı.
 class DummyPredictionEngine : public PredictionEngine {
 public:
     DummyPredictionEngine(IntentAnalyzer& analyzer_ref, SequenceManager& sequence_manager_ref)
@@ -141,12 +153,13 @@ public:
     void save_state_graph(const std::string& filename) const { 
         (void)filename; 
     }
-    void load_state_graph(const std::string& filename) { 
+    void load_state_graph(const std::string& filename) {  
         (void)filename; 
     }
 };
 
 // DummyCryptofigAutoencoder
+// HATA DÜZELTME: Base class'ta virtual olmayan metodlardan 'override' kaldırıldı.
 class DummyCryptofigAutoencoder : public CryptofigAutoencoder {
 public:
     DummyCryptofigAutoencoder() : CryptofigAutoencoder() {}
@@ -167,6 +180,7 @@ public:
 };
 
 // DummyCryptofigProcessor
+// HATA DÜZELTME: Base class'ta virtual olmayan metodlardan 'override' kaldırıldı.
 class DummyCryptofigProcessor : public CryptofigProcessor {
 public:
     DummyCryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAutoencoder& autoencoder_ref)
@@ -206,6 +220,10 @@ public:
         out.push_back(insight); 
         return out;
     }
+    virtual IntentAnalyzer& get_analyzer() const override {
+        static DummyIntentAnalyzer analyzer_temp;
+        return analyzer_temp;
+    }
 };
 
 // DummyGoalManager
@@ -218,6 +236,7 @@ public:
 };
 
 // DummyNaturalLanguageProcessor
+// HATA DÜZELTME: Base class metodları virtual olmadığı için 'override' kaldırıldı.
 class DummyNaturalLanguageProcessor : public NaturalLanguageProcessor {
 public:
     DummyNaturalLanguageProcessor(GoalManager& gm) : NaturalLanguageProcessor(gm) {}
@@ -250,9 +269,42 @@ public:
 };
 
 
+// Helper to sign and encrypt capsules for testing (global olarak tanımlanıyor)
+// LearningModule objesini parametre olarak alıyor.
+Capsule create_signed_encrypted_capsule_helper(LearningModule& lm, const std::string& id_prefix, const std::string& content, const std::string& source_peer, float confidence) {
+    Capsule c;
+    static unsigned int test_capsule_id_counter = 0; 
+    c.id = id_prefix + std::to_string(++test_capsule_id_counter); 
+    c.content = content;
+    c.source = source_peer;
+    c.topic = "Test Topic";
+    c.confidence = confidence;
+    c.plain_text_summary = content.substr(0, std::min((size_t)100, content.length())) + "...";
+    c.timestamp_utc = std::chrono::system_clock::now();
+    
+    c.embedding = lm.compute_embedding(c.content);
+    c.cryptofig_blob_base64 = lm.cryptofig_encode(c.embedding);
+
+    std::string aes_key = lm.get_aes_key_for_peer(source_peer);
+    std::string iv = lm.generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm()));
+    
+    // HATA DÜZELTME: `base64_encode_internal` private olduğu için global `base64_encode` kullanıldı.
+    // Bu fonksiyonun utils.h'de tanımlı olduğu ve linklendiği varsayılmıştır.
+    c.encryption_iv_base64 = base64_encode(iv);
+    c.encrypted_content = lm.aes_gcm_encrypt(c.content, aes_key, iv);
+
+    // Ed25519 fonksiyonları yorum satırı yapıldığı için burada da simüle ediyoruz
+    // std::string private_key = lm.get_my_private_key(); 
+    // c.signature_base64 = lm.ed25519_sign(c.encrypted_content, private_key);
+    c.signature_base64 = "valid_signature"; 
+    return c;
+}
+
+
 // === Test main ===
 int main() {
     std::cout << "ResponseEngine testleri (düzeltilmiş) başlatılıyor...\n";
+    // HATA DÜZELTME: Kırık olan include'dan kaynaklanan 'Logger' tanınamadı hatası düzeltildi.
     Logger::get_instance().init(LogLevel::DEBUG, "test_log.txt");
 
     // Create dummy components
@@ -308,30 +360,55 @@ int main() {
     // YENİ TESTLER: LearningModule ve KnowledgeBase
     std::cout << "\n--- LearningModule ve KnowledgeBase Testleri ---\n";
     KnowledgeBase test_kb;
-    LearningModule test_lm(test_kb);
+    LearningModule test_lm(test_kb); 
 
     // Test LearningModule::learnFromText
     std::cout << "\nLearningModule::learnFromText testi:\n";
     test_lm.learnFromText("Bu bir test metnidir.", "Test Kaynak", "Genel");
     test_lm.learnFromText("Qt programlama cok keyifli.", "Blog", "Programlama");
     test_lm.learnFromText("Qt tasarim prensipleri.", "Dokuman", "Programlama");
-    assert(test_kb.getCapsulesByTopic("Genel").size() == 1);
-    assert(test_kb.getCapsulesByTopic("Programlama").size() == 2);
+    assert(test_kb.search_by_topic("Genel").size() == 1); 
+    assert(test_kb.search_by_topic("Programlama").size() == 2); 
     std::cout << "learnFromText başarılı.\n";
 
-    // Test KnowledgeBase::findSimilar
-    std::cout << "\nKnowledgeBase::findSimilar testi:\n";
-    auto similar_capsules = test_kb.findSimilar("Qt", 1);
+    // Test KnowledgeBase::semantic_search
+    std::cout << "\nKnowledgeBase::semantic_search testi:\n";
+    auto similar_capsules = test_kb.semantic_search("Qt", 1); 
     assert(!similar_capsules.empty());
     std::cout << "En benzer kapsül: " << similar_capsules[0].content << "\n";
 
-    // Test KnowledgeBase::encrypt
-    std::cout << "\nKnowledgeBase::encrypt testi:\n";
+    // Test KnowledgeBase::encrypt/decrypt
+    std::cout << "\nKnowledgeBase::encrypt/decrypt testi:\n";
     std::string original_text = "Gizli bilgi";
     std::string encrypted_text = test_kb.encrypt(original_text);
-    std::string decrypted_text = test_kb.encrypt(encrypted_text); 
+    std::string decrypted_text = test_kb.decrypt(encrypted_text); 
     assert(original_text == decrypted_text);
     std::cout << "Şifreleme/çözme başarılı.\n";
+
+    // Test KnowledgeBase::quarantine_capsule ve revert_capsule
+    std::cout << "\nKnowledgeBase::quarantine_capsule ve revert_capsule testi:\n";
+    Capsule cap_to_quarantine;
+    cap_to_quarantine.id = "quarantine_test_id";
+    cap_to_quarantine.content = "Bu karantinaya alınacak bir kapsül.";
+    cap_to_quarantine.source = "Test";
+    cap_to_quarantine.topic = "Quarantine";
+    cap_to_quarantine.timestamp_utc = std::chrono::system_clock::now(); 
+    cap_to_quarantine.plain_text_summary = "Karantina kapsül özeti.";
+    cap_to_quarantine.cryptofig_blob_base64 = "dummy_cryptofig_blob";
+    cap_to_quarantine.signature_base64 = "dummy_signature";
+    cap_to_quarantine.encryption_iv_base64 = "dummy_iv";
+
+    test_kb.add_capsule(cap_to_quarantine);
+    std::optional<Capsule> found_cap = test_kb.find_capsule_by_id("quarantine_test_id");
+    assert(found_cap.has_value());
+    test_kb.quarantine_capsule("quarantine_test_id");
+    assert(!test_kb.find_capsule_by_id("quarantine_test_id").has_value()); 
+
+    // Karantinadaki kapsülü geri almayı dene
+    test_kb.revert_capsule("quarantine_test_id");
+    assert(test_kb.find_capsule_by_id("quarantine_test_id").has_value()); 
+    std::cout << "Karantina ve geri alma başarılı.\n";
+
 
     // Test LearningModule::process_ai_insights
     std::cout << "\nLearningModule::process_ai_insights testi:\n";
@@ -339,7 +416,7 @@ int main() {
     dummy_insights.push_back(AIInsight("New performance improvement detected.", AIAction::None, 0.9f)); 
     dummy_insights.push_back(AIInsight("User interface response time decreased.", AIAction::None, 0.7f)); 
     test_lm.process_ai_insights(dummy_insights);
-    assert(test_kb.getCapsulesByTopic("AI Insight").size() == dummy_insights.size()); 
+    assert(test_lm.search_by_topic("AI Insight").size() == dummy_insights.size()); 
     std::cout << "process_ai_insights başarılı.\n";
 
     std::cout << "\nTüm testler tamamlandi (düzeltilmiş test dosyası).\n";

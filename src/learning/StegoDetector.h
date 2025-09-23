@@ -2,7 +2,7 @@
 #define STEGODETECTOR_H
 
 #include <string>
-#include <vector> // Eğer içeriği byte vektörü olarak işleyeceksek
+#include <vector> 
 
 class StegoDetector {
 public:

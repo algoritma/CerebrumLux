@@ -1,13 +1,18 @@
+// Düzeltme: Windows GUI uygulamaları için Qt'nin özel başlığı
 #include <QApplication>
 #include <QTimer>
 #include <iostream>   
 #include <memory>     
 #include <fstream>    
 #include <QDebug>     
+#include <iomanip> 
+#include <sstream> 
+
+// OpenSSL için gerekli başlıklar (Sadece EVP_CIPHER_iv_length için gerekli olanı bırakıldı)
+#include <openssl/evp.h>    
 
 #include "gui/MainWindow.h"
 #include "gui/engine_integration.h"
-// #include "gui/qtextedit_stream_buf.h" // Kaldırıldı
 #include "gui/panels/LogPanel.h" 
 
 #ifdef _WIN32 
@@ -19,7 +24,7 @@
 // AI core bileşenleri
 #include "sensors/atomic_signal.h"
 #include "core/enums.h"
-#include "core/utils.h"
+#include "core/utils.h" 
 #include "core/logger.h"
 #include "sensors/simulated_processor.h"
 #include "data_models/sequence_manager.h"
@@ -37,14 +42,9 @@
 #include "user/user_profile_manager.h"
 #include "communication/natural_language_processor.h"
 #include "learning/KnowledgeBase.h"
-#include "learning/LearningModule.h" // YENİ: LearningModule.h dahil edildi (IngestResult, IngestReport ve Capsule tanımları için)
-#include "learning/Capsule.h"       // YENİ: Capsule tanımı için (zaten LearningModule.h dahil ediyor olabilir ama emin olmak için)
+#include "learning/LearningModule.h" 
+#include "learning/Capsule.h"       
 
-
-// KALDIRILDI: std::cout/cerr yönlendirmesi için static unique_ptr'lar ve mutex
-// static std::unique_ptr<QTextEditStreamBuf> g_coutRedirector;
-// static std::unique_ptr<QTextEditStreamBuf> g_cerrRedirector;
-// static QMutex g_streamMutex; 
 
 // Qt'nin debug mesajlarını Logger'a yönlendirecek özel mesaj işleyici
 void customQtMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
@@ -74,12 +74,15 @@ void customQtMessageHandler(QtMsgType type, const QMessageLogContext &context, c
 
 int main(int argc, char *argv[])
 {
+    // konsol açılmasın
+    /*
     #ifdef _WIN32 
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     _setmode(_fileno(stdout), _O_U8TEXT);
     _setmode(_fileno(stderr), _O_U8TEXT);
     #endif
+    */
 
     std::ofstream early_diagnostic_log("cerebrum_lux_early_diagnostic.log", std::ios_base::app);
     if (early_diagnostic_log.is_open()) {
@@ -91,10 +94,17 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
 
+    qRegisterMetaType<IngestResult>("IngestResult");
+    qRegisterMetaType<IngestReport>("IngestReport");
+
+     // Logger başlat
     Logger::get_instance().init(LogLevel::INFO, "cerebrum_lux_gui_log.txt", "MAIN_APP"); 
     LOG(LogLevel::INFO, "Application starting up. Standard streams (cout/cerr) will output to console. Qt logs and custom logs go to GUI.");
+    
     early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] QApplication initialized. Logger ready (buffered)." << std::endl;
     early_diagnostic_log.flush();
+
+    qInstallMessageHandler(customQtMessageHandler);
 
     // --- AI motoru bileşenleri ---
     SequenceManager sequenceManager;
@@ -154,12 +164,6 @@ int main(int argc, char *argv[])
         LOG(LogLevel::INFO, "Logger: Direct GUI QTextEdit link established. Buffered logs flushed to GUI.");
         early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Logger linked directly to GUI QTextEdit." << std::endl;
 
-        early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Standard streams NOT redirected to GUI (intentionally). They will appear in console." << std::endl;
-
-        qInstallMessageHandler(customQtMessageHandler);
-        LOG(LogLevel::INFO, "Qt message handler installed for redirecting qDebug() etc. to Logger.");
-        early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Qt message handler installed." << std::endl;
-
     } else {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "ERROR: GUI LogPanel's QTextEdit could not be found for direct linking. Logs will ONLY go to file and console.");
         early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] ERROR: GUI LogPanel's QTextEdit not found for direct linking." << std::endl;
@@ -169,52 +173,54 @@ int main(int argc, char *argv[])
     // --- YENİ: LearningModule::ingest_envelope için Test Senaryoları ---
     LOG(LogLevel::INFO, "--- Starting LearningModule::ingest_envelope Test Scenarios ---");
 
-    // Test Senaryosu 1: Başarılı Kapsül Yutma (Valid Signature, Clean Content)
-    Capsule test_capsule_1;
-    test_capsule_1.id = 101;
-    test_capsule_1.content = "Bu temiz bir test kapsuludur. Guzel bir gun geciriyoruz.";
-    test_capsule_1.source = "Test_Peer_A";
-    test_capsule_1.topic = "General Info";
-    test_capsule_1.confidence = 0.8f;
-    test_capsule_1.encrypted_content = learning_module.getKnowledgeBase().encrypt(test_capsule_1.content); // encrypt content
+    // Helper to sign and encrypt capsules for testing
+    // Lambda LearningModule objesini yakalıyor
+    auto create_signed_encrypted_capsule = [&](const std::string& id_prefix, const std::string& content, const std::string& source_peer, float confidence) {
+        Capsule c;
+        static unsigned int local_capsule_id_counter = 0; // main.cpp için yerel sayaç
+        c.id = id_prefix + std::to_string(++local_capsule_id_counter); 
+        c.content = content;
+        c.source = source_peer;
+        c.topic = "Test Topic";
+        c.confidence = confidence;
+        c.plain_text_summary = content.substr(0, std::min((size_t)100, content.length())) + "...";
+        c.timestamp_utc = std::chrono::system_clock::now();
+        
+        c.embedding = learning_module.compute_embedding(c.content);
+        c.cryptofig_blob_base64 = learning_module.cryptofig_encode(c.embedding);
 
-    IngestReport report_1 = learning_module.ingest_envelope(test_capsule_1, "valid_signature", "Test_Peer_A");
+        std::string aes_key = learning_module.get_aes_key_for_peer(source_peer);
+        std::string iv = learning_module.generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm()));
+        c.encryption_iv_base64 = learning_module.base64_encode_string(iv); // LearningModule'ün public base64_encode_string metodu kullanıldı
+        c.encrypted_content = learning_module.aes_gcm_encrypt(c.content, aes_key, iv);
+
+        // Ed25519 fonksiyonları yorum satırı yapıldığı için burada da simüle ediyoruz
+        // std::string private_key = learning_module.get_my_private_key(); 
+        // c.signature_base64 = learning_module.ed25519_sign(c.encrypted_content, private_key);
+        c.signature_base64 = "valid_signature"; // Geçici simülasyon
+        return c;
+    };
+
+
+    // Test Senaryosu 1: Başarılı Kapsül Yutma (Valid Signature, Clean Content)
+    Capsule test_capsule_1 = create_signed_encrypted_capsule("valid_capsule_", "Bu temiz bir test kapsuludur. Guzel bir gun geciriyoruz.", "Test_Peer_A", 0.8f);
+    IngestReport report_1 = learning_module.ingest_envelope(test_capsule_1, test_capsule_1.signature_base64, test_capsule_1.source);
     LOG(LogLevel::INFO, "Test 1 Result: " << static_cast<int>(report_1.result) << " - " << report_1.message);
 
     // Test Senaryosu 2: Geçersiz İmza
-    Capsule test_capsule_2;
-    test_capsule_2.id = 102;
-    test_capsule_2.content = "Bu kapsulun imzasi gecersiz olmali.";
-    test_capsule_2.source = "Unauthorized_Peer";
-    test_capsule_2.topic = "Security Alert";
-    test_capsule_2.confidence = 0.5f;
-    test_capsule_2.encrypted_content = learning_module.getKnowledgeBase().encrypt(test_capsule_2.content); // encrypt content
-
-    IngestReport report_2 = learning_module.ingest_envelope(test_capsule_2, "invalid_signature", "Unauthorized_Peer");
+    Capsule test_capsule_2 = create_signed_encrypted_capsule("invalid_sig_capsule_", "Bu kapsulun imzasi gecersiz olmali.", "Unauthorized_Peer", 0.5f);
+    test_capsule_2.signature_base64 = "invalid_signature"; // Kasten yanlış imza
+    IngestReport report_2 = learning_module.ingest_envelope(test_capsule_2, test_capsule_2.signature_base64, test_capsule_2.source);
     LOG(LogLevel::INFO, "Test 2 Result (Invalid Signature): " << static_cast<int>(report_2.result) << " - " << report_2.message);
 
     // Test Senaryosu 3: Steganografi İçeren Kapsül
-    Capsule test_capsule_3;
-    test_capsule_3.id = 103;
-    test_capsule_3.content = "Normal gorunen bir metin ama icinde hidden_message_tag var."; // StegoDetector tetiklemeli
-    test_capsule_3.source = "Suspicious_Source";
-    test_capsule_3.topic = "Hidden Data";
-    test_capsule_3.confidence = 0.7f;
-    test_capsule_3.encrypted_content = learning_module.getKnowledgeBase().encrypt(test_capsule_3.content); // encrypt content
-
-    IngestReport report_3 = learning_module.ingest_envelope(test_capsule_3, "valid_signature", "Suspicious_Source");
+    Capsule test_capsule_3 = create_signed_encrypted_capsule("stego_capsule_", "Normal gorunen bir metin ama icinde hidden_message_tag var.", "Suspicious_Source", 0.7f); // StegoDetector tetiklemeli
+    IngestReport report_3 = learning_module.ingest_envelope(test_capsule_3, test_capsule_3.signature_base64, test_capsule_3.source);
     LOG(LogLevel::INFO, "Test 3 Result (Steganography Detected): " << static_cast<int>(report_3.result) << " - " << report_3.message);
 
     // Test Senaryosu 4: Unicode Temizleme Gerektiren Kapsül
-    Capsule test_capsule_4;
-    test_capsule_4.id = 104;
-    test_capsule_4.content = "Metin\x01\x02\x03i├ºinde kontrol karakterleri var. \t Yeni satir."; // UnicodeSanitizer tetiklemeli
-    test_capsule_4.source = "Dirty_Source";
-    test_capsule_4.topic = "Data Hygiene";
-    test_capsule_4.confidence = 0.9f;
-    test_capsule_4.encrypted_content = learning_module.getKnowledgeBase().encrypt(test_capsule_4.content); // encrypt content
-
-    IngestReport report_4 = learning_module.ingest_envelope(test_capsule_4, "valid_signature", "Dirty_Source");
+    Capsule test_capsule_4 = create_signed_encrypted_capsule("unicode_capsule_", "Metin\x01\x02\x03içinde kontrol karakterleri var. \t Yeni satir.", "Dirty_Source", 0.9f); // UnicodeSanitizer tetiklemeli
+    IngestReport report_4 = learning_module.ingest_envelope(test_capsule_4, test_capsule_4.signature_base64, test_capsule_4.source);
     LOG(LogLevel::INFO, "Test 4 Result (Sanitization Needed): " << static_cast<int>(report_4.result) << " - " << report_4.message);
     if (report_4.result == IngestResult::SanitizationNeeded) {
         LOG(LogLevel::INFO, "    Sanitized Content: " << report_4.processed_capsule.content);
@@ -229,7 +235,7 @@ int main(int argc, char *argv[])
     QObject::connect(&engineTimer, &QTimer::timeout, [&](){
         meta_engine.run_meta_evolution_cycle(sequenceManager.get_current_sequence_ref());
     });
-    engineTimer.start(1000); 
+    engineTimer.start(1000); // 1 saniye döngü
 
     early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Engine timer started. Entering QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
@@ -237,6 +243,7 @@ int main(int argc, char *argv[])
     int result = app.exec();
 
     kb.save("knowledge.json");
+
     early_diagnostic_log << get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Application exited with code: " << result << std::endl;
     early_diagnostic_log.close(); 
     
