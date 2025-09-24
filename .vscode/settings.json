@@ -79,5 +79,9 @@
         "valarray": "cpp",
         "complex": "cpp",
         "cinttypes": "cpp"
+    },
+    "cmake.configureSettings": {
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.9.2/mingw_64",
+        "OPENSSL_ROOT_DIR": "C:/vcpkg/installed/x64-mingw-static"
     }
 }

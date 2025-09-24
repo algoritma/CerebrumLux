@@ -1,4 +1,8 @@
-// Düzeltme: Windows GUI uygulamaları için Qt'nin özel başlığı
+// Düzeltme: Windows.h başlığı, __argc ve __argv için gerekli olabilir.
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 #include <QApplication>
 #include <QTimer>
 #include <iostream>   
@@ -16,7 +20,6 @@
 #include "gui/panels/LogPanel.h" 
 
 #ifdef _WIN32 
-#include <Windows.h>
 #include <io.h>
 #include <fcntl.h>
 #endif
@@ -92,6 +95,8 @@ int main(int argc, char *argv[])
         std::cerr << "ERROR: Could not open early_diagnostic_log. This is a critical failure." << std::endl;
     }
 
+    // Eğer konsol istemiyorsanız, bunu CMake'de WIN32 hedefi ile sağlayacağız.
+    // QApplication'ı normal argc/argv ile başlatın:
     QApplication app(argc, argv);
 
     qRegisterMetaType<IngestResult>("IngestResult");
@@ -174,7 +179,6 @@ int main(int argc, char *argv[])
     LOG(LogLevel::INFO, "--- Starting LearningModule::ingest_envelope Test Scenarios ---");
 
     // Helper to sign and encrypt capsules for testing
-    // Lambda LearningModule objesini yakalıyor
     auto create_signed_encrypted_capsule = [&](const std::string& id_prefix, const std::string& content, const std::string& source_peer, float confidence) {
         Capsule c;
         static unsigned int local_capsule_id_counter = 0; // main.cpp için yerel sayaç
@@ -191,13 +195,12 @@ int main(int argc, char *argv[])
 
         std::string aes_key = learning_module.get_aes_key_for_peer(source_peer);
         std::string iv = learning_module.generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm()));
-        c.encryption_iv_base64 = learning_module.base64_encode_string(iv); // LearningModule'ün public base64_encode_string metodu kullanıldı
+        c.encryption_iv_base64 = learning_module.base64_encode_string(iv); 
         c.encrypted_content = learning_module.aes_gcm_encrypt(c.content, aes_key, iv);
 
-        // Ed25519 fonksiyonları yorum satırı yapıldığı için burada da simüle ediyoruz
-        // std::string private_key = learning_module.get_my_private_key(); 
-        // c.signature_base64 = learning_module.ed25519_sign(c.encrypted_content, private_key);
-        c.signature_base64 = "valid_signature"; // Geçici simülasyon
+        // Düzeltme: Ed25519 imzalama aktif edildi
+        std::string private_key_pem = learning_module.get_my_private_key(); 
+        c.signature_base64 = learning_module.ed25519_sign(c.encrypted_content, private_key_pem);
         return c;
     };
 
@@ -209,7 +212,7 @@ int main(int argc, char *argv[])
 
     // Test Senaryosu 2: Geçersiz İmza
     Capsule test_capsule_2 = create_signed_encrypted_capsule("invalid_sig_capsule_", "Bu kapsulun imzasi gecersiz olmali.", "Unauthorized_Peer", 0.5f);
-    test_capsule_2.signature_base64 = "invalid_signature"; // Kasten yanlış imza
+    test_capsule_2.signature_base64 = "invalid_signature_tampered"; // Kasten yanlış imza
     IngestReport report_2 = learning_module.ingest_envelope(test_capsule_2, test_capsule_2.signature_base64, test_capsule_2.source);
     LOG(LogLevel::INFO, "Test 2 Result (Invalid Signature): " << static_cast<int>(report_2.result) << " - " << report_2.message);
 

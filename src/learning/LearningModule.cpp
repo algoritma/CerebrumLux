@@ -10,11 +10,14 @@
 #include <openssl/crypto.h> 
 #include <openssl/ssl.h>    
 #include <openssl/evp.h>    
-#include <openssl/rand.h>   
+#include <openssl/rand.h>   // Düzeltme: RAND_bytes için bu başlık gerekli
 #include <openssl/err.h>    
 #include <openssl/bio.h>    
 #include <openssl/buffer.h> 
-// #include <openssl/ed25519.h> // Yorum satırı kalıyor
+#include <openssl/pem.h>    
+#include <openssl/x509.h>   
+// Düzeltme: openssl/ed25519.h başlığı kaldırıldı (çünkü fiziksel olarak yok)
+// #include <openssl/ed25519.h> 
 
 // YENİ: UnicodeSanitizer ve StegoDetector başlık dosyaları
 #include "UnicodeSanitizer.h"
@@ -23,8 +26,12 @@
 // Kapsül ID sayacını string ID'lere uyarlamak için (isteğe bağlı)
 static unsigned int s_learning_module_capsule_id_counter = 0;
 
+// Düzeltme: Ed25519 anahtar çifti değişkenleri buraya taşındı, dosya genelinde erişilebilir olacak.
+static EVP_PKEY* s_my_ed25519_pkey = nullptr; // Özel anahtar
+static EVP_PKEY* s_my_ed25519_pubkey = nullptr; // Açık anahtar
+
 // ================================================================
-// base64_encode_internal ve base64_decode_internal implementasyonları
+// Base64 fonksiyonları LearningModule sınıfının üye fonksiyonları olarak tanımlanıyor.
 // ================================================================
 
 std::string LearningModule::base64_encode_internal(const std::string& in) const {
@@ -94,7 +101,7 @@ std::string LearningModule::base64_decode_string(const std::string& data) const 
 
 // Kurucu
 LearningModule::LearningModule(KnowledgeBase& kb) 
-    : knowledgeBase(kb),
+    : knowledgeBase(kb), 
       unicodeSanitizer(std::make_unique<UnicodeSanitizer>()), 
       stegoDetector(std::make_unique<StegoDetector>())      
 {
@@ -104,6 +111,15 @@ LearningModule::LearningModule(KnowledgeBase& kb)
 // Yıkıcı
 LearningModule::~LearningModule() {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Destructor called.");
+    // Anahtarları temizle
+    if (s_my_ed25519_pkey) {
+        EVP_PKEY_free(s_my_ed25519_pkey);
+        s_my_ed25519_pkey = nullptr;
+    }
+    if (s_my_ed25519_pubkey) {
+        EVP_PKEY_free(s_my_ed25519_pubkey);
+        s_my_ed25519_pubkey = nullptr;
+    }
 }
 
 void LearningModule::learnFromText(const std::string& text,
@@ -125,16 +141,14 @@ void LearningModule::learnFromText(const std::string& text,
 
     std::string my_aes_key = this->get_aes_key_for_peer("Self"); 
     std::string iv = this->generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm())); 
-    c.encryption_iv_base64 = this->base64_encode_string(iv); // Yeni public metot kullanıldı
+    c.encryption_iv_base64 = this->base64_encode_string(iv); 
     c.encrypted_content = this->aes_gcm_encrypt(c.content, my_aes_key, iv); 
 
-    // Ed25519 fonksiyonları yorum satırı yapıldığı için burada da simüle ediyoruz
-    // std::string my_private_key = this->get_my_private_key(); 
-    // c.signature_base64 = this->ed25519_sign(c.encrypted_content, my_private_key); 
-    c.signature_base64 = "valid_signature_placeholder"; // Geçici simülasyon
+    std::string my_private_key_pem = this->get_my_private_key(); 
+    c.signature_base64 = this->ed25519_sign(c.encrypted_content, my_private_key_pem); 
 
-    knowledgeBase.add_capsule(c); 
-    knowledgeBase.save(); 
+    this->knowledgeBase.add_capsule(c); 
+    this->knowledgeBase.save(); 
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Learned from text. Topic: " << topic << ", ID: " << c.id);
 }
 
@@ -149,15 +163,15 @@ void LearningModule::learnFromWeb(const std::string& query) {
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
-    return knowledgeBase.search_by_topic(topic);
+    return this->knowledgeBase.search_by_topic(topic); 
 }
 
 KnowledgeBase& LearningModule::getKnowledgeBase() {
-    return knowledgeBase;
+    return this->knowledgeBase; 
 }
 
 const KnowledgeBase& LearningModule::getKnowledgeBase() const {
-    return knowledgeBase;
+    return this->knowledgeBase; 
 }
 
 
@@ -178,18 +192,16 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
 
         std::string my_aes_key = this->get_aes_key_for_peer("Self"); 
         std::string iv = this->generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm())); 
-        c.encryption_iv_base64 = this->base64_encode_string(iv); // Yeni public metot kullanıldı
+        c.encryption_iv_base64 = this->base64_encode_string(iv); 
         c.encrypted_content = this->aes_gcm_encrypt(c.content, my_aes_key, iv); 
 
-        // Ed25519 fonksiyonları yorum satırı yapıldığı için burada da simüle ediyoruz
-        // std::string my_private_key = this->get_my_private_key();
-        // c.signature_base64 = this->ed25519_sign(c.encrypted_content, my_private_key);
-        c.signature_base64 = "valid_signature_placeholder"; // Geçici simülasyon
+        std::string my_private_key_pem = this->get_my_private_key();
+        c.signature_base64 = this->ed25519_sign(c.encrypted_content, my_private_key_pem);
 
-        knowledgeBase.add_capsule(c); 
+        this->knowledgeBase.add_capsule(c); 
         LOG_DEFAULT(LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü eklendi: " << c.content.substr(0, std::min((size_t)30, c.content.length())) << "..., ID: " << c.id);
     }
-    knowledgeBase.save(); 
+    this->knowledgeBase.save(); 
 }
 
 IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id) {
@@ -201,11 +213,12 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
 
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Ingesting envelope from " << sender_id << " with ID: " << envelope.id << "...");
 
-    if (!this->verify_signature(report.processed_capsule, signature, sender_id)) { 
+    std::string public_key_of_sender_pem = this->get_public_key_for_peer(sender_id);
+    if (!this->ed25519_verify(report.processed_capsule.encrypted_content, report.processed_capsule.signature_base64, public_key_of_sender_pem)) {
         report.result = IngestResult::InvalidSignature;
         report.message = "Signature verification failed.";
         this->audit_log_append(report); 
-        knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Signature verified for capsule ID: " << envelope.id);
@@ -215,7 +228,7 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
         report.result = IngestResult::DecryptionFailed;
         report.message = "Payload decryption failed.";
         this->audit_log_append(report); 
-        knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
         return report;
     }
     report.processed_capsule = decrypted_capsule; 
@@ -225,7 +238,7 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
         report.result = IngestResult::SchemaMismatch;
         report.message = "Capsule schema mismatch.";
         this->audit_log_append(report); 
-        knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Schema validated for capsule ID: " << envelope.id);
@@ -244,7 +257,7 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
         report.result = IngestResult::SteganographyDetected;
         report.message = "Steganography detected in capsule content.";
         this->audit_log_append(report); 
-        knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Steganography check passed for capsule ID: " << envelope.id);
@@ -253,7 +266,7 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
         report.result = IngestResult::SandboxFailed;
         report.message = "Sandbox analysis indicated potential threat.";
         this->audit_log_append(report); 
-        knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Sandbox analysis passed for capsule ID: " << envelope.id);
@@ -262,13 +275,13 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
         report.result = IngestResult::CorroborationFailed;
         report.message = "Corroboration check failed against existing knowledge.";
         this->audit_log_append(report); 
-        knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Corroboration check passed for capsule ID: " << envelope.id);
 
-    knowledgeBase.add_capsule(report.processed_capsule); 
-    knowledgeBase.save(); 
+    this->knowledgeBase.add_capsule(report.processed_capsule); 
+    this->knowledgeBase.save(); 
     report.result = IngestResult::Success;
     report.message = "Capsule ingested successfully.";
     this->audit_log_append(report); 
@@ -286,14 +299,10 @@ bool LearningModule::verify_signature(const Capsule& capsule, const std::string&
         return false;
     }
 
-    // Ed25519 doğrulamasını şimdilik simüle ediyoruz
-    // std::string message_to_verify = capsule.encrypted_content;
-    // std::string signature_bytes = this->base64_decode_string(capsule.signature_base64); // Yeni public metot
-    // std::string public_key_bytes = this->get_public_key_for_peer(sender_id); 
-    // return this->ed25519_verify(message_to_verify, signature_bytes, public_key_bytes); 
-    
-    // Geçici olarak sadece gelen signature ile "valid_signature" stringini karşılaştırıyoruz.
-    return signature == "valid_signature"; 
+    std::string message_to_verify = capsule.encrypted_content;
+    std::string signature_bytes = this->base64_decode_string(capsule.signature_base64); 
+    std::string public_key_bytes_pem = this->get_public_key_for_peer(sender_id); 
+    return this->ed25519_verify(message_to_verify, signature_bytes, public_key_bytes_pem); 
 }
 
 Capsule LearningModule::decrypt_payload(const Capsule& encrypted_capsule) const {
@@ -306,7 +315,7 @@ Capsule LearningModule::decrypt_payload(const Capsule& encrypted_capsule) const 
     }
 
     std::string aes_key = this->get_aes_key_for_peer(encrypted_capsule.source); 
-    std::string iv = this->base64_decode_string(encrypted_capsule.encryption_iv_base64); // Yeni public metot
+    std::string iv = this->base64_decode_string(encrypted_capsule.encryption_iv_base64); 
 
     decrypted.content = this->aes_gcm_decrypt(encrypted_capsule.encrypted_content, aes_key, iv); 
 
@@ -375,21 +384,21 @@ void LearningModule::audit_log_append(const IngestReport& report) const {
                                       << ", Original Capsule ID: " << report.original_capsule.id);
 }
 
-// Kriptografik ve Embedding Altyapısı Implementasyonları (İskeletler)
+// Kriptografik ve Embedding Altyapısı Implementasyonları
 
 std::vector<float> LearningModule::compute_embedding(const std::string& text) const {
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: compute_embedding (KnowledgeBase'den) çağrıldı.");
-    return knowledgeBase.computeEmbedding(text); 
+    return this->knowledgeBase.computeEmbedding(text); 
 }
 
 std::string LearningModule::cryptofig_encode(const std::vector<float>& cryptofig_vector) const {
     nlohmann::json j = cryptofig_vector;
     std::string serialized_cryptofig = j.dump();
-    return this->base64_encode_internal(serialized_cryptofig); // this-> eklendi
+    return this->base64_encode_internal(serialized_cryptofig); 
 }
 
 std::vector<float> LearningModule::cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const {
-    std::string serialized_cryptofig = this->base64_decode_internal(base64_cryptofig_blob); // this-> eklendi
+    std::string serialized_cryptofig = this->base64_decode_internal(base64_cryptofig_blob); 
     try {
         nlohmann::json j = nlohmann::json::parse(serialized_cryptofig);
         return j.get<std::vector<float>>();
@@ -479,11 +488,11 @@ std::string LearningModule::aes_gcm_encrypt(const std::string& plaintext, const 
 
     OPENSSL_free(ciphertext_buf);
     OPENSSL_free(tag_buf);
-    return this->base64_encode_internal(result); // this-> eklendi
+    return this->base64_encode_string(result); 
 }
 
 std::string LearningModule::aes_gcm_decrypt(const std::string& ciphertext_base64, const std::string& key, const std::string& iv) const {
-    std::string combined_data = this->base64_decode_internal(ciphertext_base64); // this-> eklendi
+    std::string combined_data = this->base64_decode_string(ciphertext_base64); 
 
     size_t tag_len = 16; 
     if (combined_data.length() < tag_len) {
@@ -561,9 +570,135 @@ std::string LearningModule::aes_gcm_decrypt(const std::string& ciphertext_base64
     return result;
 }
 
-// Ed25519 ile ilgili fonksiyonlar şimdilik yorum satırı
-// std::string LearningModule::ed25519_sign(const std::string& message, const std::string& private_key) const { /* ... */ }
-// bool LearningModule::ed25519_verify(const std::string& message, const std::string& signature_base64, const std::string& public_key) const { /* ... */ }
+// Ed25519 İmzalama ve Doğrulama Implementasyonları (EVP_PKEY API'leri ile)
+std::string LearningModule::ed25519_sign(const std::string& message, const std::string& private_key_pem) const {
+    EVP_PKEY *pkey = nullptr;
+    BIO *mem_bio = BIO_new_mem_buf(private_key_pem.data(), static_cast<int>(private_key_pem.size()));
+    
+    // PEM formatındaki özel anahtarı yükle
+    pkey = PEM_read_bio_PrivateKey(mem_bio, nullptr, nullptr, nullptr);
+    if (!pkey) {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: Özel anahtar PEM'den yüklenemedi.");
+        BIO_free_all(mem_bio);
+        return "";
+    }
+    BIO_free_all(mem_bio);
+
+    if (EVP_PKEY_id(pkey) != EVP_PKEY_ED25519) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: Yüklenen anahtar Ed25519 değil.");
+        EVP_PKEY_free(pkey);
+        return "";
+    }
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_free(pkey);
+        return "";
+    }
+
+    unsigned char *signature = nullptr;
+    size_t sig_len = 0;
+
+    if (1 != EVP_DigestSignInit(mdctx, nullptr, nullptr, nullptr, pkey)) {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmzalama başlatılamadı.");
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return "";
+    }
+
+    // İmza uzunluğunu öğrenmek için ilk çağrı
+    if (1 != EVP_DigestSign(mdctx, nullptr, &sig_len, (const unsigned char*)message.data(), message.size())) {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmza uzunluğu alınamadı.");
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return "";
+    }
+
+    signature = (unsigned char*)OPENSSL_malloc(sig_len);
+    if (!signature) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmza için bellek ayrılamadı.");
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return "";
+    }
+
+    // Gerçek imzalama işlemi
+    if (1 != EVP_DigestSign(mdctx, signature, &sig_len, (const unsigned char*)message.data(), message.size())) {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmzalama başarısız.");
+        OPENSSL_free(signature);
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return "";
+    }
+
+    std::string sig_str((char*)signature, sig_len);
+    OPENSSL_free(signature);
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(pkey);
+
+    return this->base64_encode_string(sig_str);
+}
+
+bool LearningModule::ed25519_verify(const std::string& message, const std::string& signature_base64, const std::string& public_key_pem) const {
+    EVP_PKEY *pkey = nullptr;
+    BIO *mem_bio = BIO_new_mem_buf(public_key_pem.data(), static_cast<int>(public_key_pem.size()));
+
+    // PEM formatındaki açık anahtarı yükle
+    pkey = PEM_read_bio_PUBKEY(mem_bio, nullptr, nullptr, nullptr);
+    if (!pkey) {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Açık anahtar PEM'den yüklenemedi.");
+        BIO_free_all(mem_bio);
+        return false;
+    }
+    BIO_free_all(mem_bio);
+
+    if (EVP_PKEY_id(pkey) != EVP_PKEY_ED25519) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Yüklenen anahtar Ed25519 değil.");
+        EVP_PKEY_free(pkey);
+        return false;
+    }
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_free(pkey);
+        return false;
+    }
+
+    std::string signature_bytes = this->base64_decode_string(signature_base64);
+
+    if (1 != EVP_DigestVerifyInit(mdctx, nullptr, nullptr, nullptr, pkey)) {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Doğrulama başlatılamadı.");
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return false;
+    }
+
+    int ret = EVP_DigestVerify(mdctx, (const unsigned char*)signature_bytes.data(), signature_bytes.size(),
+                               (const unsigned char*)message.data(), message.size());
+
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(pkey);
+
+    if (ret == 1) {
+        return true; // İmza başarılı
+    } else if (ret == 0) {
+        LOG_DEFAULT(LogLevel::WARNING, "Ed25519 verify: İmza doğrulaması başarısız (geçersiz imza).");
+        return false; // İmza geçersiz
+    } else {
+        ERR_print_errors_fp(stderr);
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Doğrulama sırasında hata oluştu.");
+        return false; // Hata
+    }
+}
+
 
 std::string LearningModule::generate_random_bytes(size_t length) const {
     unsigned char* buffer = (unsigned char*)OPENSSL_malloc(length);
@@ -581,6 +716,75 @@ std::string LearningModule::generate_random_bytes(size_t length) const {
     return random_data;
 }
 
+// Anahtar Yönetimi Implementasyonları (EVP_PKEY API'leri ile anahtar çifti oluşturma ve PEM dönüşümü)
+// Bu metotlar, gerçek anahtar çiftlerini (PEM formatında) döndürmek üzere güncellendi.
+// Güvenli anahtar depolaması ve yönetimi için bu kısım gelecekte daha fazla geliştirilmelidir.
+
+// Düzeltme: s_my_ed25519_pkey ve s_my_ed25519_pubkey tanımları dosyanın başına taşındı.
+
+// Anahtar çifti oluşturma ve PEM formatında döndürme yardımcı fonksiyonu
+static std::string pkey_to_pem(EVP_PKEY* pkey, bool is_private) {
+    if (!pkey) return "";
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (!bio) return "";
+
+    if (is_private) {
+        if (1 != PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
+            ERR_print_errors_fp(stderr);
+            BIO_free_all(bio);
+            return "";
+        }
+    } else {
+        if (1 != PEM_write_bio_PUBKEY(bio, pkey)) {
+            ERR_print_errors_fp(stderr);
+            BIO_free_all(bio);
+            return "";
+        }
+    }
+
+    BUF_MEM *bptr;
+    // Düzeltme: BIO_get_mem_data artık doğrudan pointer döndürüyor, bptr->data'yı güncelle.
+    // BIO_get_mem_data'dan sonra bptr->length de doğru olmalıdır.
+    char *data;
+    long len = BIO_get_mem_data(bio, &data);
+    std::string pem_str(data, static_cast<size_t>(len));
+    
+    BIO_free_all(bio);
+    return pem_str;
+}
+
+// Yeni anahtar çifti oluşturma
+static void generate_new_ed25519_keypair() {
+    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, nullptr);
+    if (!pctx) {
+        ERR_print_errors_fp(stderr);
+        return;
+    }
+
+    if (1 != EVP_PKEY_keygen_init(pctx)) {
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_CTX_free(pctx);
+        return;
+    }
+    if (1 != EVP_PKEY_keygen(pctx, &s_my_ed25519_pkey)) { 
+        ERR_print_errors_fp(stderr);
+        EVP_PKEY_CTX_free(pctx);
+        return;
+    }
+
+    EVP_PKEY_CTX_free(pctx);
+
+    if (s_my_ed25519_pkey) {
+        // Düzeltme: Açık anahtarı özel anahtardan türetmek için EVP_PKEY_dup kullanıldı.
+        s_my_ed25519_pubkey = EVP_PKEY_dup(s_my_ed25519_pkey); 
+        if (!s_my_ed25519_pubkey) {
+            ERR_print_errors_fp(stderr);
+        }
+    }
+    LOG_DEFAULT(LogLevel::INFO, "Ed25519 anahtar çifti oluşturuldu.");
+}
+
+
 std::string LearningModule::get_aes_key_for_peer(const std::string& peer_id) const {
     if (peer_id == "Self") {
         return std::string(32, 'S'); 
@@ -589,26 +793,26 @@ std::string LearningModule::get_aes_key_for_peer(const std::string& peer_id) con
 }
 
 std::string LearningModule::get_public_key_for_peer(const std::string& peer_id) const {
-    // Normalde Ed25519 public key uzunluğu 32'dir
-    if (peer_id == "Self") {
-        return std::string(DUMMY_ED25519_PUBKEY_LEN, 'P'); 
-    } else if (peer_id == "Test_Peer_A") {
-        return std::string(DUMMY_ED25519_PUBKEY_LEN, 'A'); 
-    } else if (peer_id == "Unauthorized_Peer") {
-        return std::string(DUMMY_ED25519_PUBKEY_LEN, 'U'); 
-    } else if (peer_id == "Suspicious_Source") {
-        return std::string(DUMMY_ED25519_PUBKEY_LEN, 'X'); 
-    } else if (peer_id == "Dirty_Source") {
-        return std::string(DUMMY_ED25519_PUBKEY_LEN, 'D'); 
+    if (!s_my_ed25519_pubkey) {
+        generate_new_ed25519_keypair(); 
     }
-    return std::string(DUMMY_ED25519_PUBKEY_LEN, 'K'); 
+
+    if (peer_id == "Self") {
+        return pkey_to_pem(s_my_ed25519_pubkey, false);
+    } 
+    return std::string("-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE(DUMMY_PUBKEY_FOR_PEER)\n-----END PUBLIC KEY-----\n");
 }
 
 std::string LearningModule::get_my_private_key() const {
-    // Normalde Ed25519 private key uzunluğu 64'tür (32 byte seed + 32 byte public key)
-    return std::string(DUMMY_ED25519_PRIVKEY_LEN, 'M'); 
+    if (!s_my_ed25519_pkey) {
+        generate_new_ed25519_keypair();
+    }
+    return pkey_to_pem(s_my_ed25519_pkey, true);
 }
 
 std::string LearningModule::get_my_public_key() const {
-    return std::string(DUMMY_ED25519_PUBKEY_LEN, 'P'); 
+    if (!s_my_ed25519_pubkey) {
+        generate_new_ed25519_keypair();
+    }
+    return pkey_to_pem(s_my_ed25519_pubkey, false);
 }
