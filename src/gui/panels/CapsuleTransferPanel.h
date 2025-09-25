@@ -5,48 +5,38 @@
 #include <QTextEdit>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QVBoxLayout> // Main layout
-#include <QHBoxLayout> // For buttons and input fields
-#include "../../learning/LearningModule.h" // IngestReport için
+#include <QVBoxLayout>
+#include <QLabel>
 
-// Forward declarations for Qt classes
-// (QTextEdit, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout zaten yukarıda dahil edildi)
+#include "../../learning/LearningModule.h" // CerebrumLux::IngestReport için
+
+namespace CerebrumLux { // Namespace içine alındı
 
 class CapsuleTransferPanel : public QWidget
 {
     Q_OBJECT
 public:
-    explicit CapsuleTransferPanel(QWidget* parent = nullptr);
+    explicit CapsuleTransferPanel(QWidget *parent = nullptr);
+    void displayIngestReport(const IngestReport& report); // CerebrumLux::IngestReport olarak düzeltildi
 
 signals:
-    // Kapsül yutma isteği için sinyal
     void ingestCapsuleRequest(const QString& capsuleJson, const QString& signature, const QString& senderId);
-    // Web'den kapsül çekme isteği için sinyal
     void fetchWebCapsuleRequest(const QString& query);
 
-public slots:
-    // ingest_envelope'dan gelen raporu göstermek için slot
-    void displayIngestReport(const IngestReport& report);
-
 private slots:
-    // UI etkileşimleri için slotlar
-    void onIngestCapsuleClicked();
-    void onFetchFromWebClicked();
+    void onIngestButtonClicked();
+    void onFetchWebButtonClicked();
 
 private:
-    // UI Elemanları
-    QTextEdit* jsonInputTextEdit;
-    QLineEdit* signatureLineEdit;
-    QLineEdit* senderIdLineEdit;
-    QPushButton* ingestCapsuleButton;
-    QLineEdit* webQueryLineEdit;
-    QPushButton* fetchFromWebButton;
-    QTextEdit* ingestReportTextEdit;
-
-    // Layout'lar
-    QVBoxLayout* mainLayout;
-    QHBoxLayout* ingestControlsLayout;
-    QHBoxLayout* fetchWebControlsLayout;
+    QTextEdit *capsuleJsonInput;
+    QLineEdit *signatureInput;
+    QLineEdit *senderIdInput;
+    QPushButton *ingestButton;
+    QLineEdit *webQueryInput;
+    QPushButton *fetchWebButton;
+    QTextEdit *reportOutput;
 };
+
+} // namespace CerebrumLux
 
 #endif // CAPSULETRANSFERPANEL_H

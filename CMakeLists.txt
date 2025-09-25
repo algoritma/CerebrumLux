@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # -----------------------------
 # Qt6 entegrasyonu
 # -----------------------------
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Charts Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Charts)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -21,33 +21,25 @@ set(PROJECT_TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 # -----------------------------
 find_package(OpenSSL REQUIRED)
 
-set(VCPKG_OPENSSL_INCLUDE_DIR "C:/vcpkg/installed/x64-mingw-static/include")
-set(VCPKG_OPENSSL_LIBRARIES
-    "C:/vcpkg/installed/x64-mingw-static/lib/libssl.a"
-    "C:/vcpkg/installed/x64-mingw-static/lib/libcrypto.a"
-)
-
 # -----------------------------
 # Core library
 # -----------------------------
-file(GLOB_RECURSE CEREBRUML_LUX_CORE_SOURCES
+file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/brain/*.cpp"
     "${PROJECT_SRC_DIR}/communication/*.cpp"
     "${PROJECT_SRC_DIR}/core/*.cpp"
     "${PROJECT_SRC_DIR}/data_models/*.cpp"
-    "${PROJECT_SRC_DIR}/gui/*.cpp"
     "${PROJECT_SRC_DIR}/gui/panels/*.cpp"
+    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp"   # ✅ Burada eksikti, eklendi
     "${PROJECT_SRC_DIR}/meta/*.cpp"
     "${PROJECT_SRC_DIR}/planning_execution/*.cpp"
     "${PROJECT_SRC_DIR}/sensors/*.cpp"
     "${PROJECT_SRC_DIR}/user/*.cpp"
     "${PROJECT_SRC_DIR}/learning/*.cpp"
-    "${PROJECT_SRC_DIR}/gui/panels/CapsuleTransferPanel.cpp"
-    "${PROJECT_SRC_DIR}/learning/UnicodeSanitizer.cpp"
-    "${PROJECT_SRC_DIR}/learning/StegoDetector.cpp"
+    "${PROJECT_SRC_DIR}/crypto/*.cpp"
 )
 
-add_library(CerebrumLuxCore STATIC ${CEREBRUML_LUX_CORE_SOURCES})
+add_library(CerebrumLuxCore STATIC ${CEREBRUMLUX_CORE_SOURCES})
 
 target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}"
@@ -63,13 +55,18 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}/tools"
     "${PROJECT_SRC_DIR}/user"
     "${PROJECT_SRC_DIR}/learning"
+    "${PROJECT_SRC_DIR}/crypto"
     "${PROJECT_SRC_DIR}/external"
-    "${VCPKG_OPENSSL_INCLUDE_DIR}"
 )
 
 target_link_libraries(CerebrumLuxCore PUBLIC
-    Qt6::Core Qt6::Widgets Qt6::Gui Qt6::Charts Qt6::Network
-    OpenSSL::SSL OpenSSL::Crypto
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Network
+    Qt6::Charts
+    OpenSSL::SSL
+    OpenSSL::Crypto
 )
 
 # -----------------------------
@@ -77,13 +74,25 @@ target_link_libraries(CerebrumLuxCore PUBLIC
 # -----------------------------
 add_executable(CerebrumLuxGUI WIN32
     "${PROJECT_SRC_DIR}/main.cpp"
+    "${PROJECT_SRC_DIR}/gui/MainWindow.cpp"
+    "${PROJECT_SRC_DIR}/gui/MainWindow.ui"
 )
+
+target_link_options(CerebrumLuxGUI PRIVATE -Wl,--subsystem,windows)
 
 target_link_libraries(CerebrumLuxGUI PRIVATE
     CerebrumLuxCore
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Charts Qt6::Network
-    OpenSSL::SSL OpenSSL::Crypto
-    ws2_32 crypt32 gdi32 version mingw32
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Network
+    Qt6::Charts
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    ws2_32
+    crypt32
+    gdi32
+    version
 )
 
 target_include_directories(CerebrumLuxGUI PRIVATE
@@ -100,8 +109,8 @@ target_include_directories(CerebrumLuxGUI PRIVATE
     "${PROJECT_SRC_DIR}/tools"
     "${PROJECT_SRC_DIR}/user"
     "${PROJECT_SRC_DIR}/learning"
+    "${PROJECT_SRC_DIR}/crypto"
     "${PROJECT_SRC_DIR}/external"
-    "${VCPKG_OPENSSL_INCLUDE_DIR}"
 )
 
 # -----------------------------
@@ -110,17 +119,25 @@ target_include_directories(CerebrumLuxGUI PRIVATE
 file(GLOB TEST_MAIN_SOURCE "${PROJECT_TESTS_DIR}/test_response_engine.cpp")
 add_executable(test_response_engine ${TEST_MAIN_SOURCE})
 
-target_link_libraries(test_response_engine PRIVATE 
-    CerebrumLuxCore 
-    OpenSSL::SSL OpenSSL::Crypto
-    ws2_32 crypt32 gdi32 version mingw32 stdc++ gcc winpthread
+target_link_libraries(test_response_engine PRIVATE
+    CerebrumLuxCore
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    ws2_32
+    crypt32
+    gdi32
+    version
+    mingw32
+    stdc++
+    gcc
+    winpthread
     -Wl,--enable-stdcall-fixup
 )
 
 target_include_directories(test_response_engine PRIVATE
     "${PROJECT_SRC_DIR}"
     "${PROJECT_TESTS_DIR}"
-    "${VCPKG_OPENSSL_INCLUDE_DIR}"
+    "${PROJECT_SRC_DIR}/crypto"
 )
 
 # -----------------------------
@@ -128,17 +145,25 @@ target_include_directories(test_response_engine PRIVATE
 # -----------------------------
 add_executable(nlp_online_trainer "${PROJECT_SRC_DIR}/tools/nlp_online_trainer.cpp")
 
-target_link_libraries(nlp_online_trainer PRIVATE 
-    CerebrumLuxCore 
-    OpenSSL::SSL OpenSSL::Crypto
-    ws2_32 crypt32 gdi32 version mingw32 stdc++ gcc winpthread
+target_link_libraries(nlp_online_trainer PRIVATE
+    CerebrumLuxCore
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    ws2_32
+    crypt32
+    gdi32
+    version
+    mingw32
+    stdc++
+    gcc
+    winpthread
     -Wl,--enable-stdcall-fixup
 )
 
 target_include_directories(nlp_online_trainer PRIVATE
     "${PROJECT_SRC_DIR}"
-    "${PROJECT_SRC_DIR}/communication" 
+    "${PROJECT_SRC_DIR}/communication"
     "${PROJECT_SRC_DIR}/core"
     "${PROJECT_SRC_DIR}/external"
-    "${VCPKG_OPENSSL_INCLUDE_DIR}"
+    "${PROJECT_SRC_DIR}/crypto"
 )

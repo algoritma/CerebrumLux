@@ -1,32 +1,34 @@
-#ifndef LOGPANEL_H
-#define LOGPANEL_H
+#ifndef LOG_PANEL_H
+#define LOG_PANEL_H
 
 #include <QWidget>
-#include <QTextEdit> 
-#include <QStringList> 
-#include <QLineEdit> // YENİ: Arama kutusu için
-#include <QVBoxLayout> // YENİ: Düzenleme için (eğer henüz yoksa)
+#include <QTextEdit>
+#include <QPushButton>
+#include <QDateTime> // QDateTime için
 
-#include "../engine_integration.h" 
+#include "../../core/enums.h" // CerebrumLux::LogLevel için
+
+namespace CerebrumLux { // LogPanel sınıfı bu namespace içine alınacak
 
 class LogPanel : public QWidget
 {
-    Q_OBJECT 
+    Q_OBJECT
 public:
-    explicit LogPanel(QWidget* parent = nullptr);
-    void updatePanel(const QStringList& logs); // Mevcut metot
+    explicit LogPanel(QWidget *parent = nullptr);
+    void appendLog(CerebrumLux::LogLevel level, const QString& message);
+    QTextEdit* getLogTextEdit() const; // LogTextEdit'e erişim için getter
 
-    QTextEdit* getLogTextEdit() const { return logArea; }
+signals:
+    void logCleared(); // Log temizleme sinyali
 
 private slots:
-    // YENİ: Arama kutusundaki metin değiştiğinde çağrılacak slot
-    void onSearchTextChanged(const QString& searchText);
+    void onClearLogClicked();
 
 private:
-    QTextEdit* logArea; 
-    QLineEdit* searchLineEdit; // YENİ: Arama kutusu
-    QStringList allLogsBuffer; // YENİ: Tüm logları tutacak dahili buffer (filtreleme için)
-    QVBoxLayout* mainLayout; // YENİ: LogPanel'in ana düzeni
+    QTextEdit *logTextEdit;
+    QPushButton *clearLogButton;
 };
 
-#endif // LOGPANEL_H
+} // namespace CerebrumLux
+
+#endif // LOG_PANEL_H

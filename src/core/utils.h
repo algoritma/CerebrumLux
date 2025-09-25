@@ -1,74 +1,77 @@
-#ifndef CEREBRUM_LUX_UTILS_H
-#define CEREBRUM_LUX_UTILS_H
+#ifndef UTILS_H
+#define UTILS_H
 
-#include <string>    // std::string için
-#include <sstream>   // std::stringstream için
-#include <chrono>    // std::chrono için (timestamp)
-#include <iomanip>   // std::put_time için
-#include <ctime>     // std::localtime için
-#include <cerrno>    // errno için
-#include <algorithm> // std::tolower (char versiyonu için)
-#include <locale>    // std::locale için (sadece convert_wstring_to_string'de kullanılacak)
-#include <codecvt>   // std::wstring_convert için (convert_wstring_to_string'de kullanılacak)
-#include <random>    // YENİ: std::random_device, std::mt19937 için
+#include <string>
+#include <vector>
+#include <random>
+#include <chrono> // Time-related helper functions
+#include <queue> // MessageQueue için
+#include <mutex> // MessageQueue için
+#include "enums.h" // Tüm CerebrumLux enum'ları için
 
-// OpenSSL Başlıkları (utils.h içinde dahil ediliyor)
-#include <openssl/crypto.h>
-#include <openssl/buffer.h>
+namespace CerebrumLux { // Tüm yardımcı fonksiyonlar ve sınıflar bu namespace içine alınacak
 
-#ifdef _WIN32
-#include <stringapiset.h> // WideCharToMultiByte için (Windows'a özel)
-#endif
-
-// Mesaj sistemi için (eğer MessageData ve MessageType burada tanımlıysa)
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-#include "enums.h" // MessageData, MessageType, UserIntent, AbstractState, AIGoal, LogLevel için
-
-// YENİ: Base64 encode/decode prototipleri (global fonksiyonlar olarak)
-std::string base64_encode(const std::string& in);
-std::string base64_decode(const std::string& in);
-
-// YENİ: SafeRNG sınıfı tanımı (tekil rastgele sayı üreteci)
+// === Rastgele Sayı Üreteci (Singleton) ===
 class SafeRNG {
 public:
-    static SafeRNG& get_instance(); // Tekil (singleton) erişim
-    std::mt19937& get_generator(); // Rastgele sayı üreteci nesnesini döndürür
-
-    SafeRNG(const SafeRNG&) = delete; // Kopyalamayı engelle
-    void operator=(const SafeRNG&) = delete; // Atamayı engelle
+    static SafeRNG& get_instance();
+    std::mt19937& get_generator();
 
 private:
-    SafeRNG(); // Kurucunun implementasyonu utils.cpp'ye taşındı
-    std::mt19937 generator; // Rastgele sayı üreteci
+    SafeRNG();
+    std::mt19937 generator;
+    std::random_device rd;
 };
 
-// Yardımcı fonksiyon bildirimleri (tümü std::string tabanlı)
+// === Zamanla İlgili Yardımcı Fonksiyonlar ===
 std::string get_current_timestamp_str();
+long long get_current_timestamp_us(); // Mikrosaniye cinsinden zaman
+
+// === Hash Fonksiyonları ===
+unsigned short hash_string(const std::string& s); // YENİ EKLENDİ
+
+// === Enum Dönüşüm Fonksiyonları ===
 std::string intent_to_string(UserIntent intent);
 std::string abstract_state_to_string(AbstractState state);
 std::string goal_to_string(AIGoal goal);
-std::string action_to_string(AIAction action); // YENİ: action_to_string bildirimi eklendi
-unsigned short hash_string(const std::string& s); // Artık std::string alıyor
+std::string action_to_string(AIAction action);
+std::string sensor_type_to_string(SensorType type);
+std::string key_type_to_string(KeyType type);
+std::string key_event_type_to_string(KeyEventType type);
+std::string mouse_button_state_to_string(MouseButtonState state);
 
-// std::wstring'den std::string'e dönüştürme yardımcı fonksiyonu
-// Bu, sadece harici std::wstring'ler geldiğinde veya bir std::wstring literalini dönüştürmek gerektiğinde kullanılacaktır.
-// Mümkün olduğunca doğrudan std::string kullanmayı hedefliyoruz.
-std::string convert_wstring_to_string(const std::wstring& wstr);
+// === Mesaj Veri Yapısı ve Kuyruğu ===
+// Mesaj türleri
+enum class MessageType : unsigned char {
+    Log,
+    Command,
+    Feedback,
+    SensorData,
+    Insight,
+    CapsuleTransfer
+};
 
-// MessageQueue sınıfının bildirimi (eğer utils.h içinde ise)
+struct MessageData {
+    MessageType type;
+    std::string content;
+    long long timestamp; // Mesajın oluşturulma zamanı
+    std::string source_module; // Mesajı gönderen modül
+
+    // NLOHMANN_DEFINE_TYPE_INTRUSIVE(MessageData, type, content, timestamp, source_module) // Eğer JSON serileştirme isteniyorsa
+};
+
 class MessageQueue {
 public:
     void enqueue(MessageData data);
     MessageData dequeue();
-    bool isEmpty();
+    bool isEmpty(); // 'const' kaldırıldı
+    size_t size();  // 'const' kaldırıldı
 
 private:
     std::queue<MessageData> queue;
     std::mutex mutex;
-    std::condition_variable cv;
 };
 
+} // namespace CerebrumLux
 
-#endif // CEREBRUM_LUX_UTILS_H
+#endif // UTILS_H

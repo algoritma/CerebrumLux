@@ -1,19 +1,16 @@
-#include "meta_evolution_engine.h" // Kendi başlık dosyasını dahil et
-#include "../core/logger.h"        // LOG makrosu için
-#include "../core/utils.h"         // intent_to_string, goal_to_string vb. için
-#include "../data_models/dynamic_sequence.h" // DynamicSequence'in tam tanımı için
-#include <iostream>                // Debug çıktıları için
-#include <numeric>                 // std::accumulate için (gerekliyse)
-#include <algorithm>               // std::min/max için (gerekliyse)
-#include <chrono>                  // YENİ: AIInsight timestamp için
-#include <string>                  // YENİ: std::to_string için
-#include <iomanip>                 // std::setprecision için
-#include "../communication/ai_insights_engine.h" // YENİ: AIInsight tanımı için (Gerekli olduğu için tekrar ekleniyor)
-#include "../core/enums.h"         // AIAction için
+#include "meta_evolution_engine.h"
+#include "../core/logger.h"
+#include "../sensors/atomic_signal.h"
+#include "../data_models/sequence_manager.h"
+#include "../brain/autoencoder.h" // CryptofigAutoencoder tanımı için
+#include "../brain/intent_analyzer.h"
+#include "../brain/intent_learner.h"
+#include "../communication/ai_insights_engine.h" // AIInsight tanımı için
+#include "../planning_execution/goal_manager.h"
+#include "../core/enums.h" // SensorType, UserIntent, AbstractState için
 
-// === MetaEvolutionEngine Implementasyonlari ===
+namespace CerebrumLux {
 
-// Kurucu - LearningModule referansı alacak şekilde güncellendi
 MetaEvolutionEngine::MetaEvolutionEngine(
     IntentAnalyzer& analyzer_ref,
     IntentLearner& learner_ref,
@@ -22,203 +19,62 @@ MetaEvolutionEngine::MetaEvolutionEngine(
     CryptofigProcessor& cryptofig_processor_ref,
     AIInsightsEngine& insights_engine_ref,
     LearningModule& learning_module_ref
-) : 
-    analyzer(analyzer_ref),
-    learner(learner_ref),
-    predictor(predictor_ref),
-    goal_manager(goal_manager_ref),
-    cryptofig_processor(cryptofig_processor_ref),
-    insights_engine(insights_engine_ref),
-    learning_module(learning_module_ref), // YENİ: LearningModule referansı başlatıldı
-    current_meta_goal(AIGoal::SelfImprovement), // Varsayılan meta-hedef: Kendi Kendini Geliştirmek
-    current_adherence_score(1.0f) // Başlangıçta tam bağlılık varsayımı
+)
+    : analyzer(analyzer_ref),
+      learner(learner_ref),
+      predictor(predictor_ref),
+      goal_manager(goal_manager_ref),
+      cryptofig_processor(cryptofig_processor_ref),
+      insights_engine(insights_engine_ref),
+      learning_module(learning_module_ref)
 {
-    // Temel prensipleri başlat
-    core_principles.push_back({"Ultra-Verimlilik", 0.9f});
-    core_principles.push_back({"Adaptiflik", 0.8f});
-    core_principles.push_back({"Esneklik", 0.7f});
-    core_principles.push_back({"Modülerlik", 0.7f});
-    core_principles.push_back({"Veri Ekonomisi", 0.6f});
-    // Diğer prensipler eklenebilir
-
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Başlatıldı. Varsayılan meta-hedef: " << goal_to_string(current_meta_goal) << ". LearningModule entegrasyonu için ön hazırlık yapıldı.");
+    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Initialized.");
 }
 
-// Ana kendini geliştirme döngüsünü orkestre eder
 void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& current_sequence) {
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Meta-evrim döngüsü çalıştırılıyor...");
-    
-    // 1. Prensip Bağlılığını Değerlendir
-    evaluate_principles_adherence(current_sequence);
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Mevcut prensip bağlılık skoru: " << current_adherence_score);
+    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Running meta-evolution cycle...");
 
-    // 2. Meta-Hedef İlerlemesini Kontrol Et
-    if (check_meta_goal_progress()) {
-        LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Meta-hedef (" << goal_to_string(current_meta_goal) << ") üzerinde ilerleme kaydedildi.");
-        // İlerlemeye göre yeni bir meta-hedef belirlenebilir veya mevcut hedef pekiştirilebilir.
-    } else {
-        LOG_DEFAULT(LogLevel::WARNING, "MetaEvolutionEngine: Meta-hedef (" << goal_to_string(current_meta_goal) << ") üzerinde istenen ilerleme kaydedilemedi.");
-        // Gelişimi hızlandırmak için ek stratejiler devreye alınabilir.
-    }
+    int rounds = 5;
+    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Starting self-simulation for " << rounds << " rounds.");
 
-    // YENİ: LearningModule'e güncel içgörüleri işle
-    // Bu metodun AIInsightsEngine'da generate_insights() olarak tanımlı olduğunu varsayıyoruz.
-    learning_module.process_ai_insights(insights_engine.generate_insights(current_sequence));
+    CerebrumLux::SequenceManager temp_sim_sequence_manager;
 
-    // ACİL ÖNCELİK: GraphPanel'e Anlamlı Veri Besleme için AIInsight oluştur
-    static size_t simulatedStepCount = 0;
-    simulatedStepCount++;
+    for (int i = 0; i < rounds; ++i) {
+        LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Self-simulation round " << (i + 1));
 
-    // AIInsight struct'ı sadece observation, suggested_action, urgency alıyor.
-    // GraphPanel için değeri urgency alanına yerleştiriyoruz.
-    // "StepSimulation" topic'i LearningModule tarafından Capsule oluşturulurken ayarlanmalı.
-    AIInsight insight(
-        "Simulating meta-evolution step: " + std::to_string(simulatedStepCount), // observation
-        AIAction::None, // Düzeltildi: AIAction::Monitor yerine AIAction::None kullanıldı
-        static_cast<float>(simulatedStepCount % 100) // urgency (GraphPanel için kullanılacak değer)
-    );
+        CerebrumLux::AtomicSignal simulated_signal;
+        simulated_signal.type = CerebrumLux::SensorType::Keyboard;
+        simulated_signal.value = "sim_input_" + std::to_string(i);
+        temp_sim_sequence_manager.add_signal(simulated_signal, this->cryptofig_processor); // Eksik argüman eklendi
 
-    // LearningModule'ün process_ai_insights metodu, AIInsight'ı alıp Capsule'a dönüştürürken,
-    // muhtemelen topic'i ve diğer meta verileri de belirleyecek.
-    // Bu durumda, AIInsight'ın urgency'sini Capsule'ın confidence/value alanına aktaracağını varsayıyoruz.
-    learning_module.process_ai_insights({insight});
+        CerebrumLux::DynamicSequence simulated_sequence;
+        simulated_sequence.id = "sim_seq_" + std::to_string(i);
+        simulated_sequence.timestamp_utc = std::chrono::system_clock::now();
+        simulated_sequence.event_count = i + 1;
 
-    // Log mesajındaki 'value' yerine 'urgency' kullanıldı
-    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Generated 'StepSimulation' insight with urgency " << insight.urgency);
-
-    // 3. Mimariyi Kriptofig Olarak Analiz Et ve Ayarlamalar Öner
-    analyze_architecture_cryptofig(current_sequence);
-    propose_architectural_adjustment(current_sequence);
-
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Meta-evrim döngüsü tamamlandı.");
-}
-
-// AI'ın temel prensiplere ne kadar bağlı olduğunu değerlendirir
-void MetaEvolutionEngine::evaluate_principles_adherence(const DynamicSequence& current_sequence) {
-    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Prensip bağlılığı değerlendiriliyor...");
-    float total_weighted_score = 0.0f;
-    float total_importance = 0.0f;
-
-    // Örnek: "Ultra-Verimlilik" prensibi için değerlendirme
-    // Düşük CPU/RAM kullanımı, hızlı yanıt süreleri gibi metriklerle ilişkilendirilebilir.
-    // Şimdilik basitleştirilmiş bir simülasyon yapalım.
-    float efficiency_score = 0.0f;
-    if (current_sequence.avg_keystroke_interval > 0.0f && current_sequence.avg_keystroke_interval < 200000.0f) { // Yüksek yazım hızı
-        efficiency_score = 0.7f;
-    } else {
-        efficiency_score = 0.3f;
-    }
-    // Network aktivitesi de verimliliği etkileyebilir
-    if (current_sequence.network_activity_level > 10000.0f && current_sequence.current_network_active) { 
-        efficiency_score *= 0.8f; // Yüksek ağ aktivitesi verimliliği düşürebilir
-    }
-
-    // "Adaptiflik" prensibi için değerlendirme
-    // AI'ın farklı niyetlere veya durumlara ne kadar hızlı adapte olduğuyla ilişkilendirilebilir.
-    // Şimdilik, tahmin motorunun geçmiş performansı gibi bir metrik kullanabiliriz.
-    float adaptability_score = 0.0f;
-    // PredictionEngine'dan veya IntentLearner'dan adaptasyon metrikleri alınabilir.
-    // Örneğin: learner.get_learning_rate() ne kadar hızlı değişiyor?
-    adaptability_score = learner.get_learning_rate() * 5.0f; // Öğrenme oranı yüksekse daha adaptif varsayalım
-    adaptability_score = std::min(1.0f, adaptability_score);
-
-    // Her prensip için skorları topla
-    for (const auto& principle : core_principles) {
-        float principle_current_score = 0.0f;
-        if (principle.name == "Ultra-Verimlilik") {
-            principle_current_score = efficiency_score;
-        } else if (principle.name == "Adaptiflik") {
-            principle_current_score = adaptability_score;
-        } else {
-            principle_current_score = 0.5f; // Diğerleri için varsayılan orta skor
+        simulated_sequence.statistical_features_vector.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+        for (size_t j = 0; j < simulated_sequence.statistical_features_vector.size(); ++j) {
+            simulated_sequence.statistical_features_vector[j] = static_cast<float>(rand()) / RAND_MAX;
         }
-        total_weighted_score += principle_current_score * principle.importance_score;
-        total_importance += principle.importance_score;
-    }
 
-    if (total_importance > 0.0f) {
-        current_adherence_score = total_weighted_score / total_importance;
-    } else {
-        current_adherence_score = 0.0f;
-    }
-    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Prensip bağlılığı değerlendirmesi tamamlandı. Skor: " << current_adherence_score);
-}
+        this->cryptofig_processor.process_sequence(simulated_sequence, 0.01f);
 
-// Genel prensip bağlılık skorunu döndürür
-float MetaEvolutionEngine::calculate_overall_adherence() const {
-    return current_adherence_score;
-}
+        CerebrumLux::UserIntent predicted_intent = this->analyzer.analyze_intent(simulated_sequence);
+        CerebrumLux::AbstractState inferred_state = this->learner.infer_abstract_state(temp_sim_sequence_manager.get_signal_buffer_copy());
 
-// Potansiyel bir değişikliğin etkisini simüle eder
-float MetaEvolutionEngine::simulate_change_impact(const std::string& proposed_change_description) const {
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Değişiklik etkisi simüle ediliyor: '" << proposed_change_description << "'");
-    // Bu, karmaşık bir simülasyon motoru gerektiren kritik bir metod olacaktır.
-    // Örneğin, belirli bir kod değişikliğinin performans, enerji tüketimi veya adaptasyon üzerindeki etkisini tahmin edebiliriz.
-    // Şimdilik, basit bir rastgele veya kural tabanlı tahmin döndürelim.
-    if (proposed_change_description.find("performans") != std::string::npos) {
-        return 0.8f; // Performans artışı öngörülebilir
-    } else if (proposed_change_description.find("bug") != std::string::npos) {
-        return 0.3f; // Hata düzeltme, ancak başka sorunlar yaratabilir
-    }
-    return 0.5f; // Nötr etki
-}
-
-// AI için meta-hedef belirler
-void MetaEvolutionEngine::set_meta_goal(AIGoal new_meta_goal) {
-    current_meta_goal = new_meta_goal;
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Yeni meta-hedef ayarlandı: " << goal_to_string(current_meta_goal));
-}
-
-// Meta-hedefe ulaşma ilerlemesini kontrol eder
-bool MetaEvolutionEngine::check_meta_goal_progress() const {
-    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Meta-hedef ilerlemesi kontrol ediliyor: " << goal_to_string(current_meta_goal));
-    // Bu metod, current_meta_goal'a ulaşmak için AI'ın ne kadar ilerleme kaydettiğini değerlendirir.
-    // Örneğin, AIGoal::SelfImprovement ise, IntentLearner'ın veya PredictionEngine'ın hata oranları düşüyor mu?
-    if (current_meta_goal == AIGoal::SelfImprovement) {
-        // Basit bir örnek: Öğrenme oranı artıyorsa veya hata oranı düşüyorsa ilerleme var diyelim.
-        // Daha gerçekçi bir senaryo için AIInsightsEngine'dan metrikler alınabilir.
-        if (learner.get_learning_rate() > 0.05f) { // Yüksek öğrenme oranı bir ilerleme işareti olabilir
-            return true;
+        std::vector<CerebrumLux::AIInsight> insights = this->insights_engine.generate_insights(simulated_sequence);
+        if (!insights.empty()) {
+            this->learning_module.process_ai_insights(insights);
         }
+
+        this->goal_manager.evaluate_and_set_goal(simulated_sequence);
+
+        LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Simulated intent: " << static_cast<int>(predicted_intent)
+                                      << ", Inferred state: " << static_cast<int>(inferred_state));
     }
-    // Diğer meta-hedefler için benzer mantıklar eklenebilir.
-    return false; // Şimdilik varsayılan: ilerleme yok
+    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Self-simulation finished.");
+
+    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Meta-evolution cycle completed.");
 }
 
-// Mevcut AI mimarisini kriptofig olarak analiz eder
-void MetaEvolutionEngine::analyze_architecture_cryptofig(const DynamicSequence& current_sequence) {
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: AI mimarisi kriptofig olarak analiz ediliyor...");
-    // Bu metod, AI'ın kendi iç yapısını ve davranışını "kriptofigler" aracılığıyla temsil etmesini sağlar.
-    // Örneğin, farklı modüllerin (analyzer, learner, predictor) birbirleriyle olan etkileşimleri,
-    // ağırlık dağılımları veya öğrenme eğrileri kriptofig olarak kodlanabilir.
-    // Şimdilik, sadece mevcut sequence'in latent kriptofig'ini kullanarak bir loglama yapalım.
-    if (!current_sequence.latent_cryptofig_vector.empty()) {
-        std::stringstream ss;
-        ss << std::fixed << std::setprecision(2);
-        ss << "MetaEvolutionEngine: Mevcut mimari kriptofig (latent): [";
-        for (size_t i = 0; i < current_sequence.latent_cryptofig_vector.size(); ++i) {
-            ss << current_sequence.latent_cryptofig_vector[i];
-            if (i + 1 < current_sequence.latent_cryptofig_vector.size()) ss << ", ";
-        }
-        ss << "]";
-        LOG_DEFAULT(LogLevel::DEBUG, ss.str());
-    } else {
-        LOG_DEFAULT(LogLevel::WARNING, "MetaEvolutionEngine: Mimari analizi için latent kriptofig bulunamadı.");
-    }
-}
-
-// Kriptofig analizine göre mimari ayarlamalar önerir
-void MetaEvolutionEngine::propose_architectural_adjustment(const DynamicSequence& current_sequence) {
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Mimari ayarlamalar öneriliyor...");
-    // Bu metod, analyze_architecture_cryptofig'den elde edilen içgörülere dayanarak
-    // AI'ın kendi mimarisinde yapısal veya algoritmik değişiklikler önerebilir.
-    // Örneğin, belirli bir niyet şablonunun ağırlıklarının ayarlanması,
-    // bir öğrenme hızının değiştirilmesi veya hatta yeni bir modülün entegrasyonu gibi.
-    
-    // Basit bir örnek: Eğer prensip bağlılık skoru düşükse, adaptasyon prensibini vurgula
-    if (current_adherence_score < 0.6f) {
-        LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Düşük prensip bağlılık skoru nedeniyle 'Adaptiflik' prensibine odaklanma öneriliyor.");
-        LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Öneri: IntentLearner'ın öğrenme hızını artırın veya PredictionEngine'ın adaptasyon parametrelerini gözden geçirin.");
-    }
-    // TODO: Daha karmaşık öneri mekanizmaları eklenecek
-}
+} // namespace CerebrumLux

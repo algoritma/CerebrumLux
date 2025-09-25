@@ -1,22 +1,40 @@
-#ifndef CEREBRUM_LUX_INTENT_TEMPLATE_H
-#define CEREBRUM_LUX_INTENT_TEMPLATE_H
+#ifndef INTENT_TEMPLATE_H
+#define INTENT_TEMPLATE_H
 
-#include <vector>  // For std::vector
-#include <map>     // For std::map
-#include <string>  // For std::string
-#include "../core/enums.h" // UserIntent, AIAction enum'ları için
-#include "../core/utils.h" // For convert_wstring_to_string (if needed elsewhere)
+#include <string>
+#include <vector>
+#include <map>
+#include "../core/enums.h" // UserIntent, AIAction için
 
-// İleri bildirim: Eğer IntentTemplate içinde CryptofigAutoencoder'dan bir boyut kullanılıyorsa, burada bildirilebilir.
-// Ancak IntentTemplate'ın kendisi CryptofigAutoencoder'ı doğrudan kullanmadığı için şimdilik gerek yok.
+namespace CerebrumLux { // IntentTemplate struct'ı bu namespace içine alınacak
 
-// *** IntentTemplate: Dinamik niyet sablonlarini temsil eden yapi ***
-struct IntentTemplate { 
+// Her bir UserIntent için bir şablon
+struct IntentTemplate {
     UserIntent id;
-    std::vector<float> weights; // Bu ağırlıklar artık latent_cryptofig_vector boyutunda olacak
-    std::map<AIAction, float> action_success_scores; 
-    
-    IntentTemplate(UserIntent intent_id, const std::vector<float>& initial_weights); 
+    std::vector<float> weights; // Bu niyetin özellik uzayındaki temsilcisi
+    float confidence_threshold; // Bu niyeti tanımak için gereken minimum güven
+    std::map<AIAction, float> action_success_scores; // Bu niyetle ilişkili eylemlerin başarı puanları
+
+        // YENİ EKLENDİ: Varsayılan kurucu
+    IntentTemplate() 
+        : id(UserIntent::Undefined), 
+          confidence_threshold(0.7f) {
+        // weights ve action_success_scores default olarak boş/sıfır başlatılır.
+        // Gerekirse burada varsayılan değerler atanabilir.
+    }
+
+    IntentTemplate(UserIntent intent_id, const std::vector<float>& initial_weights)
+        : id(intent_id), weights(initial_weights), confidence_threshold(0.7f) {
+        // Varsayılan eylem başarı puanlarını başlat
+        action_success_scores[AIAction::None] = 0.5f;
+        action_success_scores[AIAction::RespondToUser] = 0.7f;
+        // ... diğer aksiyonlar için başlangıç puanları
+    }
+
+    // JSON serileştirme desteği için (eğer kullanılıyorsa)
+    // NLOHMANN_DEFINE_TYPE_INTRUSIVE(IntentTemplate, id, weights, confidence_threshold, action_success_scores)
 };
 
-#endif // CEREBRUM_LUX_INTENT_TEMPLATE_H
+} // namespace CerebrumLux
+
+#endif // INTENT_TEMPLATE_H

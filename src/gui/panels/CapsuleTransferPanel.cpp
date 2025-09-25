@@ -1,105 +1,107 @@
 #include "CapsuleTransferPanel.h"
-#include <QDateTime> // IngestReport timestamp için
-#include "../../core/logger.h" // Loglama için
-#include <QDebug> // Debug çıktıları için
+#include "../../core/logger.h"
+#include <QDateTime> // QDateTime için
+#include <QFrame>    // QFrame için eklendi
 
-CapsuleTransferPanel::CapsuleTransferPanel(QWidget* parent) : QWidget(parent)
+namespace CerebrumLux {
+
+CapsuleTransferPanel::CapsuleTransferPanel(QWidget *parent)
+    : QWidget(parent)
 {
-    mainLayout = new QVBoxLayout(this);
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    // 1. JSON Giriş Alanı
-    jsonInputTextEdit = new QTextEdit(this);
-    jsonInputTextEdit->setPlaceholderText("Enter Capsule JSON here...");
-    mainLayout->addWidget(jsonInputTextEdit);
+    // Kapsül Yutma Alanı
+    mainLayout->addWidget(new QLabel("Kapsül JSON İçeriği:"));
+    capsuleJsonInput = new QTextEdit(this);
+    capsuleJsonInput->setPlaceholderText("Buraya kapsül JSON verisini yapıştırın...");
+    mainLayout->addWidget(capsuleJsonInput);
 
-    // 2. İmza ve Gönderen ID Alanları ile Ingest Butonu
-    ingestControlsLayout = new QHBoxLayout();
-    signatureLineEdit = new QLineEdit(this);
-    signatureLineEdit->setPlaceholderText("Enter Signature (Base64)");
-    senderIdLineEdit = new QLineEdit(this);
-    senderIdLineEdit->setPlaceholderText("Enter Sender ID");
-    ingestCapsuleButton = new QPushButton("Ingest Capsule", this);
+    mainLayout->addWidget(new QLabel("İmza (Base64):"));
+    signatureInput = new QLineEdit(this);
+    signatureInput->setPlaceholderText("Buraya kapsül imzasını yapıştırın...");
+    mainLayout->addWidget(signatureInput);
 
-    ingestControlsLayout->addWidget(signatureLineEdit);
-    ingestControlsLayout->addWidget(senderIdLineEdit);
-    ingestControlsLayout->addWidget(ingestCapsuleButton);
-    mainLayout->addLayout(ingestControlsLayout);
+    mainLayout->addWidget(new QLabel("Gönderen ID'si:"));
+    senderIdInput = new QLineEdit(this);
+    senderIdInput->setPlaceholderText("Kapsülün geldiği eşin ID'si (örneğin 'Test_Peer_A')...");
+    mainLayout->addWidget(senderIdInput);
 
-    // 3. Web Sorgu Alanı ve Fetch Butonu
-    fetchWebControlsLayout = new QHBoxLayout();
-    webQueryLineEdit = new QLineEdit(this);
-    webQueryLineEdit->setPlaceholderText("Enter Web Search Query for Capsule");
-    fetchFromWebButton = new QPushButton("Fetch from Web", this);
+    ingestButton = new QPushButton("Kapsülü Yut", this);
+    mainLayout->addWidget(ingestButton);
+    connect(ingestButton, &QPushButton::clicked, this, &CapsuleTransferPanel::onIngestButtonClicked);
 
-    fetchWebControlsLayout->addWidget(webQueryLineEdit);
-    fetchWebControlsLayout->addWidget(fetchFromWebButton);
-    mainLayout->addLayout(fetchWebControlsLayout);
+    // Ayırıcı ekle
+    QFrame* separator1 = new QFrame(this); // Yeni ayırıcı
+    separator1->setFrameShape(QFrame::HLine);
+    separator1->setFrameShadow(QFrame::Sunken);
+    mainLayout->addWidget(separator1);
 
-    // 4. Ingest Raporu Gösterim Alanı
-    ingestReportTextEdit = new QTextEdit(this);
-    ingestReportTextEdit->setReadOnly(true);
-    ingestReportTextEdit->setPlaceholderText("Ingest Report will appear here...");
-    mainLayout->addWidget(ingestReportTextEdit);
+    // Web'den Kapsül Çekme Alanı
+    mainLayout->addWidget(new QLabel("Web'den Kapsül Çek:"));
+    webQueryInput = new QLineEdit(this);
+    webQueryInput->setPlaceholderText("Web'de aranacak anahtar kelimeler...");
+    mainLayout->addWidget(webQueryInput);
+
+    fetchWebButton = new QPushButton("Web'den Çek", this);
+    mainLayout->addWidget(fetchWebButton);
+    connect(fetchWebButton, &QPushButton::clicked, this, &CapsuleTransferPanel::onFetchWebButtonClicked);
+
+    // Ayırıcı ekle
+    QFrame* separator2 = new QFrame(this); // Yeni ayırıcı
+    separator2->setFrameShape(QFrame::HLine);
+    separator2->setFrameShadow(QFrame::Sunken);
+    mainLayout->addWidget(separator2);
+
+    // Rapor Çıktısı Alanı
+    mainLayout->addWidget(new QLabel("İşlem Raporu:"));
+    reportOutput = new QTextEdit(this);
+    reportOutput->setReadOnly(true);
+    mainLayout->addWidget(reportOutput);
 
     setLayout(mainLayout);
 
-    // Sinyal-Slot Bağlantıları
-    connect(ingestCapsuleButton, &QPushButton::clicked, this, &CapsuleTransferPanel::onIngestCapsuleClicked);
-    connect(fetchFromWebButton, &QPushButton::clicked, this, &CapsuleTransferPanel::onFetchFromWebClicked);
-
-    // IngestReport'u Qt'nin meta sistemine kaydet (DataTypes.h'de zaten yapıldı)
-    // qRegisterMetaType<IngestReport>("IngestReport"); // Zaten DataTypes.h içinde Q_DECLARE_METATYPE ile bildirilmişti
-    // Ancak sinyal/slot bağlantılarında argüman olarak kullanılabilmesi için qRegisterMetaType<IngestReport>() çağrısı da uygun bir yerde yapılmalı.
-    // main.cpp'de QApplication kurulduktan sonra veya MainWindow constructor'ında olabilir.
-    
     LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Initialized.");
 }
 
-void CapsuleTransferPanel::onIngestCapsuleClicked()
-{
-    QString capsuleJson = jsonInputTextEdit->toPlainText();
-    QString signature = signatureLineEdit->text();
-    QString senderId = senderIdLineEdit->text();
-
-    if (capsuleJson.isEmpty()) {
-        ingestReportTextEdit->append(QDateTime::currentDateTime().toString("HH:mm:ss") + " [ERROR] Capsule JSON cannot be empty.");
-        LOG_DEFAULT(LogLevel::WARNING, "CapsuleTransferPanel: Ingest Capsule JSON input is empty.");
-        return;
-    }
-
-    LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Emitting ingestCapsuleRequest for sender: " << senderId.toStdString());
-    emit ingestCapsuleRequest(capsuleJson, signature, senderId);
-}
-
-void CapsuleTransferPanel::onFetchFromWebClicked()
-{
-    QString query = webQueryLineEdit->text();
-
-    if (query.isEmpty()) {
-        ingestReportTextEdit->append(QDateTime::currentDateTime().toString("HH:mm:ss") + " [ERROR] Web query cannot be empty.");
-        LOG_DEFAULT(LogLevel::WARNING, "CapsuleTransferPanel: Fetch from Web query input is empty.");
-        return;
-    }
-
-    LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Emitting fetchWebCapsuleRequest for query: " << query.toStdString());
-    emit fetchWebCapsuleRequest(query);
-}
-
-void CapsuleTransferPanel::displayIngestReport(const IngestReport& report)
-{
+void CapsuleTransferPanel::displayIngestReport(const IngestReport& report) {
     QString timestamp = QDateTime::fromSecsSinceEpoch(std::chrono::system_clock::to_time_t(report.timestamp)).toString("HH:mm:ss");
-    QString reportMsg = QString("%1 [REPORT] Source: %2, ID: %3, Result: %4, Message: %5")
+    QString reportMsg = QString("[%1] İşlem Sonucu: %2\nMesaj: %3\nKaynak Eş ID: %4\nOrijinal Kapsül ID: %5")
                             .arg(timestamp)
-                            .arg(QString::fromStdString(report.source_peer_id))
-                            .arg(QString::fromStdString(report.original_capsule.id))
                             .arg(static_cast<int>(report.result))
-                            .arg(QString::fromStdString(report.message));
-    
-    // Processed capsule content'ini de ekleyelim
+                            .arg(QString::fromStdString(report.message))
+                            .arg(QString::fromStdString(report.source_peer_id))
+                            .arg(QString::fromStdString(report.original_capsule.id));
+
     if (report.result == IngestResult::Success || report.result == IngestResult::SanitizationNeeded) {
-        reportMsg += "\n    Processed Content: " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)200, report.processed_capsule.content.length()))) + "...";
+        reportMsg += "\n    İşlenmiş İçerik (ilk 200 karakter): " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)200, report.processed_capsule.content.length()))) + "...";
     }
 
-    ingestReportTextEdit->append(reportMsg);
-    LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Displaying ingest report for capsule ID: " << report.original_capsule.id);
+    reportOutput->append(reportMsg);
+    LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Displaying ingest report for Capsule ID: " << report.original_capsule.id);
 }
+
+void CapsuleTransferPanel::onIngestButtonClicked() {
+    QString capsuleJson = capsuleJsonInput->toPlainText();
+    QString signature = signatureInput->text();
+    QString senderId = senderIdInput->text();
+
+    if (capsuleJson.isEmpty() || signature.isEmpty() || senderId.isEmpty()) {
+        reportOutput->append("<font color='red'>Hata: Tüm alanlar doldurulmalıdır (Kapsül JSON, İmza, Gönderen ID'si).</font>");
+        return;
+    }
+
+    emit ingestCapsuleRequest(capsuleJson, signature, senderId);
+    LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Ingest button clicked.");
+}
+
+void CapsuleTransferPanel::onFetchWebButtonClicked() {
+    QString query = webQueryInput->text();
+    if (query.isEmpty()) {
+        reportOutput->append("<font color='red'>Hata: Web sorgusu boş olamaz.</font>");
+        return;
+    }
+    emit fetchWebCapsuleRequest(query);
+    LOG_DEFAULT(LogLevel::INFO, "CapsuleTransferPanel: Fetch Web button clicked for query: " << query.toStdString());
+}
+
+} // namespace CerebrumLux

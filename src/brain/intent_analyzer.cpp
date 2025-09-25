@@ -1,261 +1,125 @@
-#include "intent_analyzer.h" // Kendi başlık dosyasını dahil et
-#include "../core/logger.h"      // LOG makrosu için
-#include "../core/utils.h"       // intent_to_string, abstract_state_to_string için
-#include "../data_models/dynamic_sequence.h" // DynamicSequence için
-#include "autoencoder.h"         // CryptofigAutoencoder::LATENT_DIM için
-#include "intent_template.h"     // IntentTemplate için
-// #include "../communication/natural_language_processor.h" // KALDIRILDI: NaturalLanguageProcessor için eklendi
-#include <algorithm>             // std::min/max için
-#include <cmath>                 // std::log10 için
-#include <fstream>               // Dosya G/Ç için
-#include <iostream>              // std::cerr, std::cout için
-#include <sstream>               // std::stringstream için
+#include "intent_analyzer.h"
+#include "../core/logger.h"
+#include "../core/utils.h" // intent_to_string, action_to_string için
+#include <numeric> // std::accumulate için
+#include <cmath>   // std::sqrt için
+#include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
 
+namespace CerebrumLux {
 
-// === IntentTemplate Implementasyonu (burada kalmalı, IntentAnalyzer'ın bir parçası) ===
-IntentTemplate::IntentTemplate(UserIntent intent_id, const std::vector<float>& initial_weights)
-    : id(intent_id), weights(initial_weights) {
-        action_success_scores[AIAction::DisableSpellCheck] = 0.0f;
-        action_success_scores[AIAction::EnableCustomDictionary] = 0.0f;
-        action_success_scores[AIAction::ShowUndoHistory] = 0.0f;
-        action_success_scores[AIAction::CompareVersions] = 0.0f;
-        action_success_scores[AIAction::DimScreen] = 0.0f;
-        action_success_scores[AIAction::MuteNotifications] = 0.0f;
-        action_success_scores[AIAction::LaunchApplication] = 0.0f;
-        action_success_scores[AIAction::OpenFile] = 0.0f;
-        action_success_scores[AIAction::SetReminder] = 0.0f;
-        action_success_scores[AIAction::SimulateOSAction] = 0.0f;
-        action_success_scores[AIAction::SuggestBreak] = 0.0f;
-        action_success_scores[AIAction::OptimizeForGaming] = 0.0f;
-        action_success_scores[AIAction::EnableFocusMode] = 0.0f;
-        action_success_scores[AIAction::AdjustAudioVolume] = 0.0f;
-        action_success_scores[AIAction::OpenDocumentation] = 0.0f;
-        action_success_scores[AIAction::SuggestSelfImprovement] = 0.0f; 
-    }
+IntentAnalyzer::IntentAnalyzer()
+    : last_confidence(0.0f)
+{
+    // Varsayılan niyet şablonlarını başlat
+    add_intent_template(IntentTemplate(UserIntent::Undefined, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.1f)));
+    add_intent_template(IntentTemplate(UserIntent::Question, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.2f)));
+    add_intent_template(IntentTemplate(UserIntent::Command, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.3f)));
+    add_intent_template(IntentTemplate(UserIntent::Statement, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.4f)));
+    add_intent_template(IntentTemplate(UserIntent::FastTyping, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.5f)));
 
-// === IntentAnalyzer Implementasyonlari ===
-
-// Kurucu parametresiz hale getirildi
-IntentAnalyzer::IntentAnalyzer() 
-    : confidence_threshold_for_known_intent(0.1f) { 
-    
-    // Ağırlıklar artık LATENT_DIM boyutunda olmalı
-    intent_templates.emplace_back(UserIntent::FastTyping,    std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::Editing,       std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::IdleThinking,  std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    // YENİ NİYETLER
-    intent_templates.emplace_back(UserIntent::Programming,    std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::Gaming,         std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::MediaConsumption,std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::CreativeWork,   std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::Research,       std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::Communication,  std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    
-    // Yeni eklenen niyetler için başlangıç ağırlıkları
-    intent_templates.emplace_back(UserIntent::VideoEditing,   std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::Browsing,       std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::Reading,        std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-    intent_templates.emplace_back(UserIntent::GeneralInquiry, std::vector<float>(CryptofigAutoencoder::LATENT_DIM, 0.0f)); 
-
-    // Varsayılan ağırlıkları daha anlamlı başlatma (latent uzaydaki temsili anlamlara göre)
-    // Örn: latent_activity, latent_complexity, latent_engagement gibi
-    intent_templates[0].weights = {-0.2f, -0.5f,  0.8f}; // FastTyping (Düşük karmaşıklık, yüksek etkileşim)
-    intent_templates[1].weights = { 0.5f,  0.8f,  0.6f}; // Editing (Orta aktiflik, yüksek karmaşıklık)
-    intent_templates[2].weights = { 0.8f, -0.7f, -0.5f}; // IdleThinking (Yüksek pasiflik, düşük etkileşim)
-
-    // Yeni niyetler için daha iyi başlangıç ağırlıkları (örnek)
-    intent_templates[3].weights = { 0.6f,  0.9f,  0.7f}; // Programming (odaklanma, karmaşıklık, etkileşim)
-    intent_templates[4].weights = { 0.9f,  0.7f,  0.9f}; // Gaming (yüksek aktiflik, orta karmaşıklık, yüksek etkileşim)
-    intent_templates[5].weights = {-0.8f, -0.6f,  0.2f}; // MediaConsumption (düşük aktiflik, düşük karmaşıklık, az etkileşim)
-    intent_templates[6].weights = { 0.7f,  0.8f,  0.7f}; // CreativeWork (orta aktiflik, yüksek karmaşıklık, etkileşim)
-    intent_templates[7].weights = { 0.4f,  0.6f,  0.8f}; // Research (orta aktiflik, yüksek dış etkileşim)
-    intent_templates[8].weights = { 0.7f,  0.3f,  0.9f}; // Communication (yüksek aktiflik, düşük karmaşıklık, yüksek etkileşim)
-    
-    // Yeni eklenen niyetler için daha iyi başlangıç ağırlıkları (devamı)
-    intent_templates[9].weights  = { 0.7f, 0.9f, 0.6f}; // VideoEditing (yüksek karmaşıklık, görsel odaklanma)
-    intent_templates[10].weights = { 0.5f, 0.4f, 0.7f}; // Browsing (orta aktiflik, düşük karmaşıklık, yüksek dış etkileşim)
-    intent_templates[11].weights = { 0.3f, 0.5f, 0.4f}; // Reading (düşük aktiflik, orta karmaşıklık, içsel odaklanma)
-    intent_templates[12].weights = { 0.4f, 0.6f, 0.5f}; // GeneralInquiry (orta aktiflik, orta karmaşıklık, bilgi arayışı)
+    LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Initialized with default intent templates.");
 }
 
 UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
-    // latent_cryptofig_vector kontrol ediliyor
-    if (sequence.latent_cryptofig_vector.empty() || sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) { 
-        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer::analyze_intent: Latent cryptofig vektörü boş veya boyut uyuşmazlığı. Unknown döndürülüyor.\n");
-        return UserIntent::Unknown;
+    if (sequence.statistical_features_vector.empty()) {
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer::analyze_intent: Bos statistical_features_vector, niyet analiz edilemiyor.");
+        last_confidence = 0.0f;
+        return UserIntent::Undefined;
     }
 
-    UserIntent best_intent_from_crypto = UserIntent::Unknown;
-    float max_score_from_crypto = -std::numeric_limits<float>::max(); // Başlangıçta çok düşük bir değer
+    UserIntent best_intent = UserIntent::Undefined;
+    float highest_confidence = 0.0f;
 
-    for (auto& tmpl : intent_templates) {
-        float score = 0.0f;
-        // Ağırlık boyutu latent kriptofig boyutu ile eşleşmeli
-        if (tmpl.weights.size() != CryptofigAutoencoder::LATENT_DIM) { 
-            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "IntentAnalyzer::analyze_intent: Niyet şablonu ağırlık boyutu latent kriptofig boyutuyla uyuşmuyor! Niyet: " << intent_to_string(tmpl.id) << ".\n");
-            continue; // Bu şablonu atla
-        }
-        for (size_t i = 0; i < tmpl.weights.size(); ++i) {
-            score += tmpl.weights[i] * sequence.latent_cryptofig_vector[i]; // latent_cryptofig_vector kullanılıyor
-        }
-        
-        // --- Bağlamsal Skor Ayarlama Mantığı (önceden vardı) ---
-        if (tmpl.id == UserIntent::Editing) {
-            if (sequence.avg_keystroke_interval > 1500.0f && sequence.control_key_frequency > 0.2f) {
-                score *= 1.5f; 
-                LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Editing skoru yavaş yazım ve kontrol tuşları nedeniyle artırıldı.\n");
-            }
-        }
+    for (const auto& pair : intent_templates) {
+        UserIntent current_intent_id = pair.first;
+        const IntentTemplate& current_template = pair.second;
 
-        if (tmpl.id == UserIntent::IdleThinking) {
-            if (sequence.avg_keystroke_interval > 5000.0f) { 
-                score *= 2.0f; 
-                LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: IdleThinking skoru çok yavaş yazım nedeniyle artırıldı.\n");
-            }
-        }
+        float confidence = get_confidence_for_intent(current_intent_id, sequence.statistical_features_vector);
 
-        if (tmpl.id == UserIntent::Gaming) {
-            if (sequence.avg_keystroke_interval > 2000.0f) {
-                score *= 0.2f; 
-                LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Gaming skoru yavaş yazım nedeniyle düşürüldü.\n");
-            }
-        }
-        // --- Bağlamsal Skor Ayarlama Mantığı Sonu ---
-
-        if (score > max_score_from_crypto) {
-            max_score_from_crypto = score;
-            best_intent_from_crypto = tmpl.id;
+        if (confidence > highest_confidence) {
+            highest_confidence = confidence;
+            best_intent = current_intent_id;
         }
     }
-    
-    if (max_score_from_crypto < this->confidence_threshold_for_known_intent) { 
-        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: En yüksek kriptofig skoru (" << max_score_from_crypto << ") eşik değerinin (" << this->confidence_threshold_for_known_intent << ") altında. Niyet 'Unknown' olarak ayarlandı.\n");
-        best_intent_from_crypto = UserIntent::Unknown;
-    }
 
-    return best_intent_from_crypto;
+    last_confidence = highest_confidence;
+    LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer::analyze_intent: Analiz edilen niyet: " << CerebrumLux::intent_to_string(best_intent) << ", Güven: " << highest_confidence); // GÜNCELLENDİ
+    return best_intent;
 }
 
-void IntentAnalyzer::set_confidence_threshold(float threshold) {
-    confidence_threshold_for_known_intent = std::min(0.8f, std::max(0.01f, threshold));
+float IntentAnalyzer::get_confidence_for_intent(UserIntent intent_id, const std::vector<float>& features) const {
+    auto it = intent_templates.find(intent_id);
+    if (it == intent_templates.end()) {
+        return 0.0f;
+    }
+
+    const IntentTemplate& t = it->second;
+    return calculate_cosine_similarity(features, t.weights);
+}
+
+void IntentAnalyzer::add_intent_template(const IntentTemplate& new_template) {
+    auto [it, inserted] = intent_templates.insert({new_template.id, new_template});
+    if (inserted) {
+        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Yeni niyet şablonu eklendi: " << CerebrumLux::intent_to_string(new_template.id)); // GÜNCELLENDİ
+    } else {
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu zaten mevcut: " << CerebrumLux::intent_to_string(new_template.id) << ". Güncelleniyor."); // GÜNCELLENDİ
+        it->second = new_template;
+    }
 }
 
 void IntentAnalyzer::update_template_weights(UserIntent intent_id, const std::vector<float>& new_weights) {
-    for (auto& tmpl : intent_templates) {
-        if (tmpl.id == intent_id) {
-            tmpl.weights = new_weights;
-            return;
-        }
+    auto it = intent_templates.find(intent_id);
+    if (it != intent_templates.end()) {
+        it->second.weights = new_weights;
+        LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Niyet şablonu ağırlıkları güncellendi: " << CerebrumLux::intent_to_string(intent_id)); // GÜNCELLENDİ
+    } else {
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu bulunamadı: " << CerebrumLux::intent_to_string(intent_id) << ", ağırlıklar güncellenemedi."); // GÜNCELLENDİ
     }
 }
 
 void IntentAnalyzer::update_action_success_score(UserIntent intent_id, AIAction action, float score_change) {
-    for (auto& tmpl : intent_templates) {
-        if (tmpl.id == intent_id) {
-            tmpl.action_success_scores[action] += score_change;
-            tmpl.action_success_scores[action] = std::min(10.0f, std::max(-10.0f, tmpl.action_success_scores[action]));
-            return;
-        }
+    auto it = intent_templates.find(intent_id);
+    if (it != intent_templates.end()) {
+        it->second.action_success_scores[action] += score_change;
+        it->second.action_success_scores[action] = std::max(0.0f, std::min(1.0f, it->second.action_success_scores[action]));
+        LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Niyet '" << CerebrumLux::intent_to_string(intent_id) << "' için eylem '" << CerebrumLux::action_to_string(action) << "' başarı puanı güncellendi."); // GÜNCELLENDİ
+    } else {
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu bulunamadı: " << CerebrumLux::intent_to_string(intent_id) << ", eylem başarı puanı güncellenemedi."); // GÜNCELLENDİ
     }
 }
 
 std::vector<float> IntentAnalyzer::get_intent_weights(UserIntent intent_id) const {
-    for (const auto& tmpl : intent_templates) {
-        if (tmpl.id == intent_id) {
-            return tmpl.weights;
-        }
+    auto it = intent_templates.find(intent_id);
+    if (it != intent_templates.end()) {
+        return it->second.weights;
     }
-    return {}; 
+    return {}; // Boş vektör döndür
 }
 
 void IntentAnalyzer::report_learning_performance(UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg) {
-    LOG_DEFAULT(LogLevel::INFO, "[Meta-AI] Niyet: " << intent_to_string(intent_id) << 
-               ", Ortuk Performans (Ort): " << implicit_feedback_avg << 
-               ", Acik Performans (Ort): " << explicit_feedback_avg << "\n"); 
-
+    LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Niyet '" << CerebrumLux::intent_to_string(intent_id) << "' için öğrenme performansı raporu - İmplicit: " << implicit_feedback_avg << ", Explicit: " << explicit_feedback_avg); // GÜNCELLENDİ
 }
 
-void IntentAnalyzer::save_memory(const std::string& filename) const {
-    FILE* fp = fopen(filename.c_str(), "w"); 
-    if (!fp) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yazilamadi: " << filename << " (errno: " << errno << ")\n");
-        return;
+float IntentAnalyzer::calculate_cosine_similarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const {
+    if (vec1.empty() || vec1.size() != vec2.size()) {
+        return 0.0f;
     }
 
-    fprintf(fp, "%zu\n", intent_templates.size());
-    for (const auto& tmpl : intent_templates) {
-        fprintf(fp, "%d %zu ", static_cast<int>(tmpl.id), tmpl.weights.size());
-        for (float w : tmpl.weights) {
-            fprintf(fp, "%.8f ", w); 
-        }
-        fprintf(fp, "%zu ", tmpl.action_success_scores.size());
-        for (const auto& pair : tmpl.action_success_scores) {
-            fprintf(fp, "%d %.8f ", static_cast<int>(pair.first), pair.second); 
-        }
-        fprintf(fp, "\n");
+    float dot_product = 0.0f;
+    float norm1 = 0.0f;
+    float norm2 = 0.0f;
+
+    for (size_t i = 0; i < vec1.size(); ++i) {
+        dot_product += vec1[i] * vec2[i];
+        norm1 += vec1[i] * vec1[i];
+        norm2 += vec2[i] * vec2[i];
     }
-    fclose(fp);
-    LOG_DEFAULT(LogLevel::INFO, "AI hafizasi kaydedildi: " << filename << "\n");
+
+    if (norm1 == 0.0f || norm2 == 0.0f) {
+        return 0.0f;
+    }
+
+    return dot_product / (std::sqrt(norm1) * std::sqrt(norm2));
 }
 
-void IntentAnalyzer::load_memory(const std::string& filename) {
-    FILE* fp = fopen(filename.c_str(), "r"); 
-    if (!fp) {
-        LOG_DEFAULT(LogLevel::WARNING, "Uyari: AI hafiza dosyasi bulunamadi, varsayilan sablonlar kullaniliyor: " << filename << " (errno: " << errno << ")\n");
-        return;
-    }
-
-    intent_templates.clear(); 
-    size_t num_templates;
-    if (fscanf(fp, "%zu\n", &num_templates) != 1) { 
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi formati bozuk veya bos (templates): " << filename << "\n");
-        fclose(fp);
-        return;
-    }
-
-    for (size_t i = 0; i < num_templates; ++i) {
-        int intent_id_int;
-        if (fscanf(fp, "%d", &intent_id_int) != 1) {
-             LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken intent_id okunamadi. Satir: " << i << "\n");
-             break;
-        }
-        UserIntent intent_id = static_cast<UserIntent>(intent_id_int);
-
-        size_t num_weights;
-        if (fscanf(fp, "%zu", &num_weights) != 1) {
-            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken num_weights okunamadi. Satir: " << i << "\n");
-            break;
-        }
-        std::vector<float> weights(num_weights);
-        for (size_t j = 0; j < num_weights; ++j) {
-            if (fscanf(fp, "%f", &weights[j]) != 1) {
-                LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken weight okunamadi. Satir: " << i << ", Eleman: " << j << "\n");
-                break;
-            }
-        }
-
-        size_t num_action_scores;
-        if (fscanf(fp, "%zu", &num_action_scores) != 1) {
-            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken num_action_scores okunamadi. Satir: " << i << "\n");
-            break;
-        }
-        std::map<AIAction, float> action_scores;
-        for (size_t j = 0; j < num_action_scores; ++j) {
-            int action_id_int;
-            float score;
-            if (fscanf(fp, "%d %f", &action_id_int, &score) != 2) {
-                LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Hata: AI hafiza dosyasi yuklenirken action_score okunamadi. Satir: " << i << ", Eleman: " << j << "\n");
-                break;
-            }
-            action_scores[static_cast<AIAction>(action_id_int)] = score;
-        }
-        
-        char newline_char;
-        fscanf(fp, "%c", &newline_char); 
-
-        intent_templates.emplace_back(intent_id, weights);
-        intent_templates.back().action_success_scores = action_scores;
-    }
-    fclose(fp);
-    LOG_DEFAULT(LogLevel::INFO, "AI hafizasi yuklendi: " << filename << "\n");
-}
+} // namespace CerebrumLux

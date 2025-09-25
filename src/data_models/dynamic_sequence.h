@@ -1,56 +1,42 @@
-#ifndef CEREBRUM_LUX_DYNAMIC_SEQUENCE_H
-#define CEREBRUM_LUX_DYNAMIC_SEQUENCE_H
+#ifndef DYNAMIC_SEQUENCE_H
+#define DYNAMIC_SEQUENCE_H
 
+#include <string>
 #include <vector>
-#include <deque>
 #include <chrono>
-#include "../core/enums.h"    // Enumlar için
-#include "../core/utils.h"    // For convert_wstring_to_string (if needed elsewhere)
-#include "../brain/autoencoder.h" // CryptofigAutoencoder için ileri bildirim (sadece bildirim için)
-#include "../sensors/atomic_signal.h" // AtomicSignal'ın tam tanımı için EKLEDİM
+#include <deque> // sinyal buffer için
+#include "../sensors/atomic_signal.h" // CerebrumLux::AtomicSignal için
+#include "../brain/autoencoder.h" // CerebrumLux::CryptofigAutoencoder için
 
-// İleri bildirim (CryptofigAutoencoder için hala geçerli, çünkü sadece referansı kullanılıyor)
-class CryptofigAutoencoder; 
+namespace CerebrumLux { // DynamicSequence struct'ı bu namespace içine alınacak
 
-// *** DynamicSequence: Niyet paternlerinin tasiyicisi (Bizim 'Fuzyon Kriptofig' prototipimiz) ***
-struct DynamicSequence { 
-    std::vector<float> statistical_features_vector; // İstatistiksel özellikleri tutacak vektör (önceki cryptofig_vector)
-    std::vector<float> latent_cryptofig_vector;     // Autoencoder tarafından üretilen düşük boyutlu, latent kriptofig
-    long long last_updated_us;             
-    
-    float avg_keystroke_interval;          
-    float keystroke_variability;           
-    float alphanumeric_ratio;              
-    float control_key_frequency;           
-    
-    float mouse_movement_intensity; 
-    float mouse_click_frequency;    
-    float avg_brightness;           
-    float battery_status_change;    
-    float network_activity_level;   
+// Dinamik Sekans yapısı
+struct DynamicSequence {
+    std::string id;
+    std::chrono::system_clock::time_point timestamp_utc;
+    std::string current_application_context; // Örneğin, "VSCode", "Chrome", "Game"
+    unsigned int current_cpu_usage; // %0-100
+    unsigned int current_ram_usage; // MB
+    unsigned int event_count; // Bu sekans içinde işlenen olay sayısı
 
-    unsigned short current_app_hash;       
+    std::vector<float> statistical_features_vector; // Zaman serisi istatistikleri (mean, variance, freq analysis, etc.)
+    std::vector<float> latent_cryptofig_vector;     // Autoencoder'dan gelen sıkıştırılmış, semantik vektör
 
-    unsigned char current_battery_percentage; 
-    bool current_battery_charging;
-    bool current_display_on;      // Ekran açık/kapalı durumu
-    bool current_network_active;  // Ağ bağlantısı aktif/pasif durumu
+    // Ağ Aktivitesi Durumu (AtomicSignal'dan alınan en son değerler)
+    bool current_network_active; // Ağ bağlantısı var mı?
+    int network_activity_level; // (0-100)
+    std::string network_protocol; // HTTP, HTTPS, TCP, UDP vb.
 
-    // YENİ EKLENECEK SENSÖR VERİLERİ İÇİN ALANLAR
-    float avg_audio_level_db;
-    float avg_audio_frequency_hz;
-    float speech_detection_ratio; // buffer içinde konuşma algılanan sinyal oranı
-    unsigned short dominant_audio_environment_hash; // buffer içindeki en baskın ses ortamı
+    DynamicSequence()
+        : id(""), timestamp_utc(std::chrono::system_clock::now()),
+          current_application_context(""), current_cpu_usage(0), current_ram_usage(0),
+          event_count(0), current_network_active(false), network_activity_level(0), network_protocol("")
+    {}
 
-    float avg_ambient_light_lux;
-    float face_detection_ratio; // buffer içinde yüz algılanan sinyal oranı
-    float motion_detection_ratio; // buffer içinde hareket algılanan sinyal oranı
-    unsigned short avg_object_count;
-    unsigned short dominant_emotion_hash; // buffer içindeki en baskın duygu
-
-    DynamicSequence();
-    // update_from_signals metodu CryptofigAutoencoder referansı alacak şekilde güncellendi
-    void update_from_signals(const std::deque<AtomicSignal>& signal_buffer, long long current_time_us, unsigned short app_hash, CryptofigAutoencoder& autoencoder);
+    // Signal buffer'dan bu seansı güncelle
+    void update_from_signals(const std::deque<CerebrumLux::AtomicSignal>& signal_buffer, long long current_time_us, unsigned short app_hash, CerebrumLux::CryptofigAutoencoder& cryptofig_autoencoder_ref);
 };
 
-#endif // CEREBRUM_LUX_DYNAMIC_SEQUENCE_H
+} // namespace CerebrumLux
+
+#endif // DYNAMIC_SEQUENCE_H

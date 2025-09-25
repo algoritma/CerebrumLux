@@ -1,102 +1,49 @@
-#ifndef CEREBRUM_LUX_RESPONSE_ENGINE_H
-#define CEREBRUM_LUX_RESPONSE_ENGINE_H
+#ifndef RESPONSE_ENGINE_H
+#define RESPONSE_ENGINE_H
 
-#include <string> // std::string
-#include <vector> // std::vector
-#include <map>    // std::map
-// #include <random> // KALDIRILDI: Artık SafeRNG kullanılıyor
+#include <string>
+#include <vector>
+#include <map>
+#include "../core/enums.h" // UserIntent, AbstractState, AIGoal, AIAction için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
+#include "../brain/intent_analyzer.h" // IntentAnalyzer için
+#include "../communication/ai_insights_engine.h" // AIInsightsEngine için
+#include "../planning_execution/goal_manager.h" // GoalManager için
+#include "../communication/natural_language_processor.h" // NaturalLanguageProcessor için
 
-#include "../core/enums.h" // UserIntent, AbstractState, AIGoal, AIAction, LogLevel
-#include "../core/utils.h" // intent_to_string, abstract_state_to_string, action_to_string, YENİ: SafeRNG için
-#include "../data_models/dynamic_sequence.h"
-#include "../brain/intent_analyzer.h"
-#include "../planning_execution/goal_manager.h"
-#include "ai_insights_engine.h"
-#include "natural_language_processor.h"
+namespace CerebrumLux { // ResponseEngine ve ResponseTemplate struct'ı bu namespace içine alınacak
 
-// İleri bildirimler
-struct DynamicSequence;
-class IntentAnalyzer;
-class GoalManager;
-class AIInsightsEngine;
-class NaturalLanguageProcessor;
-
-// Yanıt şablonlarını tutan yapı
+// Yanıt şablonu yapısı
 struct ResponseTemplate {
-    std::vector<std::string> responses;
-    float trigger_threshold = 0.0f;
+    std::vector<std::string> responses; // Muhtemel yanıtların listesi
+    float priority; // Yanıtın önceliği
+
+    ResponseTemplate() : priority(0.5f) {}
+    ResponseTemplate(const std::vector<std::string>& resps, float prio = 0.5f)
+        : responses(resps), priority(prio) {}
 };
 
-// ResponseEngine sınıfı
 class ResponseEngine {
 public:
-    // Kurucu: tüm bağımlılıklar referans olarak alınır
-        ResponseEngine(IntentAnalyzer& analyzer_ref, GoalManager& goal_manager_ref,
-                   AIInsightsEngine& insights_engine_ref, NaturalLanguageProcessor* nlp_ptr);
+    ResponseEngine(CerebrumLux::IntentAnalyzer& analyzer, CerebrumLux::GoalManager& goal_manager,
+                   CerebrumLux::AIInsightsEngine& insights_engine, CerebrumLux::NaturalLanguageProcessor* nlp);
 
-    // Kullanıcının niyeti, durumu ve hedefi ile birlikte dinamik yanıt üretir
-    std::string generate_response(UserIntent current_intent, AbstractState current_abstract_state,
-                                  AIGoal current_goal, const DynamicSequence& sequence) const;
+    virtual std::string generate_response(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state,
+                                          CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence) const;
 
 private:
-    IntentAnalyzer& analyzer;
-    GoalManager& goal_manager;
-    AIInsightsEngine& insights_engine;
-    NaturalLanguageProcessor* nlp;
+    CerebrumLux::IntentAnalyzer& intent_analyzer;
+    CerebrumLux::GoalManager& goal_manager;
+    CerebrumLux::AIInsightsEngine& insights_engine;
+    CerebrumLux::NaturalLanguageProcessor* nlp_processor; // NLP pointer'ı
 
-    // Niyet ve durum kombinasyonlarına göre yanıt şablonları
-    std::map<UserIntent, std::map<AbstractState, ResponseTemplate>> response_templates;
+    // Yanıt şablonları
+    std::map<CerebrumLux::UserIntent, std::map<CerebrumLux::AbstractState, ResponseTemplate>> response_templates; // Namespace ile güncellendi
 
-    // KALDIRILDI: mutable std::mt19937 gen; // Rastgele sayı üreteci
-    // KALDIRILDI: mutable std::random_device rd; 
+    // Yardımcı fonksiyonlar
+    std::string select_random_response(const std::vector<std::string>& responses) const;
 };
 
-// === Yardımcı fonksiyonlar ===
-// Kritik eylem önerisi içerip içermediğini kontrol eder
-static bool is_critical_action_suggestion(const std::string& suggestion) {
-    const std::vector<std::string> critical_keywords = {
-        "optimize etmemi ister misiniz?", "Uygulamaları kapatmamı ister misiniz?",
-        "Gerekli olmayan bağlantıları kesmemi ister misiniz?", "arka plan süreçlerini optimize edebilirim.",
-        "gereksiz sekmeleri kapatarak", "Arka plan uygulamalarını kapatarak",
-        "Sistem performansını optimize edelim mi?", "Kaydetmek ister misiniz?",
-        "Otomatik düzeltmemi ister misiniz?"
-    };
-    for (const auto& kw : critical_keywords) {
-        if (suggestion.find(kw) != std::string::npos) return true;
-    }
-    return false;
-}
+} // namespace CerebrumLux
 
-// Kritik eylem önerisinden sadece eylem açıklamasını çıkarır
-static std::string extract_action_description(const std::string& full_suggestion) {
-    std::string description = full_suggestion;
-
-    // Önek temizleme
-    const std::vector<std::string> prefixes = {"AI Önerisi: ", "[AI-ICGORU]: "};
-    for (const auto& pre : prefixes) {
-        if (description.rfind(pre, 0) == 0) {
-            description.erase(0, pre.length());
-        }
-    }
-
-    // Sık kullanılan son ekleri temizle
-    const std::vector<std::string> suffixes = {
-        " ister misiniz?", " edebilirim.", " sağlayabilirim.", " kapatabilirim.",
-        " artırabilirim.", " optimize edebilirim?", " kesmemi ister misiniz?",
-        " edelim mi?", " öneririm.", " olabilirim?", " Otomatik düzeltmemi ister misiniz?",
-        " Kaydetmek ister misiniz?"
-    };
-    for (const auto& suf : suffixes) {
-        size_t pos = description.find(suf);
-        if (pos != std::string::npos) description.erase(pos);
-    }
-
-    // Noktalama ve boşluk temizleme
-    while (!description.empty() && (description.back() == '.' || description.back() == '?' || 
-                                   description.back() == ' ' || description.back() == '\n')) {
-        description.pop_back();
-    }
-    return description;
-}
-
-#endif // CEREBRUM_LUX_RESPONSE_ENGINE_H
+#endif // RESPONSE_ENGINE_H

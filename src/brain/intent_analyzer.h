@@ -1,47 +1,41 @@
-#ifndef CEREBRUM_LUX_INTENT_ANALYZER_H
-#define CEREBRUM_LUX_INTENT_ANALYZER_H
+#ifndef INTENT_ANALYZER_H
+#define INTENT_ANALYZER_H
 
-#include <vector>  // For std::vector
-#include <map>     // For std::map
-#include <string>  // For std::string
-#include <limits>  // For std::numeric_limits
-#include "../core/enums.h"         // Enumlar için
-#include "../core/utils.h"         // For convert_wstring_to_string (if needed elsewhere)
-#include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
-#include "intent_template.h"       // IntentTemplate için
-#include "autoencoder.h"           // CryptofigAutoencoder::LATENT_DIM için (sadece boyut için)
-// #include "../communication/natural_language_processor.h" // KALDIRILDI: NaturalLanguageProcessor için başlık dosyası dahil edildi
+#include <string>
+#include <vector>
+#include <map>
+#include <algorithm> // std::max için
+#include "../core/enums.h" // UserIntent, AIAction için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
+#include "intent_template.h" // IntentTemplate için
 
+namespace CerebrumLux { // IntentAnalyzer sınıfı bu namespace içine alınacak
 
-// İleri bildirimler
-struct DynamicSequence;
-struct IntentTemplate;
-// class NaturalLanguageProcessor; // KALDIRILDI: NaturalLanguageProcessor için ileri bildirim
-
-// *** IntentAnalyzer: Kullanici niyetlerini analiz eder ***
 class IntentAnalyzer {
 public:
-    // Kurucu parametresiz hale getirildi
-    IntentAnalyzer(); 
-    virtual UserIntent analyze_intent(const DynamicSequence& sequence); // Eklendi: virtual
-    
-    std::vector<IntentTemplate> intent_templates; 
+    IntentAnalyzer();
 
-    void update_template_weights(UserIntent intent_id, const std::vector<float>& new_weights); 
-    void update_action_success_score(UserIntent intent_id, AIAction action, float score_change); 
-    std::vector<float> get_intent_weights(UserIntent intent_id) const; 
+    virtual UserIntent analyze_intent(const DynamicSequence& sequence);
+    virtual float get_confidence_for_intent(UserIntent intent_id, const std::vector<float>& features) const;
 
-    void save_memory(const std::string& filename) const;
-    void load_memory(const std::string& filename);
+    // Niyet şablonlarını yönetme
+    void add_intent_template(const IntentTemplate& new_template);
+    void update_template_weights(UserIntent intent_id, const std::vector<float>& new_weights);
+    void update_action_success_score(UserIntent intent_id, AIAction action, float score_change);
+    std::vector<float> get_intent_weights(UserIntent intent_id) const;
 
+    // Performans izleme
+    float get_last_confidence() const { return last_confidence; }
     void report_learning_performance(UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg);
 
-    float confidence_threshold_for_known_intent; 
-    void set_confidence_threshold(float threshold); 
-
 private:
-    // NaturalLanguageProcessor& nlp; // KALDIRILDI: NaturalLanguageProcessor referansı
+    std::map<UserIntent, IntentTemplate> intent_templates;
+    float last_confidence; // En son analiz edilen niyetin güven seviyesi
+    
+    // Yardımcı fonksiyonlar
+    float calculate_cosine_similarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const;
 };
 
+} // namespace CerebrumLux
 
-#endif // CEREBRUM_LUX_INTENT_ANALYZER_H
+#endif // INTENT_ANALYZER_H

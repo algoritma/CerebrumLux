@@ -1,125 +1,34 @@
-#include "LearningModule.h" 
+#include "LearningModule.h"
 #include <iostream>
-#include <algorithm> 
-#include "../core/logger.h" 
-#include "../learning/WebFetcher.h" 
-#include "../core/utils.h" 
-#include "../external/nlohmann/json.hpp" 
-
-// OpenSSL Başlıkları (Bu dosya içinde OpenSSL API'leri doğrudan kullanılacak)
-#include <openssl/crypto.h> 
-#include <openssl/ssl.h>    
-#include <openssl/evp.h>    
-#include <openssl/rand.h>   // Düzeltme: RAND_bytes için bu başlık gerekli
-#include <openssl/err.h>    
-#include <openssl/bio.h>    
-#include <openssl/buffer.h> 
-#include <openssl/pem.h>    
-#include <openssl/x509.h>   
-// Düzeltme: openssl/ed25519.h başlığı kaldırıldı (çünkü fiziksel olarak yok)
-// #include <openssl/ed25519.h> 
+#include <algorithm>
+#include "../core/logger.h"
+#include "../learning/WebFetcher.h"
+#include "../core/utils.h"
+#include "../external/nlohmann/json.hpp"
+#include "../crypto/CryptoUtils.h" // CryptoUtils'ın Base64 fonksiyonları için
 
 // YENİ: UnicodeSanitizer ve StegoDetector başlık dosyaları
-#include "UnicodeSanitizer.h"
-#include "StegoDetector.h"
+#include "UnicodeSanitizer.h" // Tam tanımlar için eklendi
+#include "StegoDetector.h"    // Tam tanımlar için eklendi
 
 // Kapsül ID sayacını string ID'lere uyarlamak için (isteğe bağlı)
 static unsigned int s_learning_module_capsule_id_counter = 0;
 
-// Düzeltme: Ed25519 anahtar çifti değişkenleri buraya taşındı, dosya genelinde erişilebilir olacak.
-static EVP_PKEY* s_my_ed25519_pkey = nullptr; // Özel anahtar
-static EVP_PKEY* s_my_ed25519_pubkey = nullptr; // Açık anahtar
-
-// ================================================================
-// Base64 fonksiyonları LearningModule sınıfının üye fonksiyonları olarak tanımlanıyor.
-// ================================================================
-
-std::string LearningModule::base64_encode_internal(const std::string& in) const {
-    BIO *b64, *bmem;
-    BUF_MEM *bptr;
-
-    b64 = BIO_new(BIO_f_base64());
-    bmem = BIO_new(BIO_s_mem());
-    b64 = BIO_push(b64, bmem);
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL); 
-    BIO_write(b64, in.data(), static_cast<int>(in.size()));
-    BIO_flush(b64);
-
-    char *data;
-    long len = BIO_get_mem_data(bmem, &data); 
-    std::string out(data, len);
-
-    BIO_free_all(b64);
-    return out;
-}
-
-std::string LearningModule::base64_decode_internal(const std::string& in) const {
-    BIO *b64, *bmem;
-    char* buffer = nullptr;
-    size_t length = 0;
-
-    b64 = BIO_new(BIO_f_base64());
-    bmem = BIO_new_mem_buf(in.data(), static_cast<int>(in.size())); 
-    b64 = BIO_push(b64, bmem);
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-
-    length = in.length();
-    buffer = (char*)OPENSSL_malloc(length + 1); 
-    if (!buffer) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Base64 decode için bellek ayrılamadı.");
-        return "";
-    }
-    
-    int decoded_len = BIO_read(b64, buffer, static_cast<int>(length));
-    if (decoded_len < 0) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Base64 kod çözme hatası.");
-        OPENSSL_free(buffer);
-        BIO_free_all(b64);
-        return "";
-    }
-    buffer[decoded_len] = '\0'; 
-
-    std::string out(buffer, decoded_len);
-    OPENSSL_free(buffer);
-    BIO_free_all(b64);
-    return out;
-}
-
-// ================================================================
-// Yeni public virtual Base64 string metotlarının implementasyonu
-// ================================================================
-
-std::string LearningModule::base64_encode_string(const std::string& data) const {
-    return this->base64_encode_internal(data);
-}
-
-std::string LearningModule::base64_decode_string(const std::string& data) const {
-    return this->base64_decode_internal(data);
-}
-
-// ================================================================
+namespace CerebrumLux { // Buradan itibaren CerebrumLux namespace'i başlar
 
 // Kurucu
-LearningModule::LearningModule(KnowledgeBase& kb) 
-    : knowledgeBase(kb), 
-      unicodeSanitizer(std::make_unique<UnicodeSanitizer>()), 
-      stegoDetector(std::make_unique<StegoDetector>())      
+LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan)
+    : knowledgeBase(kb),
+      cryptoManager(cryptoMan), // Yeni: CryptoManager referansını başlat
+      unicodeSanitizer(std::make_unique<UnicodeSanitizer>()), // Tam tanım artık mevcut
+      stegoDetector(std::make_unique<StegoDetector>())      // Tam tanım artık mevcut
 {
-    LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized.");
+    LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized with CryptoManager.");
 }
 
 // Yıkıcı
 LearningModule::~LearningModule() {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Destructor called.");
-    // Anahtarları temizle
-    if (s_my_ed25519_pkey) {
-        EVP_PKEY_free(s_my_ed25519_pkey);
-        s_my_ed25519_pkey = nullptr;
-    }
-    if (s_my_ed25519_pubkey) {
-        EVP_PKEY_free(s_my_ed25519_pubkey);
-        s_my_ed25519_pubkey = nullptr;
-    }
 }
 
 void LearningModule::learnFromText(const std::string& text,
@@ -128,32 +37,37 @@ void LearningModule::learnFromText(const std::string& text,
                                    float confidence)
 {
     Capsule c;
-    c.id = "capsule_" + std::to_string(++s_learning_module_capsule_id_counter); 
+    c.id = "capsule_" + std::to_string(++s_learning_module_capsule_id_counter);
     c.topic = topic;
     c.source = source;
-    c.content = text; 
+    c.content = text;
     c.confidence = confidence;
     c.plain_text_summary = text.substr(0, std::min((size_t)100, text.length())) + "...";
     c.timestamp_utc = std::chrono::system_clock::now();
-    
-    c.embedding = this->compute_embedding(c.content); 
-    c.cryptofig_blob_base64 = this->cryptofig_encode(c.embedding); 
 
-    std::string my_aes_key = this->get_aes_key_for_peer("Self"); 
-    std::string iv = this->generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm())); 
-    c.encryption_iv_base64 = this->base64_encode_string(iv); 
-    c.encrypted_content = this->aes_gcm_encrypt(c.content, my_aes_key, iv); 
+    c.embedding = this->compute_embedding(c.content);
+    c.cryptofig_blob_base64 = this->cryptofig_encode(c.embedding);
 
-    std::string my_private_key_pem = this->get_my_private_key(); 
-    c.signature_base64 = this->ed25519_sign(c.encrypted_content, my_private_key_pem); 
+    std::vector<unsigned char> my_aes_key_vec = cryptoManager.generate_random_bytes_vec(32); // 256-bit AES key
+    std::vector<unsigned char> iv_vec = cryptoManager.generate_random_bytes_vec(12); // 12 byte GCM IV
+    c.encryption_iv_base64 = CerebrumLux::Crypto::base64_encode(cryptoManager.vec_to_str(iv_vec));
 
-    this->knowledgeBase.add_capsule(c); 
-    this->knowledgeBase.save(); 
+    CerebrumLux::Crypto::AESGCMCiphertext encrypted_data =
+        cryptoManager.aes256_gcm_encrypt(cryptoManager.str_to_vec(c.content), my_aes_key_vec, {}); // AAD boş bırakıldı
+
+    c.encrypted_content = encrypted_data.ciphertext_base64;
+    c.gcm_tag_base64 = encrypted_data.tag_base64; // GCM tag'ını yeni alana atıyoruz
+
+    std::string my_private_key_pem = cryptoManager.get_my_private_key_pem();
+    c.signature_base64 = cryptoManager.ed25519_sign(c.encrypted_content, my_private_key_pem);
+
+    this->knowledgeBase.add_capsule(c);
+    this->knowledgeBase.save();
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Learned from text. Topic: " << topic << ", ID: " << c.id);
 }
 
 void LearningModule::learnFromWeb(const std::string& query) {
-    WebFetcher fetcher;
+    WebFetcher fetcher; // WebFetcher'ın da CerebrumLux namespace'i içinde olduğunu varsayıyoruz
     auto results = fetcher.search(query);
 
     for (auto& r : results) {
@@ -163,15 +77,15 @@ void LearningModule::learnFromWeb(const std::string& query) {
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
-    return this->knowledgeBase.search_by_topic(topic); 
+    return this->knowledgeBase.search_by_topic(topic);
 }
 
 KnowledgeBase& LearningModule::getKnowledgeBase() {
-    return this->knowledgeBase; 
+    return this->knowledgeBase;
 }
 
 const KnowledgeBase& LearningModule::getKnowledgeBase() const {
-    return this->knowledgeBase; 
+    return this->knowledgeBase;
 }
 
 
@@ -179,29 +93,34 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] AI Insights isleniyor: " << insights.size() << " adet içgörü.");
     for (const auto& insight : insights) {
         Capsule c;
-        c.id = "insight_" + std::to_string(++s_learning_module_capsule_id_counter); 
-        c.content = insight.observation; 
-        c.source = "AIInsightsEngine";
-        c.topic = "AI Insight"; 
-        c.confidence = insight.urgency; 
+        c.id = "insight_" + std::to_string(++s_learning_module_capsule_id_counter);
+        c.content = insight.observation;
+        c.source = "AIInsightsEngine"; // AIInsightsEngine'ın da CerebrumLux namespace'i içinde olduğunu varsayıyoruz
+        c.topic = "AI Insight";
+        c.confidence = static_cast<float>(insight.urgency); // UrgencyLevel'dan float'a açık dönüşüm
         c.plain_text_summary = insight.observation.substr(0, std::min((size_t)100, insight.observation.length())) + "...";
         c.timestamp_utc = std::chrono::system_clock::now();
-        
-        c.embedding = this->compute_embedding(c.content); 
-        c.cryptofig_blob_base64 = this->cryptofig_encode(c.embedding); 
 
-        std::string my_aes_key = this->get_aes_key_for_peer("Self"); 
-        std::string iv = this->generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm())); 
-        c.encryption_iv_base64 = this->base64_encode_string(iv); 
-        c.encrypted_content = this->aes_gcm_encrypt(c.content, my_aes_key, iv); 
+        c.embedding = this->compute_embedding(c.content);
+        c.cryptofig_blob_base64 = this->cryptofig_encode(c.embedding);
 
-        std::string my_private_key_pem = this->get_my_private_key();
-        c.signature_base64 = this->ed25519_sign(c.encrypted_content, my_private_key_pem);
+        std::vector<unsigned char> my_aes_key_vec = cryptoManager.generate_random_bytes_vec(32);
+        std::vector<unsigned char> iv_vec = cryptoManager.generate_random_bytes_vec(12);
+        c.encryption_iv_base64 = CerebrumLux::Crypto::base64_encode(cryptoManager.vec_to_str(iv_vec));
 
-        this->knowledgeBase.add_capsule(c); 
+        CerebrumLux::Crypto::AESGCMCiphertext encrypted_data =
+            cryptoManager.aes256_gcm_encrypt(cryptoManager.str_to_vec(c.content), my_aes_key_vec, {});
+
+        c.encrypted_content = encrypted_data.ciphertext_base64;
+        c.gcm_tag_base64 = encrypted_data.tag_base64;
+
+        std::string my_private_key_pem = cryptoManager.get_my_private_key_pem();
+        c.signature_base64 = cryptoManager.ed25519_sign(c.encrypted_content, my_private_key_pem);
+
+        this->knowledgeBase.add_capsule(c);
         LOG_DEFAULT(LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü eklendi: " << c.content.substr(0, std::min((size_t)30, c.content.length())) << "..., ID: " << c.id);
     }
-    this->knowledgeBase.save(); 
+    this->knowledgeBase.save();
 }
 
 IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id) {
@@ -209,100 +128,99 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
     report.original_capsule = envelope;
     report.timestamp = std::chrono::system_clock::now();
     report.source_peer_id = sender_id;
-    report.processed_capsule = envelope; 
+    report.processed_capsule = envelope;
 
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Ingesting envelope from " << sender_id << " with ID: " << envelope.id << "...");
 
-    std::string public_key_of_sender_pem = this->get_public_key_for_peer(sender_id);
-    if (!this->ed25519_verify(report.processed_capsule.encrypted_content, report.processed_capsule.signature_base64, public_key_of_sender_pem)) {
+    std::string public_key_of_sender_pem = cryptoManager.get_peer_public_key_pem(sender_id);
+    if (!cryptoManager.ed25519_verify(report.processed_capsule.encrypted_content, report.processed_capsule.signature_base64, public_key_of_sender_pem)) {
         report.result = IngestResult::InvalidSignature;
         report.message = "Signature verification failed.";
-        this->audit_log_append(report); 
-        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->audit_log_append(report);
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id);
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Signature verified for capsule ID: " << envelope.id);
 
-    Capsule decrypted_capsule = this->decrypt_payload(report.processed_capsule); 
-    if (decrypted_capsule.content.empty() && !report.processed_capsule.encrypted_content.empty()) { 
+    Capsule decrypted_capsule = this->decrypt_payload(report.processed_capsule);
+    if (decrypted_capsule.content.empty() && !report.processed_capsule.encrypted_content.empty()) {
         report.result = IngestResult::DecryptionFailed;
         report.message = "Payload decryption failed.";
-        this->audit_log_append(report); 
-        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->audit_log_append(report);
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id);
         return report;
     }
-    report.processed_capsule = decrypted_capsule; 
+    report.processed_capsule = decrypted_capsule;
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Payload decrypted for capsule ID: " << envelope.id);
 
-    if (!this->schema_validate(report.processed_capsule)) { 
+    if (!this->schema_validate(report.processed_capsule)) {
         report.result = IngestResult::SchemaMismatch;
         report.message = "Capsule schema mismatch.";
-        this->audit_log_append(report); 
-        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->audit_log_append(report);
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id);
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Schema validated for capsule ID: " << envelope.id);
 
-    Capsule sanitized_capsule = this->sanitize_unicode(report.processed_capsule); 
-    if (sanitized_capsule.content != report.processed_capsule.content) { 
-        report.result = IngestResult::SanitizationNeeded; 
+    Capsule sanitized_capsule = this->sanitize_unicode(report.processed_capsule);
+    if (sanitized_capsule.content != report.processed_capsule.content) {
+        report.result = IngestResult::SanitizationNeeded;
         report.message = "Unicode sanitization applied.";
-        report.processed_capsule = sanitized_capsule; 
+        report.processed_capsule = sanitized_capsule;
         LOG_DEFAULT(LogLevel::INFO, "LearningModule: Unicode sanitization applied to capsule ID: " << envelope.id);
     } else {
         LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Unicode sanitation not needed for capsule ID: " << envelope.id);
     }
-    
-    if (this->run_steganalysis(report.processed_capsule)) { 
+
+    if (this->run_steganalysis(report.processed_capsule)) {
         report.result = IngestResult::SteganographyDetected;
         report.message = "Steganography detected in capsule content.";
-        this->audit_log_append(report); 
-        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->audit_log_append(report);
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id);
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Steganography check passed for capsule ID: " << envelope.id);
 
-    if (!this->sandbox_analysis(report.processed_capsule)) { 
+    if (!this->sandbox_analysis(report.processed_capsule)) {
         report.result = IngestResult::SandboxFailed;
         report.message = "Sandbox analysis indicated potential threat.";
-        this->audit_log_append(report); 
-        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->audit_log_append(report);
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id);
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Sandbox analysis passed for capsule ID: " << envelope.id);
 
-    if (!this->corroboration_check(report.processed_capsule)) { 
+    if (!this->corroboration_check(report.processed_capsule)) {
         report.result = IngestResult::CorroborationFailed;
         report.message = "Corroboration check failed against existing knowledge.";
-        this->audit_log_append(report); 
-        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id); 
+        this->audit_log_append(report);
+        this->knowledgeBase.quarantine_capsule(report.processed_capsule.id);
         return report;
     }
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Corroboration check passed for capsule ID: " << envelope.id);
 
-    this->knowledgeBase.add_capsule(report.processed_capsule); 
-    this->knowledgeBase.save(); 
+    this->knowledgeBase.add_capsule(report.processed_capsule);
+    this->knowledgeBase.save();
     report.result = IngestResult::Success;
     report.message = "Capsule ingested successfully.";
-    this->audit_log_append(report); 
+    this->audit_log_append(report);
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Capsule ingested successfully from " << sender_id << ", ID: " << envelope.id);
     return report;
 }
 
 bool LearningModule::verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const {
-    if (sender_id == "Self") { 
+    if (sender_id == "Self") {
         return true;
     }
 
-    if (capsule.signature_base64.empty()) { 
+    if (capsule.signature_base64.empty()) {
         LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Signature missing in capsule ID: " << capsule.id << " from " << sender_id);
         return false;
     }
 
     std::string message_to_verify = capsule.encrypted_content;
-    std::string signature_bytes = this->base64_decode_string(capsule.signature_base64); 
-    std::string public_key_bytes_pem = this->get_public_key_for_peer(sender_id); 
-    return this->ed25519_verify(message_to_verify, signature_bytes, public_key_bytes_pem); 
+    std::string public_key_bytes_pem = cryptoManager.get_peer_public_key_pem(sender_id);
+    return cryptoManager.ed25519_verify(message_to_verify, capsule.signature_base64, public_key_bytes_pem);
 }
 
 Capsule LearningModule::decrypt_payload(const Capsule& encrypted_capsule) const {
@@ -310,14 +228,30 @@ Capsule LearningModule::decrypt_payload(const Capsule& encrypted_capsule) const 
 
     if (encrypted_capsule.encrypted_content.empty()) {
         LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Encrypted content is empty for capsule ID: " << encrypted_capsule.id << ". Assuming plain text.");
-        decrypted.content = encrypted_capsule.content; 
+        decrypted.content = encrypted_capsule.content;
         return decrypted;
     }
 
-    std::string aes_key = this->get_aes_key_for_peer(encrypted_capsule.source); 
-    std::string iv = this->base64_decode_string(encrypted_capsule.encryption_iv_base64); 
+    std::vector<unsigned char> aes_key_for_peer_vec = cryptoManager.generate_random_bytes_vec(32); // Geçici, ECDH ile değişecek
 
-    decrypted.content = this->aes_gcm_decrypt(encrypted_capsule.encrypted_content, aes_key, iv); 
+    CerebrumLux::Crypto::AESGCMCiphertext ct_data;
+    ct_data.ciphertext_base64 = encrypted_capsule.encrypted_content;
+    ct_data.tag_base64 = encrypted_capsule.gcm_tag_base64;
+    ct_data.iv_base64 = encrypted_capsule.encryption_iv_base64;
+
+    try {
+        std::vector<unsigned char> decrypted_vec = cryptoManager.aes256_gcm_decrypt(
+            cryptoManager.str_to_vec(CerebrumLux::Crypto::base64_decode(ct_data.ciphertext_base64)),
+            cryptoManager.str_to_vec(CerebrumLux::Crypto::base64_decode(ct_data.tag_base64)),
+            cryptoManager.str_to_vec(CerebrumLux::Crypto::base64_decode(ct_data.iv_base64)),
+            aes_key_for_peer_vec,
+            {}); // AAD boş
+
+        decrypted.content = cryptoManager.vec_to_str(decrypted_vec);
+    } catch (const std::exception& e) {
+        LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Decryption failed for capsule ID: " << encrypted_capsule.id << ". Error: " << e.what());
+        decrypted.content.clear(); // Hata durumunda içeriği temizle
+    }
 
     if (decrypted.content.empty() && !encrypted_capsule.encrypted_content.empty()) {
         LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Decryption resulted in empty content for capsule ID: " << encrypted_capsule.id);
@@ -325,9 +259,9 @@ Capsule LearningModule::decrypt_payload(const Capsule& encrypted_capsule) const 
     return decrypted;
 }
 
-bool LearningModule::schema_validate(const Capsule& capsule) const { 
-    bool valid = !capsule.id.empty() && !capsule.content.empty() && !capsule.source.empty() && !capsule.topic.empty() && 
-                 !capsule.cryptofig_blob_base64.empty() && !capsule.signature_base64.empty() && !capsule.encryption_iv_base64.empty();
+bool LearningModule::schema_validate(const Capsule& capsule) const {
+    bool valid = !capsule.id.empty() && !capsule.content.empty() && !capsule.source.empty() && !capsule.topic.empty() &&
+                 !capsule.cryptofig_blob_base64.empty() && !capsule.signature_base64.empty() && !capsule.encryption_iv_base64.empty() && !capsule.gcm_tag_base64.empty();
 
     if (!valid) {
         LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Schema validation failed for capsule ID: " << capsule.id << ". Missing required fields.");
@@ -335,10 +269,10 @@ bool LearningModule::schema_validate(const Capsule& capsule) const {
     return valid;
 }
 
-Capsule LearningModule::sanitize_unicode(const Capsule& capsule) const { 
+Capsule LearningModule::sanitize_unicode(const Capsule& capsule) const {
     Capsule sanitized_capsule = capsule;
-    if (this->unicodeSanitizer) { 
-        sanitized_capsule.content = this->unicodeSanitizer->sanitize(capsule.content); 
+    if (this->unicodeSanitizer) {
+        sanitized_capsule.content = this->unicodeSanitizer->sanitize(capsule.content);
         if (sanitized_capsule.content != capsule.content) {
             LOG_DEFAULT(LogLevel::INFO, "LearningModule: Unicode sanitization changed content for capsule ID: " << capsule.id);
         }
@@ -348,9 +282,9 @@ Capsule LearningModule::sanitize_unicode(const Capsule& capsule) const {
     return sanitized_capsule;
 }
 
-bool LearningModule::run_steganalysis(const Capsule& capsule) const { 
-    if (this->stegoDetector) { 
-        if (this->stegoDetector->detectSteganography(capsule.content)) { 
+bool LearningModule::run_steganalysis(const Capsule& capsule) const {
+    if (this->stegoDetector) {
+        if (this->stegoDetector->detectSteganography(capsule.content)) {
             LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Steganography detected in capsule ID: " << capsule.id);
             return true;
         }
@@ -360,45 +294,43 @@ bool LearningModule::run_steganalysis(const Capsule& capsule) const {
     return false;
 }
 
-bool LearningModule::sandbox_analysis(const Capsule& capsule) const { 
+bool LearningModule::sandbox_analysis(const Capsule& capsule) const {
     if (capsule.content.find("malware_signature") != std::string::npos ||
         capsule.content.find("exploit_code") != std::string::npos) {
         LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Sandbox analysis detected potential threat in capsule ID: " << capsule.id);
-        return false; 
+        return false;
     }
-    return true; 
+    return true;
 }
 
-bool LearningModule::corroboration_check(const Capsule& capsule) const { 
-    auto similar_capsules = knowledgeBase.semantic_search(capsule.content, 1); 
-    if (!similar_capsules.empty() && similar_capsules[0].confidence > 0.95f && similar_capsules[0].id != capsule.id) { 
+bool LearningModule::corroboration_check(const Capsule& capsule) const {
+    auto similar_capsules = knowledgeBase.semantic_search(capsule.content, 1);
+    if (!similar_capsules.empty() && similar_capsules[0].confidence > 0.95f && similar_capsules[0].id != capsule.id) {
         LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Corroboration check found highly similar existing knowledge for capsule ID: " << capsule.id << ". Similar to existing capsule ID: " << similar_capsules[0].id);
     }
-    return true; 
+    return true;
 }
 
-void LearningModule::audit_log_append(const IngestReport& report) const { 
-    LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Ingest Audit Report - Result: " << static_cast<int>(report.result) 
-                                      << ", Message: " << report.message 
-                                      << ", Source Peer: " << report.source_peer_id 
+void LearningModule::audit_log_append(const IngestReport& report) const {
+    LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Ingest Audit Report - Result: " << static_cast<int>(report.result)
+                                      << ", Message: " << report.message
+                                      << ", Source Peer: " << report.source_peer_id
                                       << ", Original Capsule ID: " << report.original_capsule.id);
 }
 
-// Kriptografik ve Embedding Altyapısı Implementasyonları
-
 std::vector<float> LearningModule::compute_embedding(const std::string& text) const {
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: compute_embedding (KnowledgeBase'den) çağrıldı.");
-    return this->knowledgeBase.computeEmbedding(text); 
+    return this->knowledgeBase.computeEmbedding(text);
 }
 
 std::string LearningModule::cryptofig_encode(const std::vector<float>& cryptofig_vector) const {
     nlohmann::json j = cryptofig_vector;
     std::string serialized_cryptofig = j.dump();
-    return this->base64_encode_internal(serialized_cryptofig); 
+    return CerebrumLux::Crypto::base64_encode(serialized_cryptofig);
 }
 
 std::vector<float> LearningModule::cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const {
-    std::string serialized_cryptofig = this->base64_decode_internal(base64_cryptofig_blob); 
+    std::string serialized_cryptofig = CerebrumLux::Crypto::base64_decode(base64_cryptofig_blob);
     try {
         nlohmann::json j = nlohmann::json::parse(serialized_cryptofig);
         return j.get<std::vector<float>>();
@@ -408,411 +340,4 @@ std::vector<float> LearningModule::cryptofig_decode_base64(const std::string& ba
     }
 }
 
-std::string LearningModule::aes_gcm_encrypt(const std::string& plaintext, const std::string& key, const std::string& iv) const {
-    EVP_CIPHER_CTX *ctx;
-    int len;
-    int ciphertext_len;
-
-    int max_len = plaintext.length() + EVP_CIPHER_block_size(EVP_aes_256_gcm()) + 16;
-    unsigned char* ciphertext_buf = (unsigned char*)OPENSSL_malloc(max_len);
-    unsigned char* tag_buf = (unsigned char*)OPENSSL_malloc(16); 
-
-    if (!ciphertext_buf || !tag_buf) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "AES-GCM encrypt için bellek ayrılamadı.");
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-
-    if (!(ctx = EVP_CIPHER_CTX_new())) {
-        ERR_print_errors_fp(stderr);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-
-    if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL)) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-
-    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, (int)iv.length(), NULL)) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-
-    if (1 != EVP_EncryptInit_ex(ctx, NULL, NULL, (const unsigned char*)key.c_str(), (const unsigned char*)iv.c_str())) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf); 
-        return "";
-    }
-
-    if (1 != EVP_EncryptUpdate(ctx, ciphertext_buf, &len, (const unsigned char*)plaintext.c_str(), static_cast<int>(plaintext.length()))) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-    ciphertext_len = len;
-
-    if (1 != EVP_EncryptFinal_ex(ctx, ciphertext_buf + len, &len)) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-    ciphertext_len += len;
-
-    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag_buf)) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(ciphertext_buf);
-        OPENSSL_free(tag_buf);
-        return "";
-    }
-
-    EVP_CIPHER_CTX_free(ctx);
-
-    std::string result((char*)ciphertext_buf, ciphertext_len);
-    result.append((char*)tag_buf, 16); 
-
-    OPENSSL_free(ciphertext_buf);
-    OPENSSL_free(tag_buf);
-    return this->base64_encode_string(result); 
-}
-
-std::string LearningModule::aes_gcm_decrypt(const std::string& ciphertext_base64, const std::string& key, const std::string& iv) const {
-    std::string combined_data = this->base64_decode_string(ciphertext_base64); 
-
-    size_t tag_len = 16; 
-    if (combined_data.length() < tag_len) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "AES-GCM decrypt: Geçersiz ciphertext uzunluğu (tag eksik).");
-        return "";
-    }
-
-    std::string ciphertext_str = combined_data.substr(0, combined_data.length() - tag_len);
-    std::string tag_str = combined_data.substr(combined_data.length() - tag_len);
-
-    EVP_CIPHER_CTX *ctx;
-    int len;
-    int plaintext_len;
-
-    unsigned char* plaintext_buf = (unsigned char*)OPENSSL_malloc(ciphertext_str.length() + EVP_CIPHER_block_size(EVP_aes_256_gcm()));
-    if (!plaintext_buf) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "AES-GCM decrypt için bellek ayrılamadı.");
-        return "";
-    }
-
-    if (!(ctx = EVP_CIPHER_CTX_new())) {
-        ERR_print_errors_fp(stderr);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-
-    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL)) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-
-    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, (int)iv.length(), NULL)) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-
-    if (1 != EVP_DecryptInit_ex(ctx, NULL, NULL, (const unsigned char*)key.c_str(), (const unsigned char*)iv.c_str())) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-
-    if (1 != EVP_DecryptUpdate(ctx, plaintext_buf, &len, (const unsigned char*)ciphertext_str.c_str(), static_cast<int>(ciphertext_str.length()))) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-    plaintext_len = len;
-
-    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, (int)tag_str.length(), (void*)tag_str.c_str())) {
-        ERR_print_errors_fp(stderr);
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-
-    if (1 != EVP_DecryptFinal_ex(ctx, plaintext_buf + len, &len)) {
-        ERR_print_errors_fp(stderr); 
-        EVP_CIPHER_CTX_free(ctx);
-        OPENSSL_free(plaintext_buf);
-        return "";
-    }
-    plaintext_len += len;
-
-    EVP_CIPHER_CTX_free(ctx);
-
-    std::string result((char*)plaintext_buf, plaintext_len);
-    OPENSSL_free(plaintext_buf);
-    return result;
-}
-
-// Ed25519 İmzalama ve Doğrulama Implementasyonları (EVP_PKEY API'leri ile)
-std::string LearningModule::ed25519_sign(const std::string& message, const std::string& private_key_pem) const {
-    EVP_PKEY *pkey = nullptr;
-    BIO *mem_bio = BIO_new_mem_buf(private_key_pem.data(), static_cast<int>(private_key_pem.size()));
-    
-    // PEM formatındaki özel anahtarı yükle
-    pkey = PEM_read_bio_PrivateKey(mem_bio, nullptr, nullptr, nullptr);
-    if (!pkey) {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: Özel anahtar PEM'den yüklenemedi.");
-        BIO_free_all(mem_bio);
-        return "";
-    }
-    BIO_free_all(mem_bio);
-
-    if (EVP_PKEY_id(pkey) != EVP_PKEY_ED25519) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: Yüklenen anahtar Ed25519 değil.");
-        EVP_PKEY_free(pkey);
-        return "";
-    }
-
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    if (!mdctx) {
-        ERR_print_errors_fp(stderr);
-        EVP_PKEY_free(pkey);
-        return "";
-    }
-
-    unsigned char *signature = nullptr;
-    size_t sig_len = 0;
-
-    if (1 != EVP_DigestSignInit(mdctx, nullptr, nullptr, nullptr, pkey)) {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmzalama başlatılamadı.");
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        return "";
-    }
-
-    // İmza uzunluğunu öğrenmek için ilk çağrı
-    if (1 != EVP_DigestSign(mdctx, nullptr, &sig_len, (const unsigned char*)message.data(), message.size())) {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmza uzunluğu alınamadı.");
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        return "";
-    }
-
-    signature = (unsigned char*)OPENSSL_malloc(sig_len);
-    if (!signature) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmza için bellek ayrılamadı.");
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        return "";
-    }
-
-    // Gerçek imzalama işlemi
-    if (1 != EVP_DigestSign(mdctx, signature, &sig_len, (const unsigned char*)message.data(), message.size())) {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 sign: İmzalama başarısız.");
-        OPENSSL_free(signature);
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        return "";
-    }
-
-    std::string sig_str((char*)signature, sig_len);
-    OPENSSL_free(signature);
-    EVP_MD_CTX_free(mdctx);
-    EVP_PKEY_free(pkey);
-
-    return this->base64_encode_string(sig_str);
-}
-
-bool LearningModule::ed25519_verify(const std::string& message, const std::string& signature_base64, const std::string& public_key_pem) const {
-    EVP_PKEY *pkey = nullptr;
-    BIO *mem_bio = BIO_new_mem_buf(public_key_pem.data(), static_cast<int>(public_key_pem.size()));
-
-    // PEM formatındaki açık anahtarı yükle
-    pkey = PEM_read_bio_PUBKEY(mem_bio, nullptr, nullptr, nullptr);
-    if (!pkey) {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Açık anahtar PEM'den yüklenemedi.");
-        BIO_free_all(mem_bio);
-        return false;
-    }
-    BIO_free_all(mem_bio);
-
-    if (EVP_PKEY_id(pkey) != EVP_PKEY_ED25519) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Yüklenen anahtar Ed25519 değil.");
-        EVP_PKEY_free(pkey);
-        return false;
-    }
-
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    if (!mdctx) {
-        ERR_print_errors_fp(stderr);
-        EVP_PKEY_free(pkey);
-        return false;
-    }
-
-    std::string signature_bytes = this->base64_decode_string(signature_base64);
-
-    if (1 != EVP_DigestVerifyInit(mdctx, nullptr, nullptr, nullptr, pkey)) {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Doğrulama başlatılamadı.");
-        EVP_MD_CTX_free(mdctx);
-        EVP_PKEY_free(pkey);
-        return false;
-    }
-
-    int ret = EVP_DigestVerify(mdctx, (const unsigned char*)signature_bytes.data(), signature_bytes.size(),
-                               (const unsigned char*)message.data(), message.size());
-
-    EVP_MD_CTX_free(mdctx);
-    EVP_PKEY_free(pkey);
-
-    if (ret == 1) {
-        return true; // İmza başarılı
-    } else if (ret == 0) {
-        LOG_DEFAULT(LogLevel::WARNING, "Ed25519 verify: İmza doğrulaması başarısız (geçersiz imza).");
-        return false; // İmza geçersiz
-    } else {
-        ERR_print_errors_fp(stderr);
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "Ed25519 verify: Doğrulama sırasında hata oluştu.");
-        return false; // Hata
-    }
-}
-
-
-std::string LearningModule::generate_random_bytes(size_t length) const {
-    unsigned char* buffer = (unsigned char*)OPENSSL_malloc(length);
-    if (!buffer) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "RAND_bytes için bellek ayrılamadı.");
-        return "";
-    }
-    if (1 != RAND_bytes(buffer, static_cast<int>(length))) {
-        ERR_print_errors_fp(stderr);
-        OPENSSL_free(buffer);
-        return "";
-    }
-    std::string random_data((char*)buffer, length);
-    OPENSSL_free(buffer);
-    return random_data;
-}
-
-// Anahtar Yönetimi Implementasyonları (EVP_PKEY API'leri ile anahtar çifti oluşturma ve PEM dönüşümü)
-// Bu metotlar, gerçek anahtar çiftlerini (PEM formatında) döndürmek üzere güncellendi.
-// Güvenli anahtar depolaması ve yönetimi için bu kısım gelecekte daha fazla geliştirilmelidir.
-
-// Düzeltme: s_my_ed25519_pkey ve s_my_ed25519_pubkey tanımları dosyanın başına taşındı.
-
-// Anahtar çifti oluşturma ve PEM formatında döndürme yardımcı fonksiyonu
-static std::string pkey_to_pem(EVP_PKEY* pkey, bool is_private) {
-    if (!pkey) return "";
-    BIO *bio = BIO_new(BIO_s_mem());
-    if (!bio) return "";
-
-    if (is_private) {
-        if (1 != PEM_write_bio_PrivateKey(bio, pkey, nullptr, nullptr, 0, nullptr, nullptr)) {
-            ERR_print_errors_fp(stderr);
-            BIO_free_all(bio);
-            return "";
-        }
-    } else {
-        if (1 != PEM_write_bio_PUBKEY(bio, pkey)) {
-            ERR_print_errors_fp(stderr);
-            BIO_free_all(bio);
-            return "";
-        }
-    }
-
-    BUF_MEM *bptr;
-    // Düzeltme: BIO_get_mem_data artık doğrudan pointer döndürüyor, bptr->data'yı güncelle.
-    // BIO_get_mem_data'dan sonra bptr->length de doğru olmalıdır.
-    char *data;
-    long len = BIO_get_mem_data(bio, &data);
-    std::string pem_str(data, static_cast<size_t>(len));
-    
-    BIO_free_all(bio);
-    return pem_str;
-}
-
-// Yeni anahtar çifti oluşturma
-static void generate_new_ed25519_keypair() {
-    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, nullptr);
-    if (!pctx) {
-        ERR_print_errors_fp(stderr);
-        return;
-    }
-
-    if (1 != EVP_PKEY_keygen_init(pctx)) {
-        ERR_print_errors_fp(stderr);
-        EVP_PKEY_CTX_free(pctx);
-        return;
-    }
-    if (1 != EVP_PKEY_keygen(pctx, &s_my_ed25519_pkey)) { 
-        ERR_print_errors_fp(stderr);
-        EVP_PKEY_CTX_free(pctx);
-        return;
-    }
-
-    EVP_PKEY_CTX_free(pctx);
-
-    if (s_my_ed25519_pkey) {
-        // Düzeltme: Açık anahtarı özel anahtardan türetmek için EVP_PKEY_dup kullanıldı.
-        s_my_ed25519_pubkey = EVP_PKEY_dup(s_my_ed25519_pkey); 
-        if (!s_my_ed25519_pubkey) {
-            ERR_print_errors_fp(stderr);
-        }
-    }
-    LOG_DEFAULT(LogLevel::INFO, "Ed25519 anahtar çifti oluşturuldu.");
-}
-
-
-std::string LearningModule::get_aes_key_for_peer(const std::string& peer_id) const {
-    if (peer_id == "Self") {
-        return std::string(32, 'S'); 
-    }
-    return std::string(32, 'A'); 
-}
-
-std::string LearningModule::get_public_key_for_peer(const std::string& peer_id) const {
-    if (!s_my_ed25519_pubkey) {
-        generate_new_ed25519_keypair(); 
-    }
-
-    if (peer_id == "Self") {
-        return pkey_to_pem(s_my_ed25519_pubkey, false);
-    } 
-    return std::string("-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE(DUMMY_PUBKEY_FOR_PEER)\n-----END PUBLIC KEY-----\n");
-}
-
-std::string LearningModule::get_my_private_key() const {
-    if (!s_my_ed25519_pkey) {
-        generate_new_ed25519_keypair();
-    }
-    return pkey_to_pem(s_my_ed25519_pkey, true);
-}
-
-std::string LearningModule::get_my_public_key() const {
-    if (!s_my_ed25519_pubkey) {
-        generate_new_ed25519_keypair();
-    }
-    return pkey_to_pem(s_my_ed25519_pubkey, false);
-}
+} // namespace CerebrumLux

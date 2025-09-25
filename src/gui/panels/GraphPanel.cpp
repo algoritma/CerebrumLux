@@ -1,88 +1,87 @@
 #include "GraphPanel.h"
-#include <QtCharts/QChart>
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
+
+// QtCharts başlıkları artık GraphPanel.h içinde olduğu için burada tekrar dahil etmiyoruz.
 #include <QVBoxLayout>
-#include <QDebug> // YENİ: QDebug için eklendi
-#include <QValueAxis> // YENİ: QValueAxis için eklendi (chart->axisX/Y()->setRange kullanmak için)
+#include <QPainter>
+#include "../../core/logger.h" // LOG_DEFAULT makrosu için
+#include <limits> // std::numeric_limits için
 
+// QT_CHARTS_USE_NAMESPACE makrosu KALDIRILDI, artık kullanmıyoruz.
 
-GraphPanel::GraphPanel(QWidget *parent) : QWidget(parent)
+namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
+
+CerebrumLux::GraphPanel::GraphPanel(QWidget *parent)
+    : QWidget(parent)
 {
-    series = new QLineSeries(this);
-    chart = new QChart();
-    chart->addSeries(series);
-    chart->createDefaultAxes();
-    chart->setTitle("Simulation Graph");
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    // X ve Y eksenlerini doğru türe cast etmek için
-    if (chart->axes(Qt::Horizontal).count() > 0) {
-        auto axisX = qobject_cast<QValueAxis*>(chart->axes(Qt::Horizontal).at(0));
-        if (axisX) {
-            axisX->setTitleText("Zaman/Adım");
-            axisX->setLabelFormat("%d");
-        }
-    }
-    if (chart->axes(Qt::Vertical).count() > 0) {
-        auto axisY = qobject_cast<QValueAxis*>(chart->axes(Qt::Vertical).at(0));
-        if (axisY) {
-            axisY->setTitleText("Değer");
-            axisY->setLabelFormat("%.1f");
-        }
-    }
+    this->chart = new QChart(); // QtCharts:: ön eki KALDIRILDI
+    this->chart->setTitle("AI Güven Seviyesi ve Performans Grafiği");
+    this->chart->legend()->hide();
 
+    // X ve Y eksenlerini oluştur
+    this->axisX = new QValueAxis(); // QtCharts:: ön eki KALDIRILDI
+    this->axisX->setTitleText("Zaman (ms)");
+    this->axisX->setLabelFormat("%d");
+    this->chart->addAxis(this->axisX, Qt::AlignBottom);
 
-    chartView = new QChartView(chart, this);
-    chartView->setRenderHint(QPainter::Antialiasing);
+    this->axisY = new QValueAxis(); // QtCharts:: ön eki KALDIRILDI
+    this->axisY->setTitleText("Güven/Performans");
+    this->axisY->setLabelFormat("%.2f");
+    this->axisY->setRange(0, 1);
+    this->chart->addAxis(this->axisY, Qt::AlignLeft);
 
-    auto layout = new QVBoxLayout(this);
-    layout->addWidget(chartView);
-    setLayout(layout);
+    this->series = new QLineSeries(); // QtCharts:: ön eki KALDIRILDI
+    this->series->setName("AI Confidence");
+    this->chart->addSeries(this->series);
+    this->series->attachAxis(this->axisX); // Seriyi X eksenine bağla
+    this->series->attachAxis(this->axisY); // Seriyi Y eksenine bağla
+
+    this->chartView = new QChartView(this->chart); // QtCharts:: ön eki KALDIRILDI
+    this->chartView->setRenderHint(QPainter::Antialiasing);
+    mainLayout->addWidget(this->chartView);
+
+    setLayout(mainLayout);
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "GraphPanel: Initialized.");
 }
 
-void GraphPanel::addDataPoint(double x, double y)
-{
-    series->append(x, y);
-}
+void CerebrumLux::GraphPanel::updateData(const QString& seriesName, const QMap<qreal, qreal>& data) {
+    if (seriesName == "AI Confidence" && this->series) {
+        this->series->clear();
+        qreal maxX = 0;
+        qreal minX = std::numeric_limits<qreal>::max();
+        qreal maxY = 0;
+        qreal minY = std::numeric_limits<qreal>::max();
 
-// YENİ: Grafik güncelleme metodu implementasyonu
-void GraphPanel::updateGraph(size_t value)
-{
-    // Mevcut grafiğe yeni bir veri noktası ekleyelim.
-    // X ekseni için basitçe mevcut nokta sayısını kullanabiliriz.
-    // Y ekseni için gelen 'value' parametresini kullanırız.
-    double x_value = series->count(); // Mevcut nokta sayısı
-    double y_value = static_cast<double>(value); // Gelen değeri Y ekseni değeri olarak kullan
-
-    series->append(x_value, y_value);
-
-    // Grafik aralığını otomatik olarak güncelle
-    if (chart->axes(Qt::Horizontal).count() > 0) {
-        auto axisX = qobject_cast<QValueAxis*>(chart->axes(Qt::Horizontal).at(0));
-        if (axisX) {
-            axisX->setRange(0, series->count());
+        for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+            this->series->append(it.key(), it.value());
+            maxX = std::max(maxX, it.key());
+            minX = std::min(minX, it.key());
+            maxY = std::max(maxY, it.value());
+            minY = std::min(minY, it.value());
         }
-    }
-    
-    // Y ekseni için min/max değerlerini otomatik ayarla veya sabit tut
-    if (series->count() > 0 && chart->axes(Qt::Vertical).count() > 0) {
-        double minY = y_value, maxY = y_value;
-        for (int i = 0; i < series->count(); ++i) {
-            QPointF point = series->at(i);
-            if (point.y() < minY) minY = point.y();
-            if (point.y() > maxY) maxY = point.y();
-        }
-        auto axisY = qobject_cast<QValueAxis*>(chart->axes(Qt::Vertical).at(0));
-        if (axisY) {
-            // Sadece tek bir nokta varsa min/max aynı olacağından biraz boşluk bırak
-            if (minY == maxY) { 
-                axisY->setRange(minY - 1.0, maxY + 1.0);
-            } else {
-                axisY->setRange(minY - (maxY - minY) * 0.1, maxY + (maxY - minY) * 0.1); // %10 boşluk
+
+        if (this->chart->axes(Qt::Horizontal).size() > 0 && this->chart->axes(Qt::Vertical).size() > 0) {
+            // QValueAxis* türüne qobject_cast yaparken QtCharts:: ön eki KALDIRILDI
+            QValueAxis *axisX_ptr = qobject_cast<QValueAxis*>(this->chart->axes(Qt::Horizontal).at(0));
+            QValueAxis *axisY_ptr = qobject_cast<QValueAxis*>(this->chart->axes(Qt::Vertical).at(0));
+            if (axisX_ptr && axisY_ptr) {
+                qreal timeSpan = maxX - minX;
+                if (data.isEmpty()) { // Veri yoksa varsayılan aralık
+                    minX = 0;
+                    maxX = 10000;
+                } else if (timeSpan < 10000 && minX != std::numeric_limits<qreal>::max()) { // Minimum 10 saniyelik aralık
+                    minX = maxX - 10000;
+                    if (minX < 0) minX = 0;
+                }
+                
+                axisX_ptr->setRange(minX, maxX);
+                axisY_ptr->setRange(0, 1);
             }
         }
     }
-
-    // Qt debug çıktısı
-    qDebug() << "[GraphPanel] Grafik güncellendi: (" << x_value << ", " << y_value << ")";
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "GraphPanel: Data updated for series: " << seriesName.toStdString());
 }
+
+} // namespace CerebrumLux

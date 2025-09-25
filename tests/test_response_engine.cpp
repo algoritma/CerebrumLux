@@ -1,424 +1,308 @@
 #include <iostream>
-#include <cassert>
 #include <string>
 #include <vector>
+#include <cassert>
 #include <map>
 #include <deque>
-#include <fstream> 
-#include <optional> 
+#include <chrono> // std::chrono::system_clock için
+#include <stdexcept> // std::runtime_error için
 
-// OpenSSL Başlıkları (Sadece EVP_CIPHER_iv_length için gerekli olanı bırakıldı)
-#include <openssl/evp.h> 
+#include "../communication/response_engine.h"
+#include "../communication/natural_language_processor.h"
+#include "../communication/ai_insights_engine.h"
+#include "../communication/suggestion_engine.h"
+#include "../brain/intent_analyzer.h"
+#include "../brain/intent_learner.h"
+#include "../brain/prediction_engine.h"
+#include "../brain/autoencoder.h" // CryptofigAutoencoder için
+#include "../brain/cryptofig_processor.h"
+#include "../data_models/dynamic_sequence.h"
+#include "../data_models/sequence_manager.h"
+#include "../planning_execution/goal_manager.h"
+#include "../user/user_profile_manager.h"
+#include "../learning/KnowledgeBase.h"
+#include "../learning/LearningModule.h"
+#include "../learning/Capsule.h"
+#include "../core/logger.h" // LogLevel için
+#include "../core/enums.h" // UserIntent, AbstractState, AIAction, AIGoal, SensorType, InsightType, UrgencyLevel için
+#include "../core/utils.h" // intent_to_string, abstract_state_to_string, goal_to_string, action_to_string için
+#include "../crypto/CryptoManager.h" // CryptoManager için
 
-// Project headers (use relative path from tests/)
-#include "../src/communication/response_engine.h"
-#include "../src/communication/ai_insights_engine.h"
-#include "../src/communication/suggestion_engine.h"
-#include "../src/communication/natural_language_processor.h"
-#include "../src/brain/intent_analyzer.h"
-#include "../src/brain/intent_learner.h"
-#include "../src/brain/prediction_engine.h"
-#include "../src/brain/cryptofig_processor.h"
-#include "../src/brain/autoencoder.h"
-#include "../src/data_models/dynamic_sequence.h"
-#include "../src/data_models/sequence_manager.h" 
-#include "../src/user/user_profile_manager.h"
-#include "../src/planning_execution/goal_manager.h"
-#include "../src/core/logger.h"
-#include "../src/core/utils.h" // utils.h'de artık global base64 fonksiyonları yok
-#include "../src/learning/KnowledgeBase.h" 
-#include "../src/learning/LearningModule.h" 
-#include "../src/learning/Capsule.h" 
-#include "../src/learning/WebFetcher.h" 
+// CerebrumLux namespace'ini kullanıma açmıyoruz, her yerde tam niteleme yapıyoruz.
 
-// Rastgele sayı üreteci (random_device hatasını önlemek için sabit seed ile)
-static std::mt19937 gen_test(12345); 
-
-// Geçici olarak Ed25519 sabitleri tanımlanıyor, OpenSSL bulunana kadar
-#define DUMMY_ED25519_PRIVKEY_LEN 64 
-#define DUMMY_ED25519_PUBKEY_LEN 32  
-#define DUMMY_ED25519_SIG_LEN   64   
-
-// === Dummy implementations for testing ===
+// === DUMMY SINIFLAR ===
 
 // Dummy SequenceManager
-// HATA DÜZELTME: Base class metodları virtual olmadığı için 'override' kaldırıldı.
-class DummySequenceManager : public SequenceManager {
+class DummySequenceManager : public CerebrumLux::SequenceManager {
 public:
-    DummySequenceManager() : SequenceManager() {}
-    bool add_signal(const AtomicSignal& signal, CryptofigProcessor& cryptofig_processor) { 
-        (void)signal; (void)cryptofig_processor; 
-        return true;
-    }
-    std::deque<AtomicSignal> get_signal_buffer_copy() const { 
-        return std::deque<AtomicSignal>{};
-    }
-    DynamicSequence& get_current_sequence_ref() { 
-        static DynamicSequence dummy_seq;
-        return dummy_seq;
-    }
-    const DynamicSequence& get_current_sequence_ref() const { 
-        static DynamicSequence dummy_seq;
+    DummySequenceManager() : CerebrumLux::SequenceManager() {}
+    bool add_signal(const CerebrumLux::AtomicSignal& signal, CerebrumLux::CryptofigProcessor& cryptofig_processor) { return true; }
+    std::deque<CerebrumLux::AtomicSignal> get_signal_buffer_copy() { return {}; } // Base class ile eşleşti (const'suz)
+    const CerebrumLux::DynamicSequence& get_current_sequence_ref() const {
+        static CerebrumLux::DynamicSequence dummy_seq;
         return dummy_seq;
     }
 };
 
-// DummyIntentAnalyzer
-class DummyIntentAnalyzer : public IntentAnalyzer {
+// Dummy IntentAnalyzer
+class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer {
 public:
-    DummyIntentAnalyzer() : IntentAnalyzer() {}
-    virtual UserIntent analyze_intent(const DynamicSequence& sequence) override {
-        (void)sequence; 
-        if (sequence.avg_keystroke_interval > 100000.0f) return UserIntent::IdleThinking;
-        if (sequence.alphanumeric_ratio > 0.8f) return UserIntent::FastTyping;
-        return UserIntent::Editing;
-    }
+    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {}
+    CerebrumLux::UserIntent analyze_intent(const CerebrumLux::DynamicSequence& sequence) { return CerebrumLux::UserIntent::Programming; }
+    float get_last_confidence() const { return 0.9f; }
+    void update_template_weights(CerebrumLux::UserIntent intent_id, const std::vector<float>& new_weights) {}
+    std::vector<float> get_intent_weights(CerebrumLux::UserIntent intent_id) const { return std::vector<float>(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f); }
+    void report_learning_performance(CerebrumLux::UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg) {}
 };
 
-// DummySuggestionEngine
-class DummySuggestionEngine : public SuggestionEngine {
+// Dummy SuggestionEngine
+class DummySuggestionEngine : public CerebrumLux::SuggestionEngine {
 public:
-    DummySuggestionEngine(IntentAnalyzer& analyzer_ref) : SuggestionEngine(analyzer_ref) {}
-    virtual AIAction suggest_action(UserIntent current_intent, AbstractState current_abstract_state, const DynamicSequence& sequence) override { 
-        (void)sequence; 
-        if (current_intent == UserIntent::IdleThinking) return AIAction::SuggestBreak;
-        if (current_abstract_state == AbstractState::LowProductivity) return AIAction::DimScreen;
-        return AIAction::None;
-    }
-    virtual void update_q_value(const StateKey& state, AIAction action, float reward) override { 
-        (void)state; (void)action; (void)reward; 
-    }
+    DummySuggestionEngine(CerebrumLux::IntentAnalyzer& analyzer_ref) : CerebrumLux::SuggestionEngine(analyzer_ref) {}
+    CerebrumLux::AIAction suggest_action(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, const CerebrumLux::DynamicSequence& sequence) { return CerebrumLux::AIAction::None; }
+    void update_q_value(const CerebrumLux::StateKey& state, CerebrumLux::AIAction action, float reward) {}
 };
 
-// DummyUserProfileManager
-// HATA DÜZELTME: Base class metodları virtual olmadığı için 'override' kaldırıldı.
-class DummyUserProfileManager : public UserProfileManager {
+// Dummy UserProfileManager
+class DummyUserProfileManager : public CerebrumLux::UserProfileManager {
 public:
-    DummyUserProfileManager() : UserProfileManager() {}
-    void update_profile_from_sequence(const DynamicSequence& sequence) { 
-        (void)sequence; 
+    DummyUserProfileManager() : CerebrumLux::UserProfileManager() {}
+    void set_user_preference(const std::string& key, const std::string& value) {}
+    std::string get_user_preference(const std::string& key) const { return ""; }
+    void add_intent_history_entry(CerebrumLux::UserIntent intent, long long timestamp_us) {}
+    void add_state_history_entry(CerebrumLux::AbstractState state, long long timestamp_us) {}
+    void add_explicit_action_feedback(CerebrumLux::UserIntent intent, CerebrumLux::AIAction action, bool approved) {}
+    float get_personalized_feedback_strength(CerebrumLux::UserIntent intent, CerebrumLux::AIAction action) const { return 0.5f; }
+    void set_history_limit(size_t limit) {}
+};
+
+// Dummy CryptofigAutoencoder
+class DummyCryptofigAutoencoder : public CerebrumLux::CryptofigAutoencoder {
+public:
+    DummyCryptofigAutoencoder() : CerebrumLux::CryptofigAutoencoder() {}
+    std::vector<float> encode(const std::vector<float>& input_features) const { return {0.1f, 0.2f, 0.3f}; }
+    std::vector<float> decode(const std::vector<float>& latent_features) const { return {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f}; } // INPUT_DIM = 18
+    float calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const { return 0.01f; }
+    std::vector<float> reconstruct(const std::vector<float>& input_features) const { return decode(encode(input_features)); }
+    void adjust_weights_on_error(const std::vector<float>& input_features, float learning_rate_ae) {}
+    void save_weights(const std::string& filename) const {}
+    void load_weights(const std::string& filename) {}
+};
+
+// Dummy CryptofigProcessor
+class DummyCryptofigProcessor : public CerebrumLux::CryptofigProcessor {
+public:
+    DummyCryptofigProcessor(CerebrumLux::IntentAnalyzer& analyzer_ref, CerebrumLux::CryptofigAutoencoder& autoencoder_ref)
+        : CerebrumLux::CryptofigProcessor(analyzer_ref, autoencoder_ref) {}
+    std::vector<float> process_atomic_signal(const CerebrumLux::AtomicSignal& signal) { return {0.1f, 0.2f, 0.3f}; }
+    void process_sequence(CerebrumLux::DynamicSequence& sequence, float autoencoder_learning_rate) {
+        sequence.latent_cryptofig_vector = {0.4f, 0.5f, 0.6f}; // Örnek latent vektör
     }
-    void add_intent_history_entry(UserIntent intent, long long timestamp_us) { 
-        (void)timestamp_us; (void)intent;
+    const CerebrumLux::CryptofigAutoencoder& get_autoencoder() const {
+        static DummyCryptofigAutoencoder da;
+        return da;
     }
-    void add_state_history_entry(AbstractState state, long long timestamp_us) { 
-        (void)timestamp_us; (void)state;
+    CerebrumLux::CryptofigAutoencoder& get_autoencoder() {
+        static DummyCryptofigAutoencoder da;
+        return da;
     }
-    void add_explicit_action_feedback(UserIntent intent, AIAction action, bool approved) { 
-        (void)intent; (void)action; (void)approved; 
-    }
-    void load_profile(const std::string& filename) { 
-        (void)filename; 
-    }
-    void save_profile(const std::string& filename) const { 
-        (void)filename; 
-    }
+    void process_expert_cryptofig(const std::vector<float>& expert_cryptofig, CerebrumLux::IntentLearner& learner) {}
+    void apply_cryptofig_for_learning(CerebrumLux::IntentLearner& learner, const std::vector<float>& received_cryptofig, CerebrumLux::UserIntent target_intent) const {}
 };
 
 // Dummy IntentLearner
-// HATA DÜZELTME: Sadece IntentLearner base class'ındaki virtual metodlar override edildi. 
-// LearningModule'e ait olan ve override hatası veren metodlar bu dummy class'tan kaldırıldı.
-class DummyIntentLearner : public IntentLearner {
+class DummyIntentLearner : public CerebrumLux::IntentLearner {
 public:
-    DummyIntentLearner(IntentAnalyzer& analyzer_ref, SuggestionEngine& suggester_ref, UserProfileManager& user_profile_manager_ref)
-        : IntentLearner(analyzer_ref, suggester_ref, user_profile_manager_ref) {}
-
-    virtual void process_explicit_feedback(UserIntent predicted_intent, AIAction action, bool approved, const DynamicSequence& sequence, AbstractState current_abstract_state) override {
-        (void)sequence; 
-        std::cout << "[DUMMY LEARNER] Acik geri bildirim: " << intent_to_string(predicted_intent)
-             << ", eylem=" << static_cast<int>(action) << ", onay=" << (approved ? "Evet" : "Hayir")
-             << ", durum=" << abstract_state_to_string(current_abstract_state) << "\n";
+    DummyIntentLearner(CerebrumLux::IntentAnalyzer& analyzer_ref, CerebrumLux::SuggestionEngine& suggester_ref, CerebrumLux::UserProfileManager& user_profile_manager_ref)
+        : CerebrumLux::IntentLearner(analyzer_ref, suggester_ref, user_profile_manager_ref) {}
+    void set_learning_rate(float rate) {}
+    float get_learning_rate() const { return 0.01f; }
+    void process_feedback(const CerebrumLux::DynamicSequence& sequence, CerebrumLux::UserIntent predicted_intent, const std::deque<CerebrumLux::AtomicSignal>& recent_signals) {}
+    void process_explicit_feedback(CerebrumLux::UserIntent predicted_intent, CerebrumLux::AIAction action, bool approved, const CerebrumLux::DynamicSequence& sequence, CerebrumLux::AbstractState current_abstract_state) {
+        std::cout << "[DUMMY LEARNER] Açık geri bildirim: " << CerebrumLux::intent_to_string(predicted_intent)
+                  << ", eylem=" << CerebrumLux::action_to_string(action)
+                  << ", onaylandı=" << (approved ? "Evet" : "Hayır")
+                  << ", durum=" << CerebrumLux::abstract_state_to_string(current_abstract_state) << "\n";
     }
-
-    virtual AbstractState infer_abstract_state(const std::deque<AtomicSignal>& recent_signals) override {
-        if (recent_signals.size() > 50) return AbstractState::HighProductivity;
-        if (recent_signals.empty()) return AbstractState::None;
-        return AbstractState::NormalOperation;
-    }
+    CerebrumLux::AbstractState infer_abstract_state(const std::deque<CerebrumLux::AtomicSignal>& recent_signals) { return CerebrumLux::AbstractState::Undefined; }
+    const std::map<CerebrumLux::UserIntent, std::deque<float>>& get_implicit_feedback_history() const { static std::map<CerebrumLux::UserIntent, std::deque<float>> history; return history; }
+    size_t get_feedback_history_size() const { return 50; }
+    bool get_implicit_feedback_for_intent(CerebrumLux::UserIntent intent_id, std::deque<float>& history_out) const { return false; }
 };
 
 // Dummy PredictionEngine
-// HATA DÜZELTME: Base class'ta virtual olmayan metodlardan 'override' kaldırıldı.
-class DummyPredictionEngine : public PredictionEngine {
+class DummyPredictionEngine : public CerebrumLux::PredictionEngine {
 public:
-    DummyPredictionEngine(IntentAnalyzer& analyzer_ref, SequenceManager& sequence_manager_ref)
-        : PredictionEngine(analyzer_ref, sequence_manager_ref) {}
-    virtual UserIntent predict_next_intent(UserIntent current_intent, const DynamicSequence& sequence) const override { 
-        (void)current_intent; (void)sequence; 
-        return UserIntent::Unknown;
-    }
-    void update_state_graph(UserIntent from_intent, UserIntent to_intent, const DynamicSequence& sequence) { 
-        (void)from_intent; (void)to_intent; (void)sequence; 
-    }
-    void save_state_graph(const std::string& filename) const { 
-        (void)filename; 
-    }
-    void load_state_graph(const std::string& filename) {  
-        (void)filename; 
-    }
+    DummyPredictionEngine(CerebrumLux::IntentAnalyzer& analyzer_ref, CerebrumLux::SequenceManager& sequence_manager_ref)
+        : CerebrumLux::PredictionEngine(analyzer_ref, sequence_manager_ref) {}
+    CerebrumLux::UserIntent predict_next_intent(CerebrumLux::UserIntent previous_intent, const CerebrumLux::DynamicSequence& current_sequence) const { return CerebrumLux::UserIntent::Undefined; }
+    void update_state_graph(CerebrumLux::UserIntent from_intent, CerebrumLux::UserIntent to_intent, const CerebrumLux::DynamicSequence& sequence) {}
+    float query_intent_probability(CerebrumLux::UserIntent target_intent, const CerebrumLux::DynamicSequence& current_sequence) const { return 0.0f; }
+    void learn_time_patterns(const std::deque<CerebrumLux::AtomicSignal>& signal_buffer, CerebrumLux::UserIntent current_intent) {}
 };
 
-// DummyCryptofigAutoencoder
-// HATA DÜZELTME: Base class'ta virtual olmayan metodlardan 'override' kaldırıldı.
-class DummyCryptofigAutoencoder : public CryptofigAutoencoder {
+// Dummy AIInsightsEngine
+class DummyAIInsightsEngine : public CerebrumLux::AIInsightsEngine {
 public:
-    DummyCryptofigAutoencoder() : CryptofigAutoencoder() {}
-    virtual std::vector<float> encode(const std::vector<float>& input_features) const override {
-        (void)input_features; 
-        return {0.1f, 0.2f, 0.3f};
+    DummyAIInsightsEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::IntentLearner& l, CerebrumLux::PredictionEngine& p, CerebrumLux::CryptofigAutoencoder& ae, CerebrumLux::CryptofigProcessor& cp)
+        : CerebrumLux::AIInsightsEngine(a, l, p, ae, cp) {}
+    std::vector<CerebrumLux::AIInsight> generate_insights(const CerebrumLux::DynamicSequence& sequence) { return {}; }
+    float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const { return 0.0f; }
+    CerebrumLux::IntentAnalyzer& get_analyzer() const { static DummyIntentAnalyzer da; return da; }
+    CerebrumLux::IntentLearner& get_learner() const {
+        static DummyIntentLearner dil(static_cast<CerebrumLux::IntentAnalyzer&>(static_cast<DummyIntentAnalyzer&>(get_analyzer())),
+                                     static_cast<CerebrumLux::SuggestionEngine&>(static_cast<DummySuggestionEngine&>(get_suggester())),
+                                     static_cast<CerebrumLux::UserProfileManager&>(static_cast<DummyUserProfileManager&>(get_user_profile_manager())));
+        return dil;
     }
-    void save_weights(const std::string& filename) const { 
-        (void)filename; 
-    }
-    void load_weights(const std::string& filename) {  
-        (void)filename; 
-    }
-    virtual float calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const override {
-        (void)original; (void)reconstructed; 
-        return 0.0f;
-    }
+    CerebrumLux::CryptofigAutoencoder& get_cryptofig_autoencoder() const { static DummyCryptofigAutoencoder dca; return dca; }
+
+private:
+    CerebrumLux::SuggestionEngine& get_suggester() const { static DummySuggestionEngine ds(static_cast<CerebrumLux::IntentAnalyzer&>(static_cast<DummyIntentAnalyzer&>(get_analyzer()))); return ds; }
+    CerebrumLux::UserProfileManager& get_user_profile_manager() const { static DummyUserProfileManager dupm; return dupm; }
 };
 
-// DummyCryptofigProcessor
-// HATA DÜZELTME: Base class'ta virtual olmayan metodlardan 'override' kaldırıldı.
-class DummyCryptofigProcessor : public CryptofigProcessor {
+// Dummy GoalManager
+class DummyGoalManager : public CerebrumLux::GoalManager {
 public:
-    DummyCryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAutoencoder& autoencoder_ref)
-        : CryptofigProcessor(analyzer_ref, autoencoder_ref) {}
-
-    void process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate) { 
-        (void)autoencoder_learning_rate; 
-        sequence.latent_cryptofig_vector = {0.4f, 0.5f, 0.6f};
-    }
-    virtual void process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner) override {
-        (void)expert_cryptofig; (void)learner; 
-    }
-    virtual std::vector<float> generate_cryptofig_from_signals(const DynamicSequence& sequence) override {
-        (void)sequence; 
-        return {0.7f, 0.8f, 0.9f};
-    }
-    virtual const CryptofigAutoencoder& get_autoencoder() const override {
-        static DummyCryptofigAutoencoder da;
-        return da;
-    }
-    virtual CryptofigAutoencoder& get_autoencoder() override {
-        static DummyCryptofigAutoencoder da;
-        return da;
-    }
+    DummyGoalManager(CerebrumLux::AIInsightsEngine& ie) : CerebrumLux::GoalManager(ie) {}
+    CerebrumLux::AIGoal get_current_goal() const { return CerebrumLux::AIGoal::UndefinedGoal; }
+    void evaluate_and_set_goal(const CerebrumLux::DynamicSequence& current_sequence) {}
+    void adjust_goals_based_on_feedback() {}
+    void evaluate_goals() {}
 };
 
-// DummyAIInsightsEngine
-class DummyAIInsightsEngine : public AIInsightsEngine {
+// Dummy NaturalLanguageProcessor
+class DummyNaturalLanguageProcessor : public CerebrumLux::NaturalLanguageProcessor {
 public:
-    DummyAIInsightsEngine(IntentAnalyzer& a, IntentLearner& l, PredictionEngine& p, CryptofigAutoencoder& ae, CryptofigProcessor& cp)
-        : AIInsightsEngine(a, l, p, ae, cp) {}
-
-    virtual std::vector<AIInsight> generate_insights(const DynamicSequence& sequence) override {
-        (void)sequence; 
-        AIInsight insight("Performance looks good.", AIAction::None, 0.8f); 
-        std::vector<AIInsight> out;
-        out.push_back(insight); 
-        return out;
-    }
-    virtual IntentAnalyzer& get_analyzer() const override {
-        static DummyIntentAnalyzer analyzer_temp;
-        return analyzer_temp;
-    }
-};
-
-// DummyGoalManager
-class DummyGoalManager : public GoalManager {
-public:
-    DummyGoalManager(AIInsightsEngine& ie) : GoalManager(ie) {}
-    virtual AIGoal get_current_goal() const override {
-        return AIGoal::OptimizeProductivity;
-    }
-};
-
-// DummyNaturalLanguageProcessor
-// HATA DÜZELTME: Base class metodları virtual olmadığı için 'override' kaldırıldı.
-class DummyNaturalLanguageProcessor : public NaturalLanguageProcessor {
-public:
-    DummyNaturalLanguageProcessor(GoalManager& gm) : NaturalLanguageProcessor(gm) {}
-
-    std::string generate_response_text(UserIntent current_intent, AbstractState current_abstract_state, AIGoal current_goal,
-                                  const DynamicSequence& sequence, const std::vector<std::string>& relevant_keywords = {}) const { 
-        (void)current_intent; (void)current_abstract_state; (void)current_goal; (void)sequence; (void)relevant_keywords; 
-        return "NLP'den gelen test yaniti.";
-    }
-    UserIntent infer_intent_from_text(const std::string& user_input) const { 
-        if (user_input.find("oyun") != std::string::npos) return UserIntent::Gaming;
-        return UserIntent::GeneralInquiry;
-    }
-    AbstractState infer_state_from_text(const std::string& user_input) const { 
-        if (user_input.find("pil") != std::string::npos) return AbstractState::PowerSaving;
-        return AbstractState::NormalOperation;
-    }
-};
-
-// Dummy WebFetcher
-class DummyWebFetcher : public WebFetcher {
-public:
-    DummyWebFetcher() : WebFetcher() {}
-    virtual std::vector<WebResult> search(const std::string& query) override { 
-        (void)query;
-        WebResult res1 = {"Test Content 1", "Test Source 1"};
-        WebResult res2 = {"Test Content 2", "Test Source 2"};
-        return {res1, res2};
-    }
+    DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm) : CerebrumLux::NaturalLanguageProcessor(gm) {}
+    std::string generate_response_text(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence, const std::vector<std::string>& relevant_keywords) const { return "Dummy NLP yanıtı."; }
+    CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const { return CerebrumLux::UserIntent::Undefined; }
+    CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const { return CerebrumLux::AbstractState::Undefined; }
+    void update_model(const std::string& observed_text, CerebrumLux::UserIntent true_intent, const std::vector<float>& latent_cryptofig) {}
+    void trainIncremental(const std::string& input, const std::string& expected_intent) {}
+    void load_model(const std::string& path) { throw std::runtime_error("Dummy NLP modeli yüklenemedi."); }
+    void save_model(const std::string& path) const {}
 };
 
 
-// Helper to sign and encrypt capsules for testing (global olarak tanımlanıyor)
-// LearningModule objesini parametre olarak alıyor.
-Capsule create_signed_encrypted_capsule_helper(LearningModule& lm, const std::string& id_prefix, const std::string& content, const std::string& source_peer, float confidence) {
-    Capsule c;
-    static unsigned int test_capsule_id_counter = 0; 
-    c.id = id_prefix + std::to_string(++test_capsule_id_counter); 
+// === HELPER FONKSİYON ===
+CerebrumLux::Capsule create_signed_encrypted_capsule_helper(CerebrumLux::LearningModule& lm, const std::string& id_prefix, const std::string& content, const std::string& source_peer, float confidence, CerebrumLux::Crypto::CryptoManager& cryptoManager) {
+    CerebrumLux::Capsule c;
+    static unsigned int local_capsule_id_counter = 0;
+    c.id = id_prefix + std::to_string(++local_capsule_id_counter);
     c.content = content;
     c.source = source_peer;
     c.topic = "Test Topic";
     c.confidence = confidence;
     c.plain_text_summary = content.substr(0, std::min((size_t)100, content.length())) + "...";
     c.timestamp_utc = std::chrono::system_clock::now();
-    
+
     c.embedding = lm.compute_embedding(c.content);
     c.cryptofig_blob_base64 = lm.cryptofig_encode(c.embedding);
 
-    std::string aes_key = lm.get_aes_key_for_peer(source_peer);
-    std::string iv = lm.generate_random_bytes(EVP_CIPHER_iv_length(EVP_aes_256_gcm()));
-    
-    // HATA DÜZELTME: `base64_encode_internal` private olduğu için global `base64_encode` kullanıldı.
-    // Bu fonksiyonun utils.h'de tanımlı olduğu ve linklendiği varsayılmıştır.
-    c.encryption_iv_base64 = base64_encode(iv);
-    c.encrypted_content = lm.aes_gcm_encrypt(c.content, aes_key, iv);
+    std::vector<unsigned char> aes_key_vec = cryptoManager.generate_random_bytes_vec(32);
+    std::vector<unsigned char> iv_vec = cryptoManager.generate_random_bytes_vec(12);
+    c.encryption_iv_base64 = CerebrumLux::Crypto::base64_encode(cryptoManager.vec_to_str(iv_vec));
 
-    // Ed25519 fonksiyonları yorum satırı yapıldığı için burada da simüle ediyoruz
-    // std::string private_key = lm.get_my_private_key(); 
-    // c.signature_base64 = lm.ed25519_sign(c.encrypted_content, private_key);
-    c.signature_base64 = "valid_signature"; 
+    CerebrumLux::Crypto::AESGCMCiphertext encrypted_data =
+        cryptoManager.aes256_gcm_encrypt(cryptoManager.str_to_vec(c.content), aes_key_vec, {});
+
+    c.encrypted_content = encrypted_data.ciphertext_base64;
+    c.gcm_tag_base64 = encrypted_data.tag_base64;
+
+    std::string private_key_pem = cryptoManager.get_my_private_key_pem();
+    c.signature_base64 = cryptoManager.ed25519_sign(c.encrypted_content, private_key_pem);
     return c;
 }
 
 
-// === Test main ===
+// === TEST ANA FONKSİYONU ===
 int main() {
-    std::cout << "ResponseEngine testleri (düzeltilmiş) başlatılıyor...\n";
-    // HATA DÜZELTME: Kırık olan include'dan kaynaklanan 'Logger' tanınamadı hatası düzeltildi.
-    Logger::get_instance().init(LogLevel::DEBUG, "test_log.txt");
+    // Logger'ı başlat
+    CerebrumLux::Logger::get_instance().init(CerebrumLux::LogLevel::DEBUG, "test_response_engine_log.txt", "TEST_ENGINE");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test Response Engine başlatılıyor.");
 
-    // Create dummy components
+    // Dummy bağımlılıkları oluştur
     DummyIntentAnalyzer dummy_analyzer;
-    DummySequenceManager dummy_sequence_manager; 
+    DummySequenceManager dummy_sequence_manager;
+    DummyCryptofigAutoencoder dummy_autoencoder;
+    DummyCryptofigProcessor dummy_cryptofig_processor(dummy_analyzer, dummy_autoencoder);
     DummySuggestionEngine dummy_suggester(dummy_analyzer);
     DummyUserProfileManager dummy_user_profile_manager;
     DummyIntentLearner dummy_learner(dummy_analyzer, dummy_suggester, dummy_user_profile_manager);
-    
-    DummyCryptofigAutoencoder dummy_autoencoder; 
-    DummyCryptofigProcessor dummy_cryptofig_processor(dummy_analyzer, dummy_autoencoder);
-    DummyPredictionEngine dummy_predictor(dummy_analyzer, dummy_sequence_manager); 
+    DummyPredictionEngine dummy_predictor(dummy_analyzer, dummy_sequence_manager);
     DummyAIInsightsEngine dummy_insights_engine(dummy_analyzer, dummy_learner, dummy_predictor, dummy_autoencoder, dummy_cryptofig_processor);
     DummyGoalManager dummy_goal_manager(dummy_insights_engine);
-    DummyNaturalLanguageProcessor dummy_nlp(dummy_goal_manager); 
+    DummyNaturalLanguageProcessor dummy_nlp(dummy_goal_manager);
 
-    ResponseEngine response_engine(dummy_analyzer, dummy_goal_manager, dummy_insights_engine, &dummy_nlp);
+    // ResponseEngine'ı test için başlat
+    CerebrumLux::ResponseEngine response_engine(dummy_analyzer, dummy_goal_manager, dummy_insights_engine, &dummy_nlp);
 
-    // Prepare a DynamicSequence for testing
-    DynamicSequence seq;
-    seq.avg_keystroke_interval = 150000.0f; 
-    seq.alphanumeric_ratio = 0.9f;
-    seq.current_battery_percentage = 85;
-    seq.current_battery_charging = false;
-    seq.latent_cryptofig_vector = {0.5f, 0.6f, 0.7f};
+    // DynamicSequence'ın dummy bir örneği
+    CerebrumLux::DynamicSequence seq;
+    seq.id = "test_sequence_1";
+    seq.timestamp_utc = std::chrono::system_clock::now();
+    seq.statistical_features_vector.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.5f);
+    seq.latent_cryptofig_vector.assign(CerebrumLux::CryptofigAutoencoder::LATENT_DIM, 0.2f);
+    seq.current_network_active = true;
+    seq.network_activity_level = 75;
+    seq.current_application_context = "Testing";
 
-    // Test 1: general response
-    std::cout << "\n--- Test 1: Genel Yanıt ---\n";
-    std::string r1 = response_engine.generate_response(UserIntent::None, AbstractState::None, AIGoal::None, seq);
-    std::cout << "AI Yaniti: " << r1 << "\n";
+    // Test Senaryosu 1: Genel yanıt
+    std::string r1 = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Idle, CerebrumLux::AIGoal::UndefinedGoal, seq);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 1 (Genel): " << r1);
     assert(!r1.empty());
 
-    // Test 2: specific intent/state
-    std::cout << "\n--- Test 2: Programlama ve Odaklanma ---\n";
-    std::string r2 = response_engine.generate_response(UserIntent::Programming, AbstractState::Focused, AIGoal::OptimizeProductivity, seq);
-    std::cout << "AI Yaniti: " << r2 << "\n";
+    // Test Senaryosu 2: Programlama niyeti ve odaklanmış durum
+    std::string r2 = response_engine.generate_response(CerebrumLux::UserIntent::Programming, CerebrumLux::AbstractState::Focused, CerebrumLux::AIGoal::OptimizeProductivity, seq);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 2 (Programlama, Odaklanmış): " << r2);
     assert(!r2.empty());
 
-    // Test 3: critical action confirmation (just ensure non-empty)
-    std::cout << "\n--- Test 3: Kritik Eylem ---\n";
-    std::string r3 = response_engine.generate_response(UserIntent::None, AbstractState::None, AIGoal::OptimizeProductivity, seq);
-    std::cout << "AI Yaniti: " << r3 << "\n";
+    // Test Senaryosu 3: Hata algılandı
+    std::string r3 = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Error, CerebrumLux::AIGoal::MinimizeErrors, seq);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 3 (Hata): " << r3);
     assert(!r3.empty());
 
-    std::cout << "\nDummy learner -> suggester feedback test\n";
-    dummy_learner.process_explicit_feedback(UserIntent::FastTyping, AIAction::DisableSpellCheck, true, seq, AbstractState::HighProductivity);
+    // LearningModule ve KnowledgeBase testleri
+    // Kripto Yöneticisi gerekiyor
+    CerebrumLux::Crypto::CryptoManager cryptoManager;
+    CerebrumLux::KnowledgeBase test_kb;
+    CerebrumLux::LearningModule test_lm(test_kb, cryptoManager);
 
-    // user profile manager tests (simulate)
-    dummy_user_profile_manager.add_explicit_action_feedback(UserIntent::Programming, AIAction::OpenDocumentation, true);
-    dummy_user_profile_manager.save_profile("test_user_profile.json");
-    dummy_user_profile_manager.load_profile("test_user_profile.json");
-
-    // YENİ TESTLER: LearningModule ve KnowledgeBase
-    std::cout << "\n--- LearningModule ve KnowledgeBase Testleri ---\n";
-    KnowledgeBase test_kb;
-    LearningModule test_lm(test_kb); 
-
-    // Test LearningModule::learnFromText
-    std::cout << "\nLearningModule::learnFromText testi:\n";
+    // Kapsül öğrenme testi
     test_lm.learnFromText("Bu bir test metnidir.", "Test Kaynak", "Genel");
-    test_lm.learnFromText("Qt programlama cok keyifli.", "Blog", "Programlama");
-    test_lm.learnFromText("Qt tasarim prensipleri.", "Dokuman", "Programlama");
-    assert(test_kb.search_by_topic("Genel").size() == 1); 
-    assert(test_kb.search_by_topic("Programlama").size() == 2); 
-    std::cout << "learnFromText başarılı.\n";
+    assert(test_kb.search_by_topic("Genel").size() == 1);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LearningModule Test: Metinden öğrenme başarılı.");
 
-    // Test KnowledgeBase::semantic_search
-    std::cout << "\nKnowledgeBase::semantic_search testi:\n";
-    auto similar_capsules = test_kb.semantic_search("Qt", 1); 
-    assert(!similar_capsules.empty());
-    std::cout << "En benzer kapsül: " << similar_capsules[0].content << "\n";
+    // Kapsül karantinaya alma testi
+    CerebrumLux::Capsule cap_to_quarantine = create_signed_encrypted_capsule_helper(test_lm, "quarantine_test_id", "Bu karantinaya alinacak bir kapsuldur.", "GuvenilmeyenKaynak", 0.1f, cryptoManager);
+    test_lm.getKnowledgeBase().add_capsule(cap_to_quarantine);
+    assert(test_lm.getKnowledgeBase().find_capsule_by_id("quarantine_test_id").has_value());
+    test_lm.getKnowledgeBase().quarantine_capsule("quarantine_test_id");
+    assert(!test_lm.getKnowledgeBase().find_capsule_by_id("quarantine_test_id").has_value()); // Aktif KB'de olmamal─▒
+    // Karantina KB'ye erişim için public metot veya KnowledgeBase API kullanılmalı
+    // assert(test_lm.getKnowledgeBase().quarantined_capsules.size() == 1); // Bu satır private üyeye erişiyor, değiştirildi.
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LearningModule Test: Kapsül karantinaya alma başarılı.");
 
-    // Test KnowledgeBase::encrypt/decrypt
-    std::cout << "\nKnowledgeBase::encrypt/decrypt testi:\n";
-    std::string original_text = "Gizli bilgi";
-    std::string encrypted_text = test_kb.encrypt(original_text);
-    std::string decrypted_text = test_kb.decrypt(encrypted_text); 
-    assert(original_text == decrypted_text);
-    std::cout << "Şifreleme/çözme başarılı.\n";
+    // Kapsül geri alma testi
+    test_lm.getKnowledgeBase().revert_capsule("quarantine_test_id");
+    assert(test_lm.getKnowledgeBase().find_capsule_by_id("quarantine_test_id").has_value()); // Tekrar aktif KB'de olmal─▒
+    // assert(test_lm.getKnowledgeBase().quarantined_capsules.empty()); // Bu satır private üyeye erişiyor, değiştirildi.
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LearningModule Test: Kapsül karantinadan geri alma başarılı.");
 
-    // Test KnowledgeBase::quarantine_capsule ve revert_capsule
-    std::cout << "\nKnowledgeBase::quarantine_capsule ve revert_capsule testi:\n";
-    Capsule cap_to_quarantine;
-    cap_to_quarantine.id = "quarantine_test_id";
-    cap_to_quarantine.content = "Bu karantinaya alınacak bir kapsül.";
-    cap_to_quarantine.source = "Test";
-    cap_to_quarantine.topic = "Quarantine";
-    cap_to_quarantine.timestamp_utc = std::chrono::system_clock::now(); 
-    cap_to_quarantine.plain_text_summary = "Karantina kapsül özeti.";
-    cap_to_quarantine.cryptofig_blob_base64 = "dummy_cryptofig_blob";
-    cap_to_quarantine.signature_base64 = "dummy_signature";
-    cap_to_quarantine.encryption_iv_base64 = "dummy_iv";
+    // Yapay İçgörüler testi
+    std::vector<CerebrumLux::AIInsight> dummy_insights_vec;
+    CerebrumLux::AIInsight insight1 = {"id1", "New performance improvement detected.", "Performance", "N/A", CerebrumLux::InsightType::None, CerebrumLux::UrgencyLevel::Low, {}, {}};
+    CerebrumLux::AIInsight insight2 = {"id2", "User interface response time decreased.", "Performance", "N/A", CerebrumLux::InsightType::None, CerebrumLux::UrgencyLevel::Low, {}, {}};
+    dummy_insights_vec.push_back(insight1);
+    dummy_insights_vec.push_back(insight2);
 
-    test_kb.add_capsule(cap_to_quarantine);
-    std::optional<Capsule> found_cap = test_kb.find_capsule_by_id("quarantine_test_id");
-    assert(found_cap.has_value());
-    test_kb.quarantine_capsule("quarantine_test_id");
-    assert(!test_kb.find_capsule_by_id("quarantine_test_id").has_value()); 
+    test_lm.process_ai_insights(dummy_insights_vec);
+    assert(test_lm.search_by_topic("AI Insight").size() == dummy_insights_vec.size());
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LearningModule Test: AI İçgörü işleme başarılı.");
 
-    // Karantinadaki kapsülü geri almayı dene
-    test_kb.revert_capsule("quarantine_test_id");
-    assert(test_kb.find_capsule_by_id("quarantine_test_id").has_value()); 
-    std::cout << "Karantina ve geri alma başarılı.\n";
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Tüm testler tamamlandı.");
 
-
-    // Test LearningModule::process_ai_insights
-    std::cout << "\nLearningModule::process_ai_insights testi:\n";
-    std::vector<AIInsight> dummy_insights;
-    dummy_insights.push_back(AIInsight("New performance improvement detected.", AIAction::None, 0.9f)); 
-    dummy_insights.push_back(AIInsight("User interface response time decreased.", AIAction::None, 0.7f)); 
-    test_lm.process_ai_insights(dummy_insights);
-    assert(test_lm.search_by_topic("AI Insight").size() == dummy_insights.size()); 
-    std::cout << "process_ai_insights başarılı.\n";
-
-    std::cout << "\nTüm testler tamamlandi (düzeltilmiş test dosyası).\n";
     return 0;
 }

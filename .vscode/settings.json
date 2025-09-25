@@ -78,7 +78,8 @@
         "stdfloat": "cpp",
         "valarray": "cpp",
         "complex": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "qlineseries": "cpp"
     },
     "cmake.configureSettings": {
         "CMAKE_PREFIX_PATH": "C:/Qt/6.9.2/mingw_64",

@@ -1,54 +1,57 @@
-#ifndef CEREBRUM_LUX_NATURAL_LANGUAGE_PROCESSOR_H
-#define CEREBRUM_LUX_NATURAL_LANGUAGE_PROCESSOR_H
+#ifndef NATURAL_LANGUAGE_PROCESSOR_H
+#define NATURAL_LANGUAGE_PROCESSOR_H
 
 #include <string>
 #include <vector>
 #include <map>
-#include <mutex>
-#include "../core/enums.h"
-#include "../core/utils.h"
-#include "../planning_execution/goal_manager.h"
+#include <algorithm> // std::transform için
+#include "../core/enums.h" // UserIntent, AbstractState, AIGoal için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
+#include "../planning_execution/goal_manager.h" // GoalManager için (TAM TANIM İÇİN)
+#include "../brain/autoencoder.h" // CryptofigAutoencoder için
+
+namespace CerebrumLux { // NaturalLanguageProcessor sınıfı bu namespace içine alınacak
 
 class NaturalLanguageProcessor {
 public:
-    explicit NaturalLanguageProcessor(GoalManager& goal_manager_ref);
-    NaturalLanguageProcessor(); // For tooling
+    explicit NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref); // GoalManager türü güncellendi
 
-    UserIntent infer_intent_from_text(const std::string& user_input) const;
-    AbstractState infer_state_from_text(const std::string& user_input) const;
+    CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const;
+    CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const;
 
+    // NLP'nin yanıt üretimi için merkezi metot
     std::string generate_response_text(
-        UserIntent current_intent,
-        AbstractState current_abstract_state,
-        AIGoal current_goal,
-        const DynamicSequence& sequence,
-        const std::vector<std::string>& relevant_keywords = {}
+        CerebrumLux::UserIntent current_intent,
+        CerebrumLux::AbstractState current_abstract_state,
+        CerebrumLux::AIGoal current_goal,
+        const CerebrumLux::DynamicSequence& sequence,
+        const std::vector<std::string>& relevant_keywords
     ) const;
 
-    void update_model(const std::string& observed_text, UserIntent true_intent, const std::vector<float>& latent_cryptofig);
+    // NLP modelini güncelleme ve eğitme
+    void update_model(const std::string& observed_text, CerebrumLux::UserIntent true_intent, const std::vector<float>& latent_cryptofig);
+    void trainIncremental(const std::string& input, const std::string& expected_intent);
 
+    // Modeli yükleme ve kaydetme (placeholder)
     void load_model(const std::string& path);
     void save_model(const std::string& path) const;
 
-    std::string predict_intent(const std::string& input);
-    
-    // 🔹 Incremental training fonksiyonu (enum uyumlu)
-    void trainIncremental(const std::string& input, const std::string& expected_intent);
-
 private:
-    GoalManager* goal_manager; // Changed to pointer
-    std::map<UserIntent, std::vector<std::string>> intent_keyword_map;
-    std::map<AbstractState, std::vector<std::string>> state_keyword_map;
-    mutable std::map<UserIntent, std::vector<float>> intent_cryptofig_weights;
-    float online_learning_rate = 0.05f;
-    mutable std::mutex model_mutex;
+    CerebrumLux::GoalManager& goal_manager; // GoalManager referansı
 
-    static std::string to_lower_copy(const std::string& s);
-    static bool contains_keyword(const std::string& lower_text, const std::string& lower_keyword);
-    float cryptofig_score_for_intent(UserIntent intent, const std::vector<float>& latent_cryptofig) const;
-    UserIntent rule_based_intent_guess(const std::string& lower_text) const;
-    AbstractState rule_based_state_guess(const std::string& lower_text) const;
-    std::string fallback_response_for_intent(UserIntent intent, AbstractState state, const DynamicSequence& sequence) const;
+    // Anahtar kelime ve niyet/durum eşleşmeleri
+    std::map<CerebrumLux::UserIntent, std::vector<std::string>> intent_keyword_map;
+    std::map<CerebrumLux::AbstractState, std::vector<std::string>> state_keyword_map;
+
+    mutable std::map<CerebrumLux::UserIntent, std::vector<float>> intent_cryptofig_weights; // NLP'nin kendi dahili model ağırlıkları
+
+    // Yardımcı fonksiyonlar
+    float cryptofig_score_for_intent(CerebrumLux::UserIntent intent, const std::vector<float>& latent_cryptofig) const;
+    CerebrumLux::UserIntent rule_based_intent_guess(const std::string& lower_text) const;
+    CerebrumLux::AbstractState rule_based_state_guess(const std::string& lower_text) const;
+    std::string fallback_response_for_intent(CerebrumLux::UserIntent intent, CerebrumLux::AbstractState state, const CerebrumLux::DynamicSequence& sequence) const;
 };
 
-#endif // CEREBRUM_LUX_NATURAL_LANGUAGE_PROCESSOR_H
+} // namespace CerebrumLux
+
+#endif // NATURAL_LANGUAGE_PROCESSOR_H

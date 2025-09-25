@@ -1,48 +1,242 @@
 #include <iostream>
 #include <string>
-#include "communication/natural_language_processor.h"
-#include "core/logger.h"
+#include <vector>
+#include <algorithm> // std::transform için
+#include <fstream> // Dosya okuma/yazma için
+#include <chrono> // std::chrono için
+#include <stdexcept> // std::runtime_error için
 
+#include "../communication/natural_language_processor.h"
+#include "../core/logger.h"
+#include "../core/enums.h" // LogLevel, UserIntent, AbstractState, AIAction, AIGoal için
+#include "../planning_execution/goal_manager.h"
+#include "../communication/ai_insights_engine.h"
+#include "../brain/intent_analyzer.h"
+#include "../brain/intent_learner.h"
+#include "../brain/prediction_engine.h"
+#include "../brain/autoencoder.h" // CryptofigAutoencoder için
+#include "../brain/cryptofig_processor.h"
+#include "../user/user_profile_manager.h" // UserProfileManager için
+#include "../communication/suggestion_engine.h" // SuggestionEngine için
+#include "../data_models/sequence_manager.h" // SequenceManager için
+#include "../sensors/atomic_signal.h" // AtomicSignal için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
+#include "../core/utils.h" // SafeRNG için
+
+// CerebrumLux namespace'ini kullanıma açmıyoruz, her yerde tam niteleme yapıyoruz.
+
+// === DUMMY SINIFLAR (NLP Trainer için basitleştirilmiş bağımlılıklar) ===
+
+// Dummy SequenceManager
+class DummySequenceManager : public CerebrumLux::SequenceManager {
+public:
+    DummySequenceManager() : CerebrumLux::SequenceManager() {}
+    bool add_signal(const CerebrumLux::AtomicSignal& signal, CerebrumLux::CryptofigProcessor& cryptofig_processor) { return true; }
+    std::deque<CerebrumLux::AtomicSignal> get_signal_buffer_copy() { return {}; } // Base class ile eşleşti (const'suz)
+    const CerebrumLux::DynamicSequence& get_current_sequence_ref() const {
+        static CerebrumLux::DynamicSequence dummy_seq;
+        return dummy_seq;
+    }
+};
+
+// Dummy IntentAnalyzer
+class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer {
+public:
+    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {}
+    CerebrumLux::UserIntent analyze_intent(const CerebrumLux::DynamicSequence& sequence) { return CerebrumLux::UserIntent::Undefined; }
+    float get_last_confidence() const { return 0.5f; }
+    void update_template_weights(CerebrumLux::UserIntent intent_id, const std::vector<float>& new_weights) {}
+    std::vector<float> get_intent_weights(CerebrumLux::UserIntent intent_id) const { return std::vector<float>(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f); }
+    void report_learning_performance(CerebrumLux::UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg) {}
+};
+
+// Dummy SuggestionEngine
+class DummySuggestionEngine : public CerebrumLux::SuggestionEngine {
+public:
+    DummySuggestionEngine(CerebrumLux::IntentAnalyzer& analyzer_ref) : CerebrumLux::SuggestionEngine(analyzer_ref) {}
+    CerebrumLux::AIAction suggest_action(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, const CerebrumLux::DynamicSequence& sequence) { return CerebrumLux::AIAction::None; }
+    void update_q_value(const CerebrumLux::StateKey& state, CerebrumLux::AIAction action, float reward) {}
+};
+
+// Dummy UserProfileManager
+class DummyUserProfileManager : public CerebrumLux::UserProfileManager {
+public:
+    DummyUserProfileManager() : CerebrumLux::UserProfileManager() {}
+    void set_user_preference(const std::string& key, const std::string& value) {}
+    std::string get_user_preference(const std::string& key) const { return ""; }
+    void add_intent_history_entry(CerebrumLux::UserIntent intent, long long timestamp_us) {}
+    void add_state_history_entry(CerebrumLux::AbstractState state, long long timestamp_us) {}
+    void add_explicit_action_feedback(CerebrumLux::UserIntent intent, CerebrumLux::AIAction action, bool approved) {}
+    float get_personalized_feedback_strength(CerebrumLux::UserIntent intent, CerebrumLux::AIAction action) const { return 0.5f; }
+    void set_history_limit(size_t limit) {}
+};
+
+// Dummy CryptofigAutoencoder
+class DummyCryptofigAutoencoder : public CerebrumLux::CryptofigAutoencoder {
+public:
+    DummyCryptofigAutoencoder() : CerebrumLux::CryptofigAutoencoder() {}
+    std::vector<float> encode(const std::vector<float>& input_features) const { return {0.1f, 0.2f, 0.3f}; }
+    std::vector<float> decode(const std::vector<float>& latent_features) const { return {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f}; } // INPUT_DIM = 18
+    float calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const { return 0.01f; }
+    std::vector<float> reconstruct(const std::vector<float>& input_features) const { return decode(encode(input_features)); }
+    void adjust_weights_on_error(const std::vector<float>& input_features, float learning_rate_ae) {}
+    void save_weights(const std::string& filename) const {}
+    void load_weights(const std::string& filename) {}
+};
+
+// Dummy CryptofigProcessor
+class DummyCryptofigProcessor : public CerebrumLux::CryptofigProcessor {
+public:
+    DummyCryptofigProcessor(CerebrumLux::IntentAnalyzer& analyzer_ref, CerebrumLux::CryptofigAutoencoder& autoencoder_ref)
+        : CerebrumLux::CryptofigProcessor(analyzer_ref, autoencoder_ref) {}
+    std::vector<float> process_atomic_signal(const CerebrumLux::AtomicSignal& signal) { return {0.1f, 0.2f, 0.3f}; }
+    void process_sequence(CerebrumLux::DynamicSequence& sequence, float autoencoder_learning_rate) {
+        // sequence.latent_cryptofig_vector = {0.4f, 0.5f, 0.6f}; // Gerçek işleme yok
+    }
+    const CerebrumLux::CryptofigAutoencoder& get_autoencoder() const {
+        static DummyCryptofigAutoencoder da;
+        return da;
+    }
+    CerebrumLux::CryptofigAutoencoder& get_autoencoder() {
+        static DummyCryptofigAutoencoder da;
+        return da;
+    }
+    void process_expert_cryptofig(const std::vector<float>& expert_cryptofig, CerebrumLux::IntentLearner& learner) {}
+    void apply_cryptofig_for_learning(CerebrumLux::IntentLearner& learner, const std::vector<float>& received_cryptofig, CerebrumLux::UserIntent target_intent) const {}
+};
+
+// Dummy IntentLearner
+class DummyIntentLearner : public CerebrumLux::IntentLearner {
+public:
+    DummyIntentLearner(CerebrumLux::IntentAnalyzer& analyzer_ref, CerebrumLux::SuggestionEngine& suggester_ref, CerebrumLux::UserProfileManager& user_profile_manager_ref)
+        : CerebrumLux::IntentLearner(analyzer_ref, suggester_ref, user_profile_manager_ref) {}
+    void set_learning_rate(float rate) {}
+    float get_learning_rate() const { return 0.01f; }
+    void process_feedback(const CerebrumLux::DynamicSequence& sequence, CerebrumLux::UserIntent predicted_intent, const std::deque<CerebrumLux::AtomicSignal>& recent_signals) {}
+    void process_explicit_feedback(CerebrumLux::UserIntent predicted_intent, CerebrumLux::AIAction action, bool approved, const CerebrumLux::DynamicSequence& sequence, CerebrumLux::AbstractState current_abstract_state) {}
+    CerebrumLux::AbstractState infer_abstract_state(const std::deque<CerebrumLux::AtomicSignal>& recent_signals) { return CerebrumLux::AbstractState::Undefined; }
+    const std::map<CerebrumLux::UserIntent, std::deque<float>>& get_implicit_feedback_history() const { static std::map<CerebrumLux::UserIntent, std::deque<float>> history; return history; }
+    size_t get_feedback_history_size() const { return 50; }
+    bool get_implicit_feedback_for_intent(CerebrumLux::UserIntent intent_id, std::deque<float>& history_out) const { return false; }
+};
+
+// Dummy PredictionEngine
+class DummyPredictionEngine : public CerebrumLux::PredictionEngine {
+public:
+    DummyPredictionEngine(CerebrumLux::IntentAnalyzer& analyzer_ref, CerebrumLux::SequenceManager& sequence_manager_ref)
+        : CerebrumLux::PredictionEngine(analyzer_ref, sequence_manager_ref) {}
+    CerebrumLux::UserIntent predict_next_intent(CerebrumLux::UserIntent previous_intent, const CerebrumLux::DynamicSequence& current_sequence) const { return CerebrumLux::UserIntent::Undefined; }
+    void update_state_graph(CerebrumLux::UserIntent from_intent, CerebrumLux::UserIntent to_intent, const CerebrumLux::DynamicSequence& sequence) {}
+    float query_intent_probability(CerebrumLux::UserIntent target_intent, const CerebrumLux::DynamicSequence& current_sequence) const { return 0.0f; }
+    void learn_time_patterns(const std::deque<CerebrumLux::AtomicSignal>& signal_buffer, CerebrumLux::UserIntent current_intent) {}
+};
+
+// Dummy AIInsightsEngine
+class DummyAIInsightsEngine : public CerebrumLux::AIInsightsEngine {
+public:
+    DummyAIInsightsEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::IntentLearner& l, CerebrumLux::PredictionEngine& p, CerebrumLux::CryptofigAutoencoder& ae, CerebrumLux::CryptofigProcessor& cp)
+        : CerebrumLux::AIInsightsEngine(a, l, p, ae, cp) {}
+    std::vector<CerebrumLux::AIInsight> generate_insights(const CerebrumLux::DynamicSequence& sequence) { return {}; }
+    float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const { return 0.0f; }
+    CerebrumLux::IntentAnalyzer& get_analyzer() const { static DummyIntentAnalyzer da; return da; }
+    CerebrumLux::IntentLearner& get_learner() const {
+        static DummyIntentLearner dil(static_cast<CerebrumLux::IntentAnalyzer&>(static_cast<DummyIntentAnalyzer&>(get_analyzer())),
+                                     static_cast<CerebrumLux::SuggestionEngine&>(static_cast<DummySuggestionEngine&>(get_suggester())),
+                                     static_cast<CerebrumLux::UserProfileManager&>(static_cast<DummyUserProfileManager&>(get_user_profile_manager())));
+        return dil;
+    }
+    CerebrumLux::CryptofigAutoencoder& get_cryptofig_autoencoder() const { static DummyCryptofigAutoencoder dca; return dca; }
+
+private:
+    CerebrumLux::SuggestionEngine& get_suggester() const { static DummySuggestionEngine ds(static_cast<CerebrumLux::IntentAnalyzer&>(static_cast<DummyIntentAnalyzer&>(get_analyzer()))); return ds; }
+    CerebrumLux::UserProfileManager& get_user_profile_manager() const { static DummyUserProfileManager dupm; return dupm; }
+};
+
+// Dummy GoalManager
+class DummyGoalManager : public CerebrumLux::GoalManager {
+public:
+    DummyGoalManager(CerebrumLux::AIInsightsEngine& ie) : CerebrumLux::GoalManager(ie) {}
+    CerebrumLux::AIGoal get_current_goal() const { return CerebrumLux::AIGoal::UndefinedGoal; }
+    void evaluate_and_set_goal(const CerebrumLux::DynamicSequence& current_sequence) {}
+    void adjust_goals_based_on_feedback() {}
+    void evaluate_goals() {}
+};
+
+// Dummy NaturalLanguageProcessor
+class DummyNaturalLanguageProcessor : public CerebrumLux::NaturalLanguageProcessor {
+public:
+    DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm) : CerebrumLux::NaturalLanguageProcessor(gm) {}
+    std::string generate_response_text(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence, const std::vector<std::string>& relevant_keywords) const { return "Dummy NLP yanıtı."; }
+    CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const { return CerebrumLux::UserIntent::Undefined; }
+    CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const { return CerebrumLux::AbstractState::Undefined; }
+    void update_model(const std::string& observed_text, CerebrumLux::UserIntent true_intent, const std::vector<float>& latent_cryptofig) {}
+    void trainIncremental(const std::string& input, const std::string& expected_intent) {}
+    void load_model(const std::string& path) { throw std::runtime_error("Dummy NLP modeli yüklenemedi."); }
+    void save_model(const std::string& path) const {}
+};
+
+
+// === MAIN FONKSİYONU ===
 int main() {
-    // Initialize logger
-    Logger::get_instance().init(LogLevel::INFO);
+    // Logger'ı başlat
+    CerebrumLux::Logger::get_instance().init(CerebrumLux::LogLevel::INFO, "nlp_trainer_log.txt", "NLP_TRAINER");
 
-    // Use the default constructor for NLP
-    NaturalLanguageProcessor nlp;
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NLP Online Trainer başlatılıyor.");
 
-    std::cout << "🔹 NLP Online Trainer başlatıldı." << std::endl;
+    // NLPProcessor için gerekli bağımlılıkları oluştur
+    DummyIntentAnalyzer dummy_analyzer;
+    DummyCryptofigAutoencoder real_autoencoder;
+    DummyCryptofigProcessor dummy_cryptofig_processor(dummy_analyzer, real_autoencoder);
+    DummySequenceManager dummy_sequence_manager;
+    
+    // SuggestionEngine ve UserProfileManager için dummy sınıflarını kullan
+    DummySuggestionEngine dummy_suggester(dummy_analyzer);
+    DummyUserProfileManager dummy_user_profile_manager;
+    
+    DummyIntentLearner dummy_learner(dummy_analyzer, dummy_suggester, dummy_user_profile_manager);
+    DummyPredictionEngine dummy_predictor(dummy_analyzer, dummy_sequence_manager);
 
+    DummyAIInsightsEngine dummy_insights_engine(dummy_analyzer, dummy_learner, dummy_predictor, real_autoencoder, dummy_cryptofig_processor);
+    DummyGoalManager dummy_goal_manager(dummy_insights_engine);
+
+    DummyNaturalLanguageProcessor nlp(dummy_goal_manager);
+
+    // Modeli yüklemeyi dene
     try {
         nlp.load_model("data/models/nlp_model.dat");
-        LOG_DEFAULT(LogLevel::INFO, "Model başarıyla yüklendi.");
-    } catch (...) {
-        LOG_DEFAULT(LogLevel::WARNING, "Model bulunamadı, yeni model oluşturulacak.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Model başarıyla yüklendi.");
+    } catch (const std::exception& e) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "Model bulunamadı veya yüklenemedi: " << e.what() << ". Yeni model oluşturulacak.");
     }
 
-    std::string input, expected;
-    while (true) {
-        std::cout << "\nCümle girin (veya 'exit' ile çık): ";
-        std::getline(std::cin, input);
-        if (input == "exit") break;
+    std::string input;
+    std::string expected;
 
-        std::cout << "Beklenen intent girin: ";
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Artımlı eğitim moduna hoş geldiniz. Çıkmak için 'exit' yazın.");
+
+    while (true) {
+        std::cout << "Girdi metni (exit için 'exit'): ";
+        std::getline(std::cin, input);
+        if (input == "exit") {
+            break;
+        }
+
+        std::cout << "Beklenen niyet (örneğin 'Programming', 'Question'): ";
         std::getline(std::cin, expected);
-        if (expected.empty()) {
-            LOG_DEFAULT(LogLevel::WARNING, "Boş intent girildi, atlanıyor.");
+
+        if (input.empty() || expected.empty()) {
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "Boş girdi veya niyet girildi, atlanıyor.");
             continue;
         }
 
-        // 🔹 Incremental training
         nlp.trainIncremental(input, expected);
-        LOG_DEFAULT(LogLevel::INFO, "Incremental training tamamlandı.");
-
-        std::string predicted = nlp.predict_intent(input);
-        std::cout << "📌 Tahmin edilen intent: " << predicted << std::endl;
-
-        nlp.save_model("data/models/nlp_model.dat");
-        LOG_DEFAULT(LogLevel::INFO, "Model kaydedildi.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Artımlı eğitim tamamlandı.");
     }
 
-    std::cout << "✅ Eğitim oturumu sona erdi." << std::endl;
+    // Modeli kaydet
+    nlp.save_model("data/models/nlp_model.dat");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Model kaydedildi.");
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NLP Online Trainer kapatılıyor.");
     return 0;
 }

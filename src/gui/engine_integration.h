@@ -1,43 +1,48 @@
 #ifndef ENGINE_INTEGRATION_H
 #define ENGINE_INTEGRATION_H
 
-#include <string>
-#include <vector>
-#include "../learning/KnowledgeBase.h" // KnowledgeBase için
-#include "../learning/LearningModule.h" // LearningModule için
-#include "../meta/meta_evolution_engine.h" // MetaEvolutionEngine için
-#include "../data_models/sequence_manager.h" // SequenceManager için
-#include "DataTypes.h" // SimulationData için
+#include <QObject>
+#include <QString>
+#include <QVariant>
 
+// CerebrumLux core başlıkları
+#include "../meta/meta_evolution_engine.h"
+#include "../data_models/sequence_manager.h"
+#include "../learning/LearningModule.h"
+#include "../learning/KnowledgeBase.h"
 
-// İleri bildirimler
-// class MetaEvolutionEngine; // Zaten dahil edildi
-// class SequenceManager;   // Zaten dahil edildi
-// class LearningModule;    // Zaten dahil edildi
-// class KnowledgeBase;     // Zaten dahil edildi
+namespace CerebrumLux {
 
-class EngineIntegration {
+class EngineIntegration : public QObject {
+    Q_OBJECT
 public:
-    // Mevcut kurucu
-    EngineIntegration(MetaEvolutionEngine& meta_engine, SequenceManager& sequence_manager,
-                      LearningModule& learning_module, KnowledgeBase& kb);
+    explicit EngineIntegration(MetaEvolutionEngine& metaEngineRef,
+                               SequenceManager& sequenceManRef,
+                               LearningModule& learningModRef,
+                               KnowledgeBase& kbRef,
+                               QObject *parent = nullptr);
 
-    // Mevcut getter'lar
-    MetaEvolutionEngine& getMetaEngine() { return meta_engine; }
-    SequenceManager& getSequenceManager() { return sequence_manager; }
-    LearningModule& getLearningModule() { return learning_module; }
-    KnowledgeBase& getKnowledgeBase() { return kb; }
+    virtual ~EngineIntegration() = default;
 
-    // YENİ: Simülasyonu başlatma/durdurma ve komut işleme metotları
+    MetaEvolutionEngine& getMetaEvolutionEngine() const { return metaEngineRef; }
+    SequenceManager& getSequenceManager() const { return sequenceManRef; }
+    LearningModule& getLearningModule() const { return learningModRef; }
+    KnowledgeBase& getKnowledgeBase() const { return kbRef; }
+
+    void processUserCommand(const std::string& command);
     void startCoreSimulation();
     void stopCoreSimulation();
-    void processUserCommand(const std::string& command);
+
+signals:
+    void simulationOutputReady(const QString& output);
 
 private:
-    MetaEvolutionEngine& meta_engine;
-    SequenceManager& sequence_manager;
-    LearningModule& learning_module;
-    KnowledgeBase& kb;
+    MetaEvolutionEngine& metaEngineRef;
+    SequenceManager& sequenceManRef;
+    LearningModule& learningModRef;
+    KnowledgeBase& kbRef;
 };
+
+} // namespace CerebrumLux
 
 #endif // ENGINE_INTEGRATION_H

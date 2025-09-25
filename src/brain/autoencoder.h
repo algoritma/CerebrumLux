@@ -3,11 +3,13 @@
 
 #include <vector>
 #include <string>  // For std::string
-#include "../core/enums.h" // LogLevel için
-#include "../core/utils.h" // SafeRNG ve diğerleri için
-#include <cmath>   // std::exp için
+// #include "../core/enums.h" // LogLevel için (burada gerek yok, autoencoder.cpp'ye taşındı)
+// #include "../core/utils.h" // SafeRNG ve diğerleri için (burada gerek yok, autoencoder.cpp'ye taşındı)
+#include <cmath>   // std::exp için (burada gerek yok, autoencoder.cpp'ye taşındı)
 
-// *** CryptofigAutoencoder sınıfı tanımı ***
+
+namespace CerebrumLux { // CryptofigAutoencoder sınıfı bu namespace içine alınmalı
+
 class CryptofigAutoencoder {
 public:
     // Yapılandırma parametreleri
@@ -21,9 +23,8 @@ public:
 
     // Decoder: latent_cryptofig -> reconstructed_statistical_features
     virtual std::vector<float> decode(const std::vector<float>& latent_features) const;
-    virtual float calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const; // YENİ EKLENDİ VE VIRTUAL
+    virtual float calculate_reconstruction_error(const std::vector<float>& original, const std::vector<float>& reconstructed) const;
 
-    
     // Encoder ve Decoder'ı birleştirerek yeniden yapılandırma
     std::vector<float> reconstruct(const std::vector<float>& input_features) const;
 
@@ -44,8 +45,10 @@ private:
 
     // Yardımcı fonksiyonlar
     float sigmoid(float x) const;
-    float sigmoid_derivative(float x) const; // Heuristik öğrenme için gerekli olabilir
+    float sigmoid_derivative(float x) const;
     void initialize_random_weights();
 };
+
+} // namespace CerebrumLux
 
 #endif // CEREBRUM_LUX_AUTOENCODER_H

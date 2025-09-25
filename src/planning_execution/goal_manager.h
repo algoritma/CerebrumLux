@@ -1,30 +1,34 @@
-#ifndef CEREBRUM_LUX_GOAL_MANAGER_H
-#define CEREBRUM_LUX_GOAL_MANAGER_H
+#ifndef GOAL_MANAGER_H
+#define GOAL_MANAGER_H
 
-#include <string> // For wstring
-#include "../core/enums.h"               // Enumlar için
-#include "../core/utils.h"               // LOG için
-#include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
-#include "../communication/ai_insights_engine.h" // AIInsightsEngine için ileri bildirim
-#include "../brain/intent_analyzer.h" // IntentAnalyzer için ileri bildirim
+#include <string>
+#include <vector>
+#include "../core/enums.h" // AIGoal, UserIntent için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
+#include "../communication/ai_insights_engine.h" // AIInsightsEngine için
 
-// İleri bildirimler
-class AIInsightsEngine;
-struct DynamicSequence;
-class IntentAnalyzer;
+namespace CerebrumLux { // GoalManager sınıfı bu namespace içine alınacak
 
-// *** GoalManager: AI'ın hedeflerini yonetir ***
 class GoalManager {
 public:
-    GoalManager(AIInsightsEngine& insights_engine_ref); 
-    GoalManager(); // For tooling 
-    virtual AIGoal get_current_goal() const; // Eklendi: virtual
+    GoalManager(AIInsightsEngine& insights_engine_ref);
+
+    virtual AIGoal get_current_goal() const;
     void set_current_goal(AIGoal goal);
-    void evaluate_and_set_goal(const DynamicSequence& current_sequence); // Dinamik hedef belirleme
+    void evaluate_and_set_goal(const DynamicSequence& current_sequence);
+
+    void adjust_goals_based_on_feedback(); // Meta-yönetimden çağrılabilir
+    void evaluate_goals(); // Mevcut hedefleri değerlendir
+
 private:
-    AIGoal current_goal = AIGoal::OptimizeProductivity; 
-    AIInsightsEngine& insights_engine; // AIInsightsEngine referansı
-    // IntentAnalyzer'a doğrudan erişim insights_engine üzerinden yapılmalı, burada tutulmasına gerek yok.
+    AIInsightsEngine& insights_engine;
+    AIGoal current_goal; // Mevcut aktif hedef
+
+    // Hedef öncelikleri, koşulları vb. burada yönetilebilir
+    // std::map<AIGoal, float> goal_priorities;
+    // std::map<AIGoal, std::function<bool(const DynamicSequence&)>> goal_conditions;
 };
 
-#endif // CEREBRUM_LUX_GOAL_MANAGER_H
+} // namespace CerebrumLux
+
+#endif // GOAL_MANAGER_H

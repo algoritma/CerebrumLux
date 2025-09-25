@@ -9,6 +9,8 @@
 #include <sstream>   // std::stringstream için
 
 
+namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
+
 // Statik const int üyelerinin dış tanımları
 const int CryptofigAutoencoder::INPUT_DIM;
 const int CryptofigAutoencoder::LATENT_DIM;
@@ -18,7 +20,6 @@ CryptofigAutoencoder::CryptofigAutoencoder() {
 }
 
 void CryptofigAutoencoder::initialize_random_weights() {
-    // Dağıtım nesnesi artık yerel olarak burada oluşturuluyor.
     std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
 
     encoder_weights_1.resize(INPUT_DIM * LATENT_DIM);
@@ -26,7 +27,6 @@ void CryptofigAutoencoder::initialize_random_weights() {
     decoder_weights_1.resize(LATENT_DIM * INPUT_DIM);
     decoder_bias_1.resize(INPUT_DIM);
 
-    // Tüm çağrılar SafeRNG kullanacak şekilde değiştirildi.
     for (size_t i = 0; i < encoder_weights_1.size(); ++i) encoder_weights_1[i] = dist(SafeRNG::get_instance().get_generator());
     for (size_t i = 0; i < encoder_bias_1.size(); ++i) encoder_bias_1[i] = dist(SafeRNG::get_instance().get_generator());
     for (size_t i = 0; i < decoder_weights_1.size(); ++i) decoder_weights_1[i] = dist(SafeRNG::get_instance().get_generator());
@@ -189,3 +189,5 @@ float CryptofigAutoencoder::calculate_reconstruction_error(const std::vector<flo
     }
     return std::sqrt(error_sum_sq / original.size());
 }
+
+} // namespace CerebrumLux

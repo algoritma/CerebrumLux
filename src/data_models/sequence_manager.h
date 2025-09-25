@@ -1,50 +1,38 @@
-#ifndef CEREBRUM_LUX_SEQUENCE_MANAGER_H
-#define CEREBRUM_LUX_SEQUENCE_MANAGER_H
+#ifndef SEQUENCE_MANAGER_H
+#define SEQUENCE_MANAGER_H
 
+#include <string>
+#include <vector>
 #include <deque>
-#include <memory>
-#include <chrono>
-#include "../core/enums.h"      // Enumlar için
-#include "../core/utils.h"      // For convert_wstring_to_string (if needed elsewhere)
-#include "dynamic_sequence.h"   // DynamicSequence için
-#include "../sensors/atomic_signal.h" // AtomicSignal için
-#include "../brain/cryptofig_processor.h" // CryptofigProcessor için ileri bildirim (parametre olarak kullanılacak)
+#include <mutex>
+#include <chrono> // Time functions
+#include "../sensors/atomic_signal.h" // CerebrumLux::AtomicSignal için
+#include "../brain/cryptofig_processor.h" // CerebrumLux::CryptofigProcessor için
+#include "../data_models/dynamic_sequence.h" // CerebrumLux::DynamicSequence için
+#include "../core/enums.h" // UserIntent için eklendi (görev isteğine göre)
 
-// İleri bildirim
-class CryptofigProcessor; 
+namespace CerebrumLux { // SequenceManager sınıfı bu namespace içine alınacak
 
-class DynamicSequence;
-
-// *** SequenceManager: Dinamik sinyal dizilerini yonetir ***
 class SequenceManager {
 public:
-
     SequenceManager();
-    ~SequenceManager();
 
-    // add_signal fonksiyonu CryptofigProcessor referansı alacak şekilde güncellendi
-    bool add_signal(const AtomicSignal& signal, CryptofigProcessor& cryptofig_processor); 
-
-    void step_simulation();
-
-    std::deque<AtomicSignal> get_signal_buffer_copy() const; 
-
-    // YENİ: current_sequence'e erişim için getter metodu
-    DynamicSequence& get_current_sequence_ref() { return *current_sequence; }
-    const DynamicSequence& get_current_sequence_ref() const { return *current_sequence; }
+    bool add_signal(const CerebrumLux::AtomicSignal& signal, CerebrumLux::CryptofigProcessor& cryptofig_processor); // AtomicSignal güncellendi
+    void process_oldest_signal(CerebrumLux::CryptofigProcessor& cryptofig_processor);
+    const DynamicSequence& get_current_sequence_ref() const;
+    std::deque<CerebrumLux::AtomicSignal> get_signal_buffer_copy(); // 'const' kaldırıldı
 
 private:
-    // update_current_sequence metodu CryptofigProcessor referansı alacak şekilde güncellendi
-    void update_current_sequence(CryptofigProcessor& cryptofig_processor); 
+    std::deque<CerebrumLux::AtomicSignal> signal_buffer; // AtomicSignal güncellendi
+    std::mutex buffer_mutex;
+    DynamicSequence current_sequence; // Dinamik sekans
+    size_t max_buffer_size; // Sinyal buffer'ının maksimum boyutu
+    long long last_sequence_update_time_us; // Son sekans güncelleme zamanı
 
-    std::deque<AtomicSignal> signal_buffer; 
-    size_t max_buffer_size = 100;           
-
-    std::unique_ptr<DynamicSequence> current_sequence;
-
-    uint64_t last_sequence_update_time_us;
-
+    // Yardımcı fonksiyonlar
+    void update_current_sequence(CerebrumLux::CryptofigProcessor& cryptofig_processor);
 };
 
+} // namespace CerebrumLux
 
-#endif // CEREBRUM_LUX_SEQUENCE_MANAGER_H
+#endif // SEQUENCE_MANAGER_H

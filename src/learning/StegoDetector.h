@@ -1,21 +1,22 @@
-#ifndef STEGODETECTOR_H
-#define STEGODETECTOR_H
+#ifndef STEGO_DETECTOR_H
+#define STEGO_DETECTOR_H
 
 #include <string>
-#include <vector> 
+#include <vector>
+
+namespace CerebrumLux { // Yeni eklendi
 
 class StegoDetector {
 public:
-    StegoDetector() = default;
-
-    // Verilen metin veya veri içinde steganografi belirtileri tespit eder.
-    // Bu ilk versiyonda basit heuristikler kullanacak.
     bool detectSteganography(const std::string& data) const;
 
 private:
-    // Yardımcı metodlar (gelecekte eklenebilir)
-    // float analyzeFrequencyDistribution(const std::string& data) const;
-    // bool checkForSuspiciousPatterns(const std::string& data) const;
+    // Örneğin, belirli imza kalıpları veya anormallikler
+    bool checkEntropy(const std::string& data) const;
+    bool checkMetadata(const std::string& data) const; // Örneğin, dosya formatları için
+    bool checkKnownSignatures(const std::string& data) const;
 };
 
-#endif // STEGODETECTOR_H
+} // namespace CerebrumLux // Yeni eklendi
+
+#endif // STEGO_DETECTOR_H

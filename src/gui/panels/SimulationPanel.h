@@ -1,50 +1,47 @@
-#ifndef SIMULATIONPANEL_H
-#define SIMULATIONPANEL_H
+#ifndef SIMULATION_PANEL_H
+#define SIMULATION_PANEL_H
 
 #include <QWidget>
-#include <vector>
-#include "../DataTypes.h" // SimulationData burada tanımlı
+// İleri bildirimleri kaldırıp tam başlık dosyalarını dahil ediyoruz
+#include <QLineEdit>        // QLineEdit için
+#include <QPushButton>      // QPushButton için
+#include <QTableView>       // QTableView için
+#include <QStandardItemModel> // QStandardItemModel için
+#include <QVector>          // QVector için
 
-// Forward declarations for Qt classes
-class QTableWidget;
-class QVBoxLayout;
-class QHBoxLayout;  // YENİ: Düğmeler için
-class QLineEdit;    // YENİ: Metin girişi için
-class QPushButton;  // YENİ: Düğmeler için
+#include "../../core/logger.h" // LOG_DEFAULT makrosu için
+#include "../DataTypes.h" // CerebrumLux::SimulationData için
+
+namespace CerebrumLux {
 
 class SimulationPanel : public QWidget
 {
     Q_OBJECT
 public:
-    explicit SimulationPanel(QWidget* parent = nullptr);
-    void updatePanel(const std::vector<SimulationData>& data);
+    explicit SimulationPanel(QWidget *parent = nullptr);
+
+public slots:
+    void updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data);
 
 signals:
-    // YENİ: Kullanıcıdan alınan komutu dışarıya iletmek için sinyal
     void commandEntered(const QString& command);
-    // YENİ: Simülasyonu başlatma sinyali
-    void startSimulation();
-    // YENİ: Simülasyonu durdurma sinyali
-    void stopSimulation();
+    void startSimulationTriggered();
+    void stopSimulationTriggered();
 
 private slots:
-    // YENİ: Kullanıcı metin girdisi tamamladığında çağrılacak slot
     void onCommandLineEditReturnPressed();
-    // YENİ: Simülasyon başlat düğmesine basıldığında çağrılacak slot
     void onStartSimulationClicked();
-    // YENİ: Simülasyon durdur düğmesine basıldığında çağrılacak slot
     void onStopSimulationClicked();
 
 private:
-    // UI elemanları
-    QTableWidget* table;
-    QVBoxLayout* layout;
-
-    // YENİ UI elemanları
-    QLineEdit* commandLineEdit;    // Kullanıcıdan komut almak için
-    QPushButton* startButton;      // Simülasyonu başlatma düğmesi
-    QPushButton* stopButton;       // Simülasyonu durdurma düğmesi
-    QHBoxLayout* controlLayout;    // Düğmeleri ve giriş alanını düzenlemek için
+    QLineEdit *commandLineEdit;
+    QPushButton *sendCommandButton;
+    QPushButton *startSimulationButton;
+    QPushButton *stopSimulationButton;
+    QTableView *simulationHistoryTable;
+    QStandardItemModel *simulationHistoryModel;
 };
 
-#endif // SIMULATIONPANEL_H
+} // namespace CerebrumLux
+
+#endif // SIMULATION_PANEL_H

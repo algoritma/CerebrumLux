@@ -1,96 +1,96 @@
 #include "SimulationPanel.h"
+#include "../../core/logger.h" // LOG_DEFAULT makrosu için
 #include <QVBoxLayout>
-#include <QHBoxLayout> 
-#include <QLineEdit>   
-#include <QPushButton> 
-#include <QTableWidget>
-#include <QTableWidgetItem>
-#include <QStringList>
-#include "../../core/logger.h" 
-#include <QDebug> // YENİ: qDebug için
+#include <QHBoxLayout>
+#include <QHeaderView> // QTableView başlıkları için
+#include <QMessageBox> // Hata mesajları için
+#include <QDateTime> // QDateTime için
 
-SimulationPanel::SimulationPanel(QWidget* parent) : QWidget(parent)
+namespace CerebrumLux {
+
+// Kurucu
+CerebrumLux::SimulationPanel::SimulationPanel(QWidget *parent)
+    : QWidget(parent)
 {
-    layout = new QVBoxLayout(this);
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    // Simülasyon kontrol alanı (QLineEdit ve düğmeler)
-    controlLayout = new QHBoxLayout();
-    commandLineEdit = new QLineEdit(this);
-    commandLineEdit->setPlaceholderText("Enter simulation command...");
-    startButton = new QPushButton("Start Simulation", this);
-    stopButton = new QPushButton("Stop Simulation", this);
+    // Komut giriş alanı
+    QHBoxLayout *commandLayout = new QHBoxLayout();
+    this->commandLineEdit = new QLineEdit(this); // 'this->' eklendi
+    this->commandLineEdit->setPlaceholderText("Simülasyon komutunu girin..."); // 'this->' eklendi
+    commandLayout->addWidget(this->commandLineEdit); // 'this->' eklendi
 
-    controlLayout->addWidget(commandLineEdit);
-    controlLayout->addWidget(startButton);
-    controlLayout->addWidget(stopButton);
+    this->sendCommandButton = new QPushButton("Komut Gönder", this); // 'this->' eklendi
+    commandLayout->addWidget(this->sendCommandButton); // 'this->' eklendi
+    mainLayout->addLayout(commandLayout);
 
-    layout->addLayout(controlLayout); 
+    connect(this->commandLineEdit, &QLineEdit::returnPressed, this, &CerebrumLux::SimulationPanel::onCommandLineEditReturnPressed); // 'this->' ve namespace eklendi
+    connect(this->sendCommandButton, &QPushButton::clicked, this, &CerebrumLux::SimulationPanel::onCommandLineEditReturnPressed); // 'this->' ve namespace eklendi
 
-    table = new QTableWidget(this);
-    table->setColumnCount(2);
-    table->setHorizontalHeaderLabels(QStringList() << "ID" << "Value"); // "Step" yerine "ID" yapıldı
-    layout->addWidget(table);
-    setLayout(layout);
+    // Kontrol düğmeleri
+    QHBoxLayout *controlLayout = new QHBoxLayout();
+    this->startSimulationButton = new QPushButton("Simülasyonu Başlat", this); // 'this->' eklendi
+    controlLayout->addWidget(this->startSimulationButton); // 'this->' eklendi
+    this->stopSimulationButton = new QPushButton("Simülasyonu Durdur", this); // 'this->' eklendi
+    controlLayout->addWidget(this->stopSimulationButton); // 'this->' eklendi
+    mainLayout->addLayout(controlLayout);
 
-    // Sinyal-Slot bağlantıları
-    // connect(commandLineEdit, &QLineEdit::returnPressed, this, &SimulationPanel::onCommandLineEditReturnPressed); // ESKİ BAĞLANTI (Yorum satırı)
-    // YENİ TEŞHİS BAĞLANTISI: Alternatif sinyal veya string tabanlı bağlantı dene
-    // Önce QLineEdit::returnPressed'in hala çalışıp çalışmadığını kontrol edelim.
-    // Eğer bu işe yaramazsa, QLineEdit::editingFinished'i deneyebiliriz.
+    connect(this->startSimulationButton, &QPushButton::clicked, this, &CerebrumLux::SimulationPanel::onStartSimulationClicked); // 'this->' ve namespace eklendi
+    connect(this->stopSimulationButton, &QPushButton::clicked, this, &CerebrumLux::SimulationPanel::onStopSimulationClicked); // 'this->' ve namespace eklendi
 
-    // Qt 5 (ve 6) için önerilen yöntem:
-    // connect(commandLineEdit, &QLineEdit::returnPressed, this, &SimulationPanel::onCommandLineEditReturnPressed);
+    // Simülasyon tarihçesi gösterimi
+    this->simulationHistoryTable = new QTableView(this); // 'this->' eklendi
+    this->simulationHistoryModel = new QStandardItemModel(0, 3, this); // 'this->' eklendi
+    this->simulationHistoryModel->setHeaderData(0, Qt::Horizontal, "ID");
+    this->simulationHistoryModel->setHeaderData(1, Qt::Horizontal, "Değer");
+    this->simulationHistoryModel->setHeaderData(2, Qt::Horizontal, "Zaman Damgası");
+    this->simulationHistoryTable->setModel(this->simulationHistoryModel); // 'this->' eklendi
+    this->simulationHistoryTable->horizontalHeader()->setStretchLastSection(true); // 'this->' eklendi
+    mainLayout->addWidget(this->simulationHistoryTable); // 'this->' eklendi
 
-    // Eğer yukarıdaki yöntem işe yaramıyorsa, string tabanlı eski yöntemi deneyelim (MOC sorunlarını atlatmak için)
-    // Bu, MOC'un doğru çalışmadığı durumlarda yardımcı olabilir.
-    bool connection_result = connect(commandLineEdit, SIGNAL(returnPressed()), this, SLOT(onCommandLineEditReturnPressed()));
-    if (!connection_result) {
-        qDebug() << "WARNING: QLineEdit::returnPressed connection failed in SimulationPanel constructor!";
-    } else {
-        qDebug() << "DEBUG: QLineEdit::returnPressed connected successfully in SimulationPanel constructor.";
-    }
+    setLayout(mainLayout);
 
-    connect(startButton, &QPushButton::clicked, this, &SimulationPanel::onStartSimulationClicked);
-    connect(stopButton, &QPushButton::clicked, this, &SimulationPanel::onStopSimulationClicked);
-
-    LOG_DEFAULT(LogLevel::INFO, "SimulationPanel: Initialized with input and control buttons.");
-    qDebug() << "DEBUG: SimulationPanel constructor finished.";
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Initialized with input and control buttons.");
 }
 
-void SimulationPanel::updatePanel(const std::vector<SimulationData>& data)
-{
-    table->setRowCount(static_cast<int>(data.size()));
-    for (size_t i = 0; i < data.size(); ++i) {
-        table->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(data[i].id))); // Artık string ataması doğru
-        table->setItem(i, 1, new QTableWidgetItem(QString::number(data[i].value)));
+// updateSimulationHistory metodu
+void CerebrumLux::SimulationPanel::updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data) {
+    this->simulationHistoryModel->setRowCount(0); // Eski verileri temizle // 'this->' eklendi
+    for (const auto& item : data) {
+        QList<QStandardItem*> rowItems;
+        rowItems.append(new QStandardItem(item.id));
+        rowItems.append(new QStandardItem(QString::number(item.value, 'f', 2)));
+        rowItems.append(new QStandardItem(QDateTime::fromSecsSinceEpoch(item.timestamp).toString("hh:mm:ss")));
+        this->simulationHistoryModel->appendRow(rowItems); // 'this->' eklendi
     }
+    this->simulationHistoryTable->scrollToBottom(); // Tabloyu en alta kaydır // 'this->' eklendi
 }
 
-// Slot implementasyonları
-void SimulationPanel::onCommandLineEditReturnPressed() {
-    qDebug() << "DEBUG: SimulationPanel::onCommandLineEditReturnPressed slot triggered. (via qDebug)"; // YENİ TEŞHİS LOGU
-    LOG_DEFAULT(LogLevel::DEBUG, "SimulationPanel: onCommandLineEditReturnPressed slot triggered."); 
-    QString command = commandLineEdit->text();
-    qDebug() << "DEBUG: SimulationPanel: CommandLineEdit text: '" << command << "' (isEmpty: " << command.isEmpty() << ")"; // YENİ TEŞHİS LOGU
-    LOG_DEFAULT(LogLevel::DEBUG, "SimulationPanel: CommandLineEdit text: '" << command.toStdString() << "' (isEmpty: " << command.isEmpty() << ")"); 
+// onCommandLineEditReturnPressed slotu
+void CerebrumLux::SimulationPanel::onCommandLineEditReturnPressed() {
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulationPanel: onCommandLineEditReturnPressed slot triggered.");
+    QString command = this->commandLineEdit->text(); // 'this->' eklendi
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulationPanel: CommandLineEdit text: '" << command.toStdString() << "' (isEmpty: " << command.isEmpty() << ")");
 
     if (!command.isEmpty()) {
-        LOG_DEFAULT(LogLevel::INFO, "SimulationPanel: Command entered: " << command.toStdString());
-        emit commandEntered(command); 
-        commandLineEdit->clear(); 
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Command entered: " << command.toStdString());
+        emit commandEntered(command);
+        this->commandLineEdit->clear(); // Komut gönderildikten sonra temizle // 'this->' eklendi
     } else {
-        LOG_DEFAULT(LogLevel::WARNING, "SimulationPanel: Command entered was empty."); 
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulationPanel: Command entered was empty.");
     }
 }
 
-void SimulationPanel::onStartSimulationClicked() {
-    qDebug() << "DEBUG: SimulationPanel: Start Simulation button clicked. (via qDebug)";
-    LOG_DEFAULT(LogLevel::INFO, "SimulationPanel: Start Simulation button clicked.");
-    emit startSimulation(); 
+// onStartSimulationClicked slotu
+void CerebrumLux::SimulationPanel::onStartSimulationClicked() {
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Start Simulation button clicked.");
+    emit startSimulationTriggered(); // Sinyal adı doğru olmalı
 }
 
-void SimulationPanel::onStopSimulationClicked() {
-    qDebug() << "DEBUG: SimulationPanel: Stop Simulation button clicked. (via qDebug)";
-    LOG_DEFAULT(LogLevel::INFO, "SimulationPanel: Stop Simulation button clicked.");
-    emit stopSimulation(); 
+// onStopSimulationClicked slotu
+void CerebrumLux::SimulationPanel::onStopSimulationClicked() {
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Stop Simulation button clicked.");
+    emit stopSimulationTriggered(); // Sinyal adı doğru olmalı
 }
+
+} // namespace CerebrumLux

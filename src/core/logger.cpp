@@ -1,51 +1,111 @@
 #include "logger.h"
-#include "utils.h"       
-// #include "../gui/panels/LogPanel.h" // Artık doğrudan LogPanel'e erişmiyoruz.
+#include <iostream>
 #include <chrono>
-#include <ctime>
-#include <iomanip> 
-#include <string>  
-#include <locale>  
-#include <cerrno>  
-#include <QMetaObject> 
-#include <QString> 
-#include <QTextEdit> 
+#include <iomanip> // std::put_time için
+#include <ctime>   // std::localtime, std::gmtime için
+#include <algorithm> // std::find_if için
 
-std::string Logger::level_to_string(LogLevel level) const {
-    switch (level) {
-        case LogLevel::SILENT: return "SILENT";
-        case LogLevel::ERR_CRITICAL: return "CRITICAL";
-        case LogLevel::WARNING: return "WARNING";
-        case LogLevel::INFO: return "INFO";
-        case LogLevel::DEBUG: return "DEBUG";
-        case LogLevel::TRACE: return "TRACE";
-        default: return "UNKNOWN";
-    }
-}
+namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
+// Singleton örneğinin başlatılması
 Logger& Logger::get_instance() {
     static Logger instance;
     return instance;
 }
 
+// Kurucu (private)
+Logger::Logger()
+    : level_(LogLevel::INFO), m_guiLogTextEdit(nullptr), log_counter_(0), log_source_("SYSTEM") {}
+
+// Yıkıcı (private)
+Logger::~Logger() {
+    if (log_file_.is_open()) {
+        log_file_.close();
+    }
+}
+
+// LogLevel'ı string'e dönüştürür
+std::string Logger::level_to_string(LogLevel level) const {
+    switch (level) {
+        case LogLevel::TRACE:       return "TRACE";
+        case LogLevel::DEBUG:       return "DEBUG";
+        case LogLevel::INFO:        return "INFO";
+        case LogLevel::WARNING:     return "WARNING";
+        case LogLevel::ERR_CRITICAL: return "CRITICAL_ERROR";
+        default:                    return "UNKNOWN";
+    }
+}
+
 void Logger::init(LogLevel level, const std::string& log_file_path, const std::string& log_source) {
-    std::lock_guard<std::mutex> lock(mutex_); 
+    std::lock_guard<std::mutex> lock(mutex_);
     level_ = level;
-    log_source_ = log_source; 
+    log_source_ = log_source;
     if (!log_file_path.empty()) {
-        if (file_stream_.is_open()) {
-            file_stream_.close();
-        }
-        file_stream_.open(log_file_path, std::ios_base::app); 
-        if (!file_stream_.is_open()) {
-            std::cerr << "Hata: Log dosyası açılamadı: " << log_file_path << " (errno: " << errno << ")\n";
+        log_file_.open(log_file_path, std::ios_base::app);
+        if (!log_file_.is_open()) {
+            std::cerr << "ERROR: Failed to open log file: " << log_file_path << std::endl;
         }
     }
 }
 
-Logger::~Logger() {
-    if (file_stream_.is_open()) {
-        file_stream_.close();
+// Mesajı loglar
+void Logger::log(LogLevel level, const std::string& message, const char* file, int line) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (level < level_) { // Belirlenen seviyenin altındaki logları yoksay
+        return;
+    }
+
+    std::string formatted_message = format_log_message(level, message, file, line);
+
+    if (m_guiLogTextEdit) {
+        m_guiLogTextEdit->append(QString::fromStdString(formatted_message));
+    } else {
+        log_buffer_.push_back(formatted_message); // GUI'ye bağlanana kadar buffer'da tut
+    }
+
+    if (log_file_.is_open()) {
+        log_file_ << formatted_message << std::endl;
+        log_file_.flush();
+    } else {
+        std::cout << formatted_message << std::endl; // Dosya açılamazsa konsola yaz
+    }
+}
+
+void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (level < level_) { // Belirlenen seviyenin altındaki logları yoksay
+        return;
+    }
+
+    std::string formatted_message = format_log_message(level, message, file, line);
+
+    if (m_guiLogTextEdit) {
+        m_guiLogTextEdit->append(QString::fromStdString(formatted_message));
+    } else {
+        log_buffer_.push_back(formatted_message);
+    }
+    
+    if (log_file_.is_open()) {
+        log_file_ << formatted_message << std::endl;
+        log_file_.flush();
+    } else {
+        std::cerr << formatted_message << std::endl; // Hata loglarını her zaman stderr'e yaz
+    }
+}
+
+
+void Logger::set_log_panel_text_edit(QTextEdit* text_edit) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    m_guiLogTextEdit = text_edit;
+    flush_buffered_logs(); // Buffer'daki logları hemen GUI'ye aktar
+}
+
+void Logger::flush_buffered_logs() {
+    if (m_guiLogTextEdit) {
+        for (const auto& msg : log_buffer_) {
+            m_guiLogTextEdit->append(QString::fromStdString(msg));
+        }
+        log_buffer_.clear();
     }
 }
 
@@ -53,75 +113,23 @@ LogLevel Logger::get_level() const {
     return level_;
 }
 
-void Logger::set_log_panel_text_edit(QTextEdit* textEdit) {
-    std::lock_guard<std::mutex> lock(buffer_mutex); 
-    m_guiLogTextEdit = textEdit;
-    if (m_guiLogTextEdit) {
-        for (const std::string& buffered_log : initial_log_buffer) {
-            QMetaObject::invokeMethod(m_guiLogTextEdit, "append", Qt::QueuedConnection, Q_ARG(QString, QString::fromStdString(buffered_log)));
-        }
-        initial_log_buffer.clear(); 
-    }
-}
 
-void Logger::log(LogLevel level, const std::string& message, const char* file, int line) {
-    if (level > level_) {
-        return;
-    }
+std::string Logger::format_log_message(LogLevel level, const std::string& message, const char* file, int line) {
+    auto now = std::chrono::system_clock::now();
+    auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    std::time_t timer = std::chrono::system_clock::to_time_t(now);
+    std::tm bt = *std::localtime(&timer);
 
-    std::lock_guard<std::mutex> lock(mutex_); 
-
-    log_counter_++;
-
-    std::string time_str = get_current_timestamp_str();
-    std::stringstream file_line_ss;
-    file_line_ss << " (" << file << ":" << line << ")";
-
-    std::string full_log_message = "[" + time_str + "] [" + level_to_string(level) + "] [" + log_source_ + ":" + std::to_string(log_counter_) + "] " +
-                                   message + file_line_ss.str();
-
-    {
-        std::lock_guard<std::mutex> buffer_lock(buffer_mutex); 
-        if (m_guiLogTextEdit) {
-            QMetaObject::invokeMethod(m_guiLogTextEdit, "append", Qt::QueuedConnection,
-                                      Q_ARG(QString, QString::fromStdString(full_log_message)));
-        } else {
-            initial_log_buffer.push_back(full_log_message);
-        }
-    }
+    std::stringstream ss;
+    ss << std::put_time(&bt, "%Y-%m-%d %H:%M:%S");
+    ss << '.' << std::setfill('0') << std::setw(3) << milli.count();
     
-    if (file_stream_.is_open()) {
-        file_stream_ << full_log_message << std::endl;
-    }
+    ss << " [" << std::setw(3) << ++log_counter_ << "] ";
+    ss << "[" << log_source_ << ":" << level_to_string(level) << "] ";
+    ss << "[" << file << ":" << line << "] ";
+    ss << message;
+    
+    return ss.str();
 }
 
-void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line) {
-    if (level > level_) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(mutex_); 
-
-    log_counter_++; 
-
-    std::string time_str = get_current_timestamp_str();
-    std::stringstream file_line_ss;
-    file_line_ss << " (" << file << ":" << line << ")";
-
-    std::string full_log_message = "[" + time_str + "] [" + level_to_string(level) + "] [" + log_source_ + ":" + std::to_string(log_counter_) + "] " +
-                                   message + file_line_ss.str();
-
-    {
-        std::lock_guard<std::mutex> buffer_lock(buffer_mutex); 
-        if (m_guiLogTextEdit) {
-            QMetaObject::invokeMethod(m_guiLogTextEdit, "append", Qt::QueuedConnection,
-                                      Q_ARG(QString, QString::fromStdString(full_log_message)));
-        } else {
-            initial_log_buffer.push_back(full_log_message);
-        }
-    }
-
-    if (file_stream_.is_open()) {
-        file_stream_ << full_log_message << std::endl;
-    }
-}
+} // namespace CerebrumLux

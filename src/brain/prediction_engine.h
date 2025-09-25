@@ -1,71 +1,80 @@
-#ifndef CEREBRUM_LUX_PREDICTION_ENGINE_H
-#define CEREBRUM_LUX_PREDICTION_ENGINE_H
+#ifndef PREDICTION_ENGINE_H
+#define PREDICTION_ENGINE_H
 
-#include <vector>  // For std::vector
-#include <deque>   // For std::deque
-#include <string>  // For std::string
-#include <limits>  // For std::numeric_limits
-#include <cmath>   // For std::exp
-#include "../core/enums.h"         // Enumlar için
-#include "../core/utils.h"         // intent_to_string için (LOG içinde kullanılır)
-#include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
-#include "intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
-#include "autoencoder.h"           // CryptofigAutoencoder::LATENT_DIM için (sadece boyut için)
+#include <string>
+#include <vector>
+#include <map>
+#include <deque> // time_pattern_history için
+#include <algorithm> // std::max için
+#include "../core/enums.h" // UserIntent, AtomicSignal için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
+#include "../data_models/sequence_manager.h" // SequenceManager için
+#include "../sensors/atomic_signal.h" // AtomicSignal için
 
-// İleri bildirimler
-struct DynamicSequence;
-class IntentAnalyzer;
-class SequenceManager; // PredictionEngine'ın constructor'ında kullanıldığı için
+namespace CerebrumLux { // PredictionEngine, StateNode, StateEdge sınıfları bu namespace içine alınacak
 
-// *** StateNode: Evrimsel Durum Grafigi için dugum yapisi ***
+// Durum grafiği için düğüm (niyet)
 struct StateNode {
     UserIntent intent;
-    std::vector<float> dominant_cryptofig; // latent_cryptofig_vector boyutunda olacak
-    int total_outgoing_transitions = 0; 
+    std::map<UserIntent, float> transition_probabilities;
 
-    StateNode(UserIntent i); // Constructor bildirimi
+    // YENİ EKLENDİ: Varsayılan kurucu
+    StateNode() : intent(UserIntent::Undefined) {} // Varsayılan niyet ile başlat
+
+    StateNode(UserIntent i) : intent(i) {}
+
+    bool operator<(const StateNode& other) const {
+        return intent < other.intent;
+    }
 };
 
-
-// *** StateEdge: Evrimsel Durum Grafigi için kenar yapisi ***
+// Durum grafiği için kenar (niyetten niyete geçiş)
 struct StateEdge {
     UserIntent from_intent;
     UserIntent to_intent;
-    std::vector<float> transition_cryptofig_delta; // latent_cryptofig_vector boyutunda olacak
-    float transition_probability; 
-    long long last_observed_us; 
-    int observation_count; 
+    float weight; // Geçişin gücü/sıklığı
+    long long last_transition_time_us; // Son geçiş zamanı
 
-    StateEdge(UserIntent from, UserIntent to); // Constructor bildirimi
+    // YENİ EKLENDİ: Varsayılan kurucu
+    StateEdge()
+        : from_intent(UserIntent::Undefined),
+          to_intent(UserIntent::Undefined),
+          weight(0.1f),
+          last_transition_time_us(0) {}
+
+    StateEdge(UserIntent from, UserIntent to)
+        : from_intent(from), to_intent(to), weight(0.1f), last_transition_time_us(0) {}
+
+    bool operator<(const StateEdge& other) const {
+        if (from_intent != other.from_intent) return from_intent < other.from_intent;
+        return to_intent < other.to_intent;
+    }
 };
 
 
-// *** PredictionEngine: Tahminci zeka için durum grafigini kullanir ***
-class PredictionEngine { 
+class PredictionEngine {
 public:
-    PredictionEngine(IntentAnalyzer& analyzer_ref, SequenceManager& manager_ref);
+    PredictionEngine(IntentAnalyzer& analyzer, SequenceManager& seq_manager);
 
-    virtual UserIntent predict_next_intent(UserIntent previous_intent, const DynamicSequence& current_sequence) const; // latent_cryptofig_vector kullanacak
-
-    void update_state_graph(UserIntent previous_intent, UserIntent current_intent, const DynamicSequence& sequence); // latent_cryptofig_vector kullanacak
-    
-    void save_state_graph(const std::string& filename) const;
-    void load_state_graph(const std::string& filename);
-
+    virtual UserIntent predict_next_intent(UserIntent previous_intent, const DynamicSequence& current_sequence) const;
+    void update_state_graph(UserIntent previous_intent, UserIntent current_intent, const DynamicSequence& sequence);
     float query_intent_probability(UserIntent target_intent, const DynamicSequence& current_sequence) const;
     void learn_time_patterns(const std::deque<AtomicSignal>& signal_buffer, UserIntent current_intent);
 
 private:
-    IntentAnalyzer& analyzer;
-    SequenceManager& manager; 
+    IntentAnalyzer& intent_analyzer;
+    SequenceManager& sequence_manager;
 
-    std::vector<StateNode> state_nodes; 
-    std::vector<StateEdge> state_edges; 
+    std::map<UserIntent, StateNode> state_graph_nodes;
+    std::map<std::pair<UserIntent, UserIntent>, StateEdge> state_graph_edges;
 
-    void initialize_state_graph(); 
-    StateEdge* find_or_create_edge(UserIntent from_intent, UserIntent to_intent); 
+    // Zaman deseni öğrenme
+    std::map<UserIntent, std::deque<long long>> time_pattern_history; // Niyet bazında zaman aralıkları
+    size_t time_pattern_history_limit;
 
-    float calculate_euclidean_distance(const std::vector<float>& vec1, const std::vector<float>& vec2) const;
+    StateEdge* find_or_create_edge(UserIntent from_intent, UserIntent to_intent);
 };
 
-#endif // CEREBRUM_LUX_PREDICTION_ENGINE_H
+} // namespace CerebrumLux
+
+#endif // PREDICTION_ENGINE_H

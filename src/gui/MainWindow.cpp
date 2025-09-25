@@ -1,168 +1,177 @@
 #include "MainWindow.h"
+#include "ui_MainWindow.h"
 #include <QTimer>
-#include <iostream>
-#include <QStringList> 
-#include <QDebug> 
-#include "../core/logger.h" 
-#include "../learning/capsule.h" 
-#include <iomanip> 
-#include <sstream> 
-#include <nlohmann/json.hpp> // JSON ayrıştırma için
+#include <QDateTime>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QDebug>
 
-// OpenSSL için gerekli başlıklar (Sadece EVP_CIPHER_iv_length için gerekli olanı bırakıldı)
-#include <openssl/evp.h>    
+// Kendi namespace'imizdeki sınıfları doğrudan kullanabilmek için
+#include "../core/logger.h"
+#include "../gui/panels/LogPanel.h" // YENİ EKLENDİ (MainWindow.cpp için)
+#include "../gui/panels/GraphPanel.h" // YENİ EKLENDİ (MainWindow.cpp için)
+#include "../gui/panels/SimulationPanel.h"
+#include "../gui/panels/CapsuleTransferPanel.h"
+#include "../gui/engine_integration.h"
+#include "../learning/Capsule.h"
+#include "../learning/LearningModule.h" // CerebrumLux::IngestReport, IngestResult için tam tanım
 
-// Panel başlık dosyalarını burada dahil ediyoruz
-#include "panels/SimulationPanel.h"
-#include "panels/LogPanel.h" 
-#include "panels/GraphPanel.h" 
-#include "panels/CapsuleTransferPanel.h" // YENİ: CapsuleTransferPanel dahil edildi
-#include "../gui/engine_integration.h" 
-#include "../core/utils.h" // base64_encode için utils.h'yi de dahil edelim
+#include "../external/nlohmann/json.hpp" // JSON parsing için
 
-// Capsule'dan SimulationData'ya basit bir dönüştürücü
-SimulationData convertCapsuleToSimulationData(const Capsule& capsule) {
+namespace CerebrumLux {
+
+SimulationData MainWindow::convertCapsuleToSimulationData(const Capsule& capsule) {
     SimulationData data;
-    data.id = capsule.id; 
-    data.value = capsule.confidence; 
+    data.id = QString::fromStdString(capsule.id);
+    data.value = capsule.confidence;
+    data.timestamp = std::chrono::system_clock::to_time_t(capsule.timestamp_utc);
     return data;
 }
 
-
-// Constructor
-MainWindow::MainWindow(EngineIntegration& eng, LearningModule& learn, QWidget* parent)
-    : QMainWindow(parent), engine(eng), learningModule(learn)
+MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningModuleRef, QWidget *parent)
+    : QMainWindow(parent),
+      ui(new Ui::MainWindow), // ui_MainWindow.h dahil edildiği için tam tanıma sahibiz
+      engine(engineRef),
+      learningModule(learningModuleRef)
 {
-    // Q_DECLARE_METATYPE ile kaydedilen türleri sinyal/slot sisteminde kullanabilmek için
-    // qRegisterMetaType çağrısı burada yapılabilir.
-    qRegisterMetaType<IngestResult>("IngestResult");
-    qRegisterMetaType<IngestReport>("IngestReport");
+    ui->setupUi(this);
 
-    // Paneller
+    qRegisterMetaType<CerebrumLux::IngestResult>("CerebrumLux::IngestResult");
+    qRegisterMetaType<CerebrumLux::IngestReport>("CerebrumLux::IngestReport");
+
+    // UI bileşenlerini oluşturma
     tabWidget = new QTabWidget(this);
-    simulationPanel = new SimulationPanel(this);
-    logPanel = new LogPanel(this);
-    graphPanel = new GraphPanel(this);
-    capsuleTransferPanel = new CapsuleTransferPanel(this); // YENİ: CapsuleTransferPanel oluşturuldu
-
-    tabWidget->addTab(simulationPanel, "Simulation");
-    tabWidget->addTab(logPanel, "Log");
-    tabWidget->addTab(graphPanel, "Graph");
-    tabWidget->addTab(capsuleTransferPanel, "Capsule Transfer"); // YENİ: Panele eklendi
-
     setCentralWidget(tabWidget);
 
-    // GUI güncelleme timer
-    connect(&update_timer, &QTimer::timeout, this, &MainWindow::updateGui);
-    update_timer.start(500); 
+    // Panel sınıfları artık tam olarak bilindiği için 'new' çağrısı geçerli
+    logPanel = new CerebrumLux::LogPanel(this); // Namespace ile
+    graphPanel = new CerebrumLux::GraphPanel(this); // Namespace ile
+    simulationPanel = new CerebrumLux::SimulationPanel(this); // Namespace ile
+    capsuleTransferPanel = new CerebrumLux::CapsuleTransferPanel(this); // Namespace ile
 
-    // SimulationPanel sinyallerini MainWindow'daki slot'lara bağla
-    connect(simulationPanel, &SimulationPanel::commandEntered, this, &MainWindow::onSimulationCommandEntered);
-    // Düzeltilmiş bağlantılar: SimulationPanel'in kendi sinyallerine bağlanıyoruz
-    connect(simulationPanel, &SimulationPanel::startSimulation, this, &MainWindow::onStartSimulationTriggered);
-    connect(simulationPanel, &SimulationPanel::stopSimulation, this, &MainWindow::onStopSimulationTriggered);
+    tabWidget->addTab(logPanel, "Log");
+    tabWidget->addTab(graphPanel, "Graph");
+    tabWidget->addTab(simulationPanel, "Simulation");
+    tabWidget->addTab(capsuleTransferPanel, "Capsule Transfer");
 
-    // YENİ: CapsuleTransferPanel sinyallerini MainWindow'daki slot'lara bağla
-    connect(capsuleTransferPanel, &CapsuleTransferPanel::ingestCapsuleRequest, this, &MainWindow::onIngestCapsuleRequest);
-    connect(capsuleTransferPanel, &CapsuleTransferPanel::fetchWebCapsuleRequest, this, &MainWindow::onFetchWebCapsuleRequest);
+    // Sinyal/slot bağlantıları
+    connect(logPanel, &CerebrumLux::LogPanel::logCleared, this, [this](){ // Namespace ile
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "GUI Log cleared by user.");
+    });
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::commandEntered, this, &CerebrumLux::MainWindow::onSimulationCommandEntered); // Namespace ile
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::startSimulationTriggered, this, &CerebrumLux::MainWindow::onStartSimulationTriggered); // Namespace ile
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered); // Namespace ile
 
-    LOG(LogLevel::INFO, "MainWindow: SimulationPanel and CapsuleTransferPanel signals connected.");
+    connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest); // Namespace ile
+    connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::fetchWebCapsuleRequest, this, &CerebrumLux::MainWindow::onFetchWebCapsuleRequest); // Namespace ile
+
+    // GUI güncelleme zamanlayıcısı
+    guiUpdateTimer = new QTimer(this);
+    connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui); // Namespace ile
+    guiUpdateTimer->start(100); // Her 100 ms'de bir GUI'yi güncelle
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: GUI Initialized.");
 }
 
-// Yıkıcı
-MainWindow::~MainWindow() {
-    // Paneller QObject hiyerarşisi tarafından otomatik yönetilir.
+MainWindow::~MainWindow()
+{
+    guiUpdateTimer->stop();
+    delete ui; // Ui::MainWindow artık tam olarak tanımlı olduğu için delete güvenli
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Destructor called.");
 }
 
-// GUI güncelleme metodu
+LogPanel* MainWindow::getLogPanel() const { return logPanel; }
+GraphPanel* MainWindow::getGraphPanel() const { return graphPanel; }
+SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel; }
+CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
+
+void MainWindow::appendLog(CerebrumLux::LogLevel level, const QString& message) {
+    if (logPanel) {
+        logPanel->appendLog(level, message);
+    }
+}
+
+void MainWindow::updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data) {
+    if (graphPanel) {
+        graphPanel->updateData(seriesName, data);
+    }
+}
+
+void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data) {
+    if (simulationPanel) {
+        simulationPanel->updateSimulationHistory(data);
+    }
+}
+
 void MainWindow::updateGui() {
-    std::vector<Capsule> capsules_for_sim = engine.getKnowledgeBase().search_by_topic("StepSimulation"); 
-    std::vector<SimulationData> simulation_data_vec;
+    // KnowledgeBase'den simülasyon verilerini al
+    std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().search_by_topic("StepSimulation");
+    QVector<CerebrumLux::SimulationData> sim_data;
     for (const auto& cap : capsules_for_sim) {
-        simulation_data_vec.push_back(convertCapsuleToSimulationData(cap)); 
+        sim_data.append(convertCapsuleToSimulationData(cap));
     }
-    simulationPanel->updatePanel(simulation_data_vec);
+    simulationPanel->updateSimulationHistory(sim_data);
 
-    auto capsules_for_graph = learningModule.search_by_topic("StepSimulation"); 
-    if (!capsules_for_graph.empty()) {
-        double latestValue = capsules_for_graph.back().confidence; 
-        graphPanel->updateGraph(static_cast<size_t>(latestValue));
-        LOG_DEFAULT(LogLevel::DEBUG, "MainWindow: GraphPanel updated with value: " << latestValue);
-    } else {
-        LOG_DEFAULT(LogLevel::DEBUG, "MainWindow: No 'StepSimulation' capsules found for GraphPanel. Setting value to 0.");
-        graphPanel->updateGraph(0); 
+    // KnowledgeBase'den grafik verilerini al
+    auto capsules_for_graph = learningModule.search_by_topic("StepSimulation");
+    QMap<qreal, qreal> graph_data;
+    for (const auto& cap : capsules_for_graph) {
+        graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), cap.confidence);
     }
+    graphPanel->updateData("Confidence Over Time", graph_data);
 
-    LOG_DEFAULT(LogLevel::DEBUG, "[GUI] Güncelleme..."); 
-    qDebug() << "[Qt GUI] Güncelleme..."; 
-
-    auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2); 
+    auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
     if (!results.empty()) {
-        LOG_DEFAULT(LogLevel::INFO, "[GUI] Hatırlanan bilgi: " << results[0].content);
-        qDebug() << "[Qt GUI] Hatırlanan bilgi: " << QString::fromStdString(results[0].content);
+        //LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Semantic search results: " << results[0].content.substr(0, 50));
     }
 }
 
-// SimulationPanel sinyalleri için slot implementasyonları
 void MainWindow::onSimulationCommandEntered(const QString& command) {
-    LOG(LogLevel::INFO, "MainWindow: Received simulation command: " << command.toStdString());
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Simulation Command: " << command.toStdString());
     engine.processUserCommand(command.toStdString());
 }
 
 void MainWindow::onStartSimulationTriggered() {
-    LOG(LogLevel::INFO, "MainWindow: Received start simulation signal.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Start Simulation Triggered.");
     engine.startCoreSimulation();
 }
 
 void MainWindow::onStopSimulationTriggered() {
-    LOG(LogLevel::INFO, "MainWindow: Received stop simulation signal.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Stop Simulation Triggered.");
     engine.stopCoreSimulation();
 }
 
-// YENİ: CapsuleTransferPanel sinyalleri için slot implementasyonları
 void MainWindow::onIngestCapsuleRequest(const QString& capsuleJson, const QString& signature, const QString& senderId) {
-    LOG_DEFAULT(LogLevel::INFO, "MainWindow: Received ingest capsule request from GUI. Sender: " << senderId.toStdString());
-    
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Ingest Capsule Request from " << senderId.toStdString());
     try {
         nlohmann::json j = nlohmann::json::parse(capsuleJson.toStdString());
-        Capsule incoming_capsule = Capsule::fromJson(j);
+        CerebrumLux::Capsule incoming_capsule = j.get<CerebrumLux::Capsule>();
 
-        // LearningModule'den kapsülü işle
-        IngestReport report = learningModule.ingest_envelope(incoming_capsule, signature.toStdString(), senderId.toStdString());
-        
-        // Raporu CapsuleTransferPanel'e geri gönder
+        CerebrumLux::IngestReport report = learningModule.ingest_envelope(incoming_capsule, signature.toStdString(), senderId.toStdString());
         capsuleTransferPanel->displayIngestReport(report);
-
     } catch (const nlohmann::json::parse_error& e) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "MainWindow: JSON ayrıştırma hatası: " << e.what());
-        IngestReport error_report;
-        error_report.result = IngestResult::UnknownError;
-        error_report.message = "JSON parsing failed: " + std::string(e.what());
-        error_report.source_peer_id = senderId.toStdString();
-        error_report.timestamp = std::chrono::system_clock::now();
+        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "MainWindow: JSON Parse Error on ingest request: " << e.what());
+        CerebrumLux::IngestReport error_report;
+        error_report.result = CerebrumLux::IngestResult::SchemaMismatch;
+        error_report.message = "Invalid JSON format: " + std::string(e.what());
         capsuleTransferPanel->displayIngestReport(error_report);
     } catch (const std::exception& e) {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "MainWindow: Kapsül yutma sırasında beklenmeyen hata: " << e.what());
-        IngestReport error_report;
-        error_report.result = IngestResult::UnknownError;
-        error_report.message = "Unexpected error during capsule ingestion: " + std::string(e.what());
-        error_report.source_peer_id = senderId.toStdString();
-        error_report.timestamp = std::chrono::system_clock::now();
+        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "MainWindow: Error ingesting capsule: " << e.what());
+        CerebrumLux::IngestReport error_report;
+        error_report.result = CerebrumLux::IngestResult::UnknownError;
+        error_report.message = "An unknown error occurred: " + std::string(e.what());
         capsuleTransferPanel->displayIngestReport(error_report);
     }
 }
 
 void MainWindow::onFetchWebCapsuleRequest(const QString& query) {
-    LOG_DEFAULT(LogLevel::INFO, "MainWindow: Received fetch web capsule request from GUI. Query: " << query.toStdString());
-    // LearningModule'den web'den kapsül çekme işlemini başlat
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Fetch Web Capsule Request for query: " << query.toStdString());
     learningModule.learnFromWeb(query.toStdString());
 
-    // Başarılı olduğunu varsayan basit bir rapor (gerçekte learnFromWeb bir rapor döndürmez)
-    IngestReport dummy_report;
-    dummy_report.result = IngestResult::Success;
-    dummy_report.message = "Web'den kapsül çekme işlemi başlatıldı (simüle edildi).";
-    dummy_report.source_peer_id = "WebFetcher";
-    dummy_report.original_capsule.id = "web_fetch_" + query.toStdString().substr(0, std::min(static_cast<size_t>(10), static_cast<size_t>(query.length())));
-    dummy_report.timestamp = std::chrono::system_clock::now();
+    CerebrumLux::IngestReport dummy_report;
+    dummy_report.result = CerebrumLux::IngestResult::Success;
+    dummy_report.message = "Web capsule fetch initiated for: " + query.toStdString();
     capsuleTransferPanel->displayIngestReport(dummy_report);
 }
+
+} // namespace CerebrumLux

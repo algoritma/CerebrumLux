@@ -1,40 +1,40 @@
-#ifndef CEREBRUM_LUX_CRYPTOFIG_PROCESSOR_H
-#define CEREBRUM_LUX_CRYPTOFIG_PROCESSOR_H
+#ifndef CRYPTOFIG_PROCESSOR_H
+#define CRYPTOFIG_PROCESSOR_H
 
+#include <string>
 #include <vector>
-#include <string> // For wstring
-#include "../core/enums.h"         // Enumlar için
-#include "../core/utils.h"         // For convert_wstring_to_string (if needed elsewhere)
-#include "../data_models/dynamic_sequence.h" // DynamicSequence için ileri bildirim
-#include "intent_learner.h"        // IntentLearner için ileri bildirim
-#include "intent_analyzer.h"       // IntentAnalyzer için ileri bildirim
-#include "autoencoder.h"           // CryptofigAutoencoder için ileri bildirim
 
+#include "intent_analyzer.h"
+#include "autoencoder.h" // CryptofigAutoencoder için
+#include "../sensors/atomic_signal.h" // DynamicSequence için
+#include "../core/enums.h" // UserIntent için eklendi (TAM TANIM İÇİN)
+#include "intent_learner.h" // IntentLearner için eklendi (ÇOK ÖNEMLİ)
 
-// İleri bildirimler
-class IntentAnalyzer;
-class IntentLearner;
-class CryptofigAutoencoder;
-struct DynamicSequence;
+// UserIntent için ileri bildirim yerine, tam tanım enums.h'den geliyor.
+// Bu satırı tamamen kaldırıyoruz.
+// namespace CerebrumLux { enum class UserIntent; } // BU SATIR KALDIRILDI
 
-// *** CryptofigProcessor: Kriptofiglerin olusturulmasi ve islenmesi için ***
+namespace CerebrumLux {
+
 class CryptofigProcessor {
 public:
-    CryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAutoencoder& autoencoder_ref);
+    CryptofigProcessor(IntentAnalyzer& analyzer, CryptofigAutoencoder& autoencoder);
 
-    // Bu metod DynamicSequence'i işleyerek hem statistical_features_vector'ı kullanacak hem de latent_cryptofig_vector'ı güncelleyecek.
-    void process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate); 
+    std::vector<float> process_atomic_signal(const AtomicSignal& signal);
+    void process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate);
+    void process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner);
 
-    void apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, UserIntent target_intent) const;
-    //CryptofigAutoencoder& get_autoencoder() const { return autoencoder; } // Getter metodu
-    virtual void process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner); // YENİ EKLENDİ VE VIRTUAL
-    virtual std::vector<float> generate_cryptofig_from_signals(const DynamicSequence& sequence); // YENİ EKLENDİ VE VIRTUAL
-    virtual CryptofigAutoencoder& get_autoencoder(); //non-const versiyo
-    virtual const CryptofigAutoencoder& get_autoencoder() const; // Getter metodu - Sadece prototip
+    // Get_autoencoder bildirimleri
+    const CryptofigAutoencoder& get_autoencoder() const; // Const versiyon
+    CryptofigAutoencoder& get_autoencoder(); // non-const versiyon
+
+    void apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, CerebrumLux::UserIntent target_intent) const;
 
 private:
-    IntentAnalyzer& analyzer;
-    CryptofigAutoencoder& autoencoder; // Autoencoder referansı
+    IntentAnalyzer& intent_analyzer;
+    CryptofigAutoencoder& cryptofig_autoencoder;
 };
 
-#endif // CEREBRUM_LUX_CRYPTOFIG_PROCESSOR_H
+} // namespace CerebrumLux
+
+#endif // CRYPTOFIG_PROCESSOR_H

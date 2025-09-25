@@ -1,86 +1,86 @@
-#pragma once
+#ifndef CAPSULE_H
+#define CAPSULE_H
+
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
-#include <chrono> // For std::chrono::system_clock::time_point
+#include <chrono>
+#include <nlohmann/json.hpp> // JSON serileştirme/deserileştirme için
+#include <iomanip> // std::put_time için
+#include <sstream> // std::stringstream için
+
+namespace CerebrumLux {
 
 struct Capsule {
-    std::string id;                          // YENİ: ID artık string
-    float trust_score;                       // YENİ: Güven skoru
-    std::chrono::system_clock::time_point timestamp_utc; // YENİ: UTC zaman damgası
-    std::vector<std::string> keywords;       // YENİ: Anahtar kelimeler
-    float estimated_cost;                    // YENİ: Tahmini maliyet
-    std::string plain_text_summary;          // YENİ: Düz metin özeti
-    std::string cryptofig_blob_base64;       // YENİ: Kriptofig blob'unun Base64 kodu
-    std::string signature_base64;            // YENİ: İmzanın Base64 kodu
-    std::string encryption_iv_base64;        // YENİ: Şifreleme IV'sinin Base64 kodu
+    std::string id;
+    float trust_score = 1.0f;
+    std::chrono::system_clock::time_point timestamp_utc;
+    std::string topic;
+    std::string source;
+    std::string content; // Şifresi çözülmüş/orijinal içerik
+    std::string plain_text_summary;
+    std::string cryptofig_blob_base64;
+    std::vector<float> embedding; // Cryptofig'in float vektör hali
+    float confidence;
 
-    // Mevcut alanlar (bazılarının tipi değişti)
-    std::string content;             // Orijinal içerik (plain text)
-    std::string source;              // Kaynak (manual, web vs.)
-    std::string topic;               // Konu başlığı
-    std::string encrypted_content;   // Cryptofig ile şifrelenmiş içerik (artık raw, base64 blob'u ile farklılaşacak)
-    std::vector<float> embedding;    // Embedding vektörü
-    float confidence;                // Güven skoru
+    // Güvenlik ve Şifreleme alanları
+    std::string encrypted_content;      // Şifreli içerik (ciphertext_base64)
+    std::string signature_base64;       // Ed25519 imzası Base64
+    std::string encryption_iv_base64;   // AES-GCM IV'si Base64
+    std::string gcm_tag_base64;         // YENİ: AES-GCM tag'ı Base64
 
-    // JSON’a serialize
-    nlohmann::json toJson() const {
-        // time_point'u ISO 8601 formatında string'e dönüştürme
-        std::time_t tt = std::chrono::system_clock::to_time_t(timestamp_utc);
-        std::tm tm = *std::gmtime(&tt); // UTC için gmtime
+    // NLOHMANN_DEFINE_TYPE_INTRUSIVE makrosu std::chrono::time_point'ı doğrudan desteklemez.
+    // Manuel to_json ve from_json fonksiyonları tanımlamalıyız.
+
+    // to_json için kural
+    friend void to_json(nlohmann::json& j, const Capsule& c) {
+        j["id"] = c.id;
+        j["trust_score"] = c.trust_score;
+        
+        // timestamp_utc'yi ISO 8601 string'e dönüştür
+        std::time_t t = std::chrono::system_clock::to_time_t(c.timestamp_utc);
         std::stringstream ss;
-        ss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
-        std::string timestamp_str = ss.str();
+        ss << std::put_time(std::gmtime(&t), "%Y-%m-%dT%H:%M:%SZ"); // ISO 8601 formatı
+        j["timestamp_utc"] = ss.str();
 
-        return {
-            {"id", id},
-            {"trust_score", trust_score},
-            {"timestamp_utc", timestamp_str},
-            {"keywords", keywords},
-            {"estimated_cost", estimated_cost},
-            {"plain_text_summary", plain_text_summary},
-            {"cryptofig_blob_base64", cryptofig_blob_base64},
-            {"signature_base64", signature_base64},
-            {"encryption_iv_base64", encryption_iv_base64},
-            {"content", content},
-            {"source", source},
-            {"topic", topic},
-            {"encrypted_content", encrypted_content},
-            {"embedding", embedding},
-            {"confidence", confidence}
-        };
+        j["topic"] = c.topic;
+        j["source"] = c.source;
+        j["content"] = c.content;
+        j["plain_text_summary"] = c.plain_text_summary;
+        j["cryptofig_blob_base64"] = c.cryptofig_blob_base64;
+        j["embedding"] = c.embedding;
+        j["confidence"] = c.confidence;
+        j["encrypted_content"] = c.encrypted_content;
+        j["signature_base64"] = c.signature_base64;
+        j["encryption_iv_base64"] = c.encryption_iv_base64;
+        j["gcm_tag_base64"] = c.gcm_tag_base64;
     }
 
-    // JSON’dan deserialize
-    static Capsule fromJson(const nlohmann::json& j) {
-        Capsule c;
-        c.id = j.value("id", "");
-        c.trust_score = j.value("trust_score", 0.0f);
+    // from_json için kural
+    friend void from_json(const nlohmann::json& j, Capsule& c) {
+        j.at("id").get_to(c.id);
+        j.at("trust_score").get_to(c.trust_score);
+
+        // ISO 8601 string'i timestamp_utc'ye dönüştür
+        std::string ts_str = j.at("timestamp_utc").get<std::string>();
+        std::tm tm = {};
+        std::stringstream ss(ts_str);
+        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+        c.timestamp_utc = std::chrono::system_clock::from_time_t(std::mktime(&tm));
         
-        // ISO 8601 formatından time_point'a dönüştürme
-        std::string timestamp_str = j.value("timestamp_utc", "");
-        if (!timestamp_str.empty()) {
-            std::tm tm = {};
-            std::stringstream ss(timestamp_str);
-            ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
-            if (!ss.fail()) {
-                c.timestamp_utc = std::chrono::system_clock::from_time_t(std::mktime(&tm));
-            }
-        }
-
-        c.keywords = j.value("keywords", std::vector<std::string>{});
-        c.estimated_cost = j.value("estimated_cost", 0.0f);
-        c.plain_text_summary = j.value("plain_text_summary", "");
-        c.cryptofig_blob_base64 = j.value("cryptofig_blob_base64", "");
-        c.signature_base64 = j.value("signature_base64", "");
-        c.encryption_iv_base64 = j.value("encryption_iv_base64", "");
-
-        c.content = j.value("content", "");
-        c.source = j.value("source", "");
-        c.topic = j.value("topic", "");
-        c.encrypted_content = j.value("encrypted_content", "");
-        c.embedding = j.value("embedding", std::vector<float>{});
-        c.confidence = j.value("confidence", 0.0f);
-        return c;
+        j.at("topic").get_to(c.topic);
+        j.at("source").get_to(c.source);
+        j.at("content").get_to(c.content);
+        j.at("plain_text_summary").get_to(c.plain_text_summary);
+        j.at("cryptofig_blob_base64").get_to(c.cryptofig_blob_base64);
+        j.at("embedding").get_to(c.embedding);
+        j.at("confidence").get_to(c.confidence);
+        j.at("encrypted_content").get_to(c.encrypted_content);
+        j.at("signature_base64").get_to(c.signature_base64);
+        j.at("encryption_iv_base64").get_to(c.encryption_iv_base64);
+        j.at("gcm_tag_base64").get_to(c.gcm_tag_base64);
     }
 };
+
+} // namespace CerebrumLux
+
+#endif // CAPSULE_H

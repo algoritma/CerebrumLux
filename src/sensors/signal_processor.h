@@ -1,21 +1,27 @@
-#ifndef CEREBRUM_LUX_SIGNAL_PROCESSOR_H
-#define CEREBRUM_LUX_SIGNAL_PROCESSOR_H
+#ifndef SIGNAL_PROCESSOR_H
+#define SIGNAL_PROCESSOR_H
 
-#include "../core/enums.h" // Enum'lar için
-#include "atomic_signal.h" // AtomicSignal için
+#include <string>
+#include "../sensors/atomic_signal.h" // CerebrumLux::AtomicSignal için
 
+namespace CerebrumLux { // SignalProcessor sınıfı bu namespace içine alınacak
 
-class AtomicSignalProcessor; // İleri bildirim
-
-// *** AtomicSignalProcessor: İşletim sistemi seviyesinde sinyal yakalama için soyut arayüz ***
-// İleri bildirim
-class AtomicSignalProcessor {
+// Tüm sinyal işleyicileri için temel arayüz
+class SignalProcessor {
 public:
-    virtual ~AtomicSignalProcessor() = default; 
-    virtual AtomicSignal capture_next_signal() = 0;
+    virtual ~SignalProcessor() = default; // Sanal yıkıcı
+
+    // Sinyal yakalamayı başlat/durdur
     virtual bool start_capture() = 0;
     virtual void stop_capture() = 0;
+
+    // Bir sonraki atomik sinyali yakalar
+    virtual CerebrumLux::AtomicSignal capture_next_signal() = 0; // AtomicSignal güncellendi
+
+    // Aktif uygulama ID'sinin hash'ini döndürür
     virtual unsigned short get_active_application_id_hash() = 0;
 };
 
-#endif // CEREBRUM_LUX_SIGNAL_PROCESSOR_H
+} // namespace CerebrumLux
+
+#endif // SIGNAL_PROCESSOR_H

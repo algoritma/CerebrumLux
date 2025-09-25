@@ -1,19 +1,15 @@
-#ifndef UNICODESANITIZER_H
-#define UNICODESANITIZER_H
+#ifndef UNICODE_SANITIZER_H
+#define UNICODE_SANITIZER_H
 
 #include <string>
 
+namespace CerebrumLux { // Yeni eklendi
+
 class UnicodeSanitizer {
 public:
-    UnicodeSanitizer() = default;
-
-    // Metindeki potansiyel olarak sorunlu veya gizli Unicode karakterlerini temizler.
-    std::string sanitize(const std::string& text) const;
-
-private:
-    // Yardımcı metodlar (gelecekte eklenebilir)
-    // bool isControlChar(char32_t c) const;
-    // bool isConfusableChar(char32_t c) const;
+    std::string sanitize(const std::string& input) const;
 };
 
-#endif // UNICODESANITIZER_H
+} // namespace CerebrumLux // Yeni eklendi
+
+#endif // UNICODE_SANITIZER_H
