@@ -22,7 +22,7 @@
 #include "core/enums.h"
 #include "core/utils.h"
 #include "core/logger.h"
-#include "sensors/simulated_processor.h"
+#include "sensors/simulated_processor.h" // SimulatedAtomicSignalProcessor için
 #include "data_models/sequence_manager.h"
 #include "brain/intent_analyzer.h"
 #include "brain/intent_learner.h"
@@ -190,8 +190,8 @@ int main(int argc, char *argv[])
     }
     early_diagnostic_log.flush();
 
-    // --- LearningModule::ingest_envelope Test Senaryoları bloğu kaldırıldı ---
-    /* (Bu blok, ayrı bir test executable'ına taşınmak üzere kaldırıldı) */
+    // --- LearningModule::ingest_envelope Test Senaryoları bloğu hala yorum satırında ---
+    /* (Bu blok, ayrı bir test executable'ına taşındı) */
 
     // --- Engine döngüsü QTimer bloğu ---
     QTimer* engineTimer = new QTimer(&app); // Heap üzerinde oluşturuldu ve parent olarak app verildi.
@@ -209,6 +209,30 @@ int main(int argc, char *argv[])
     engineTimer->start(1000); // 1 saniye döngü
 
 
+    // --- Yeni Eklenti: Simülasyon Sinyal Üretimi ---
+    CerebrumLux::SimulatedAtomicSignalProcessor simulated_sensor_processor;
+    QTimer* signalCaptureTimer = new QTimer(&app); // Heap üzerinde oluşturuldu ve parent olarak app verildi.
+    QObject::connect(signalCaptureTimer, &QTimer::timeout, [&]() {
+        try {
+            CerebrumLux::AtomicSignal signal = simulated_sensor_processor.capture_next_signal();
+            // signal.id'yi burada bir counter ile güncelleyebiliriz veya simulated_sensor_processor içinde yönetebiliriz.
+            // Örneğin: signal.id = "sim_signal_" + std::to_string(CerebrumLux::get_current_timestamp_us()); 
+            
+            // Loglama ekliyoruz
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: Simüle sinyal yakalandı. Type: " << CerebrumLux::sensor_type_to_string(signal.type) << ", Value: " << signal.value);
+            
+            // SequenceManager'a sinyali ekle
+            sequenceManager.add_signal(signal, cryptofig_processor);
+            
+        } catch (const std::exception& e) {
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: Sinyal yakalama sirasinda hata: " << e.what());
+        } catch (...) {
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: Sinyal yakalama sirasinda bilinmeyen bir hata olustu.");
+        }
+    });
+    signalCaptureTimer->start(500); // Her 500 ms'de bir simüle sinyal yakala
+
+
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Entering QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
 
@@ -222,8 +246,9 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Application exited with code: " << result << std::endl;
     early_diagnostic_log.close();
     
-    // app parent'ı olduğu için engineTimer otomatik silinecektir.
-    // delete engineTimer; // Gerekli değildir ve double-free'ye yol açabilir.
+    // Heap üzerinde oluşturulan timer'lar app'e parent olarak verildiği için otomatik silinecektir.
+    // delete engineTimer;
+    // delete signalCaptureTimer;
 
     return result;
 }
