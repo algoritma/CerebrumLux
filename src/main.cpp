@@ -190,10 +190,10 @@ int main(int argc, char *argv[])
     }
     early_diagnostic_log.flush();
 
-    // --- LearningModule::ingest_envelope Test Senaryoları bloğu TEKRAR YORUM SATIRI YAPILDI ---
-    /* (Bu blok şu anki çökmenin ana nedeni olarak değerlendirildi ve pasif bırakıldı) */
+    // --- LearningModule::ingest_envelope Test Senaryoları bloğu kaldırıldı ---
+    /* (Bu blok, ayrı bir test executable'ına taşınmak üzere kaldırıldı) */
 
-    // --- Engine döngüsü QTimer bloğu --- (QTimer'ı heap üzerinde oluşturuyoruz)
+    // --- Engine döngüsü QTimer bloğu ---
     QTimer* engineTimer = new QTimer(&app); // Heap üzerinde oluşturuldu ve parent olarak app verildi.
     QObject::connect(engineTimer, &QTimer::timeout, [&](){
         try { // meta_engine.run_meta_evolution_cycle() çağrısını try-catch bloğu ile sarmalıyoruz
@@ -202,11 +202,8 @@ int main(int argc, char *argv[])
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: Meta-evolution cycle tamamlandı.");
         } catch (const std::exception& e) {
             LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: Meta-evolution cycle sirasinda hata: " << e.what());
-            // Hata sonrası timer'ı durdurabiliriz veya başka bir kurtarma mekanizması ekleyebiliriz.
-            // engineTimer->stop(); // Gerekirse timer'ı durdur
         } catch (...) {
             LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: Meta-evolution cycle sirasinda bilinmeyen bir hata olustu.");
-            // engineTimer->stop(); // Gerekirse timer'ı durdur
         }
     });
     engineTimer->start(1000); // 1 saniye döngü
@@ -224,10 +221,9 @@ int main(int argc, char *argv[])
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Application exited with code: " << result << std::endl;
     early_diagnostic_log.close();
-
-    // Heap üzerinde oluşturulan engineTimer'ı temizle (parent'ı app olduğu için normalde app kapanırken silinir, ama manuel silmek daha güvenli).
-    // Ancak QTimer'ın parent'ı app olduğu için, app silindiğinde QTimer da silinecektir.
-    // delete engineTimer; // Bu satır gerekli değildir ve double-free'ye yol açabilir.
     
+    // app parent'ı olduğu için engineTimer otomatik silinecektir.
+    // delete engineTimer; // Gerekli değildir ve double-free'ye yol açabilir.
+
     return result;
 }
