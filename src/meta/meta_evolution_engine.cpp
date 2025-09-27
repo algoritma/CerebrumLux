@@ -1,13 +1,8 @@
 #include "meta_evolution_engine.h"
 #include "../core/logger.h"
-#include "../sensors/atomic_signal.h"
-#include "../data_models/sequence_manager.h"
-#include "../brain/autoencoder.h" // CryptofigAutoencoder tanımı için
-#include "../brain/intent_analyzer.h"
-#include "../brain/intent_learner.h"
-#include "../communication/ai_insights_engine.h" // AIInsight tanımı için
-#include "../planning_execution/goal_manager.h"
-#include "../core/enums.h" // SensorType, UserIntent, AbstractState için
+#include "../core/enums.h" // LogLevel için
+#include "../sensors/atomic_signal.h" // sequenceManager için
+#include <stdexcept> // std::runtime_error için
 
 namespace CerebrumLux {
 
@@ -19,62 +14,83 @@ MetaEvolutionEngine::MetaEvolutionEngine(
     CryptofigProcessor& cryptofig_processor_ref,
     AIInsightsEngine& insights_engine_ref,
     LearningModule& learning_module_ref
-)
-    : analyzer(analyzer_ref),
-      learner(learner_ref),
-      predictor(predictor_ref),
-      goal_manager(goal_manager_ref),
-      cryptofig_processor(cryptofig_processor_ref),
-      insights_engine(insights_engine_ref),
-      learning_module(learning_module_ref)
+) : 
+    analyzer(analyzer_ref),
+    learner(learner_ref),
+    predictor(predictor_ref),
+    goal_manager(goal_manager_ref),
+    cryptofig_processor(cryptofig_processor_ref),
+    insights_engine(insights_engine_ref),
+    learning_module(learning_module_ref)
 {
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Initialized.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MetaEvolutionEngine: Initialized.");
 }
 
 void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& current_sequence) {
-    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Running meta-evolution cycle...");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Running meta-evolution cycle...");
 
-    int rounds = 5;
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Starting self-simulation for " << rounds << " rounds.");
-
-    CerebrumLux::SequenceManager temp_sim_sequence_manager;
-
-    for (int i = 0; i < rounds; ++i) {
-        LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Self-simulation round " << (i + 1));
-
-        CerebrumLux::AtomicSignal simulated_signal;
-        simulated_signal.type = CerebrumLux::SensorType::Keyboard;
-        simulated_signal.value = "sim_input_" + std::to_string(i);
-        temp_sim_sequence_manager.add_signal(simulated_signal, this->cryptofig_processor); // Eksik argüman eklendi
-
-        CerebrumLux::DynamicSequence simulated_sequence;
-        simulated_sequence.id = "sim_seq_" + std::to_string(i);
-        simulated_sequence.timestamp_utc = std::chrono::system_clock::now();
-        simulated_sequence.event_count = i + 1;
-
-        simulated_sequence.statistical_features_vector.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
-        for (size_t j = 0; j < simulated_sequence.statistical_features_vector.size(); ++j) {
-            simulated_sequence.statistical_features_vector[j] = static_cast<float>(rand()) / RAND_MAX;
-        }
-
-        this->cryptofig_processor.process_sequence(simulated_sequence, 0.01f);
-
-        CerebrumLux::UserIntent predicted_intent = this->analyzer.analyze_intent(simulated_sequence);
-        CerebrumLux::AbstractState inferred_state = this->learner.infer_abstract_state(temp_sim_sequence_manager.get_signal_buffer_copy());
-
-        std::vector<CerebrumLux::AIInsight> insights = this->insights_engine.generate_insights(simulated_sequence);
-        if (!insights.empty()) {
-            this->learning_module.process_ai_insights(insights);
-        }
-
-        this->goal_manager.evaluate_and_set_goal(simulated_sequence);
-
-        LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Simulated intent: " << static_cast<int>(predicted_intent)
-                                      << ", Inferred state: " << static_cast<int>(inferred_state));
+    try {
+        // Adım 1: Mevcut durumu analiz et ve hedefleri değerlendir.
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: GoalManager evaluate_and_set_goal çağrılıyor.");
+        goal_manager.evaluate_and_set_goal(current_sequence);
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: GoalManager evaluate_and_set_goal tamamlandı. Güncel hedef: " << CerebrumLux::goal_to_string(goal_manager.get_current_goal()));
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: GoalManager adiminda hata: " << e.what());
+        return;
+    } catch (...) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: GoalManager adiminda bilinmeyen hata.");
+        return;
     }
-    LOG_DEFAULT(LogLevel::INFO, "MetaEvolutionEngine: Self-simulation finished.");
 
-    LOG_DEFAULT(LogLevel::DEBUG, "MetaEvolutionEngine: Meta-evolution cycle completed.");
+    try {
+        // Adım 2: Öngörüde bulun.
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: PredictionEngine predict_next_intent çağrılıyor.");
+        CerebrumLux::UserIntent predicted_intent = predictor.predict_next_intent(CerebrumLux::UserIntent::Undefined, current_sequence);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Tahmin edilen niyet: " << CerebrumLux::intent_to_string(predicted_intent));
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: PredictionEngine adiminda hata: " << e.what());
+        return;
+    } catch (...) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: PredictionEngine adiminda bilinmeyen hata.");
+        return;
+    }
+
+    try {
+        // Adım 3: İçgörüler oluştur.
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: AIInsightsEngine generate_insights çağrılıyor.");
+        std::vector<AIInsight> insights = insights_engine.generate_insights(current_sequence);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: " << insights.size() << " adet içgörü üretildi.");
+        learning_module.process_ai_insights(insights);
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: AIInsightsEngine adiminda hata: " << e.what());
+        return;
+    } catch (...) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: AIInsightsEngine adiminda bilinmeyen hata.");
+        return;
+    }
+
+    try {
+        // Adım 4: Kriptofigleri işle ve öğrenme için kullan.
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: CryptofigProcessor process_sequence çağrılıyor.");
+        
+        // current_sequence const olduğu için, kopyasını oluşturup mutable hale getiriyoruz.
+        // Ayrıca, boş vector hatasını önlemek için kontrol ekliyoruz.
+        if (current_sequence.statistical_features_vector.empty() || current_sequence.statistical_features_vector.size() != CryptofigAutoencoder::INPUT_DIM) {
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MetaEvolutionEngine: current_sequence.statistical_features_vector boş veya boyutu CryptofigAutoencoder::INPUT_DIM ile uyuşmuyor. CryptofigProcessor işlemi atlanıyor.");
+        } else {
+            DynamicSequence mutable_sequence_copy = current_sequence; // Kopyasını alıyoruz
+            cryptofig_processor.process_sequence(mutable_sequence_copy, 0.01f); // learning_rate_ae dummy olarak verildi
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: CryptofigProcessor process_sequence tamamlandı.");
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: CryptofigProcessor adiminda hata: " << e.what());
+        return;
+    } catch (...) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: CryptofigProcessor adiminda bilinmeyen hata.");
+        return;
+    }
+    
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Meta-evolution cycle tamamlandı.");
 }
 
 } // namespace CerebrumLux
