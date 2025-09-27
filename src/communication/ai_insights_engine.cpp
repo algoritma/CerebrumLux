@@ -3,6 +3,8 @@
 #include "../core/enums.h" // InsightType, UrgencyLevel, UserIntent, AIAction için
 #include "../core/utils.h" // intent_to_string için
 #include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
+#include <numeric> // std::accumulate için
+#include <algorithm> // std::min, std::max için
 
 namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
@@ -23,6 +25,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     std::vector<AIInsight> insights;
     auto now = std::chrono::system_clock::now();
     
+    // --- Önceki mantık korunuyor ---
     // Simülasyon modunda değilsek veya her zaman izlememiz gereken şeyler
     // 1. Latent kriptofig verisi mevcut mu?
     if (current_sequence.latent_cryptofig_vector.empty() || current_sequence.latent_cryptofig_vector.size() != CryptofigAutoencoder::LATENT_DIM) {
@@ -79,10 +82,39 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
             insight_cooldowns["low_learning_rate_stuck"] = now;
         }
     }
+    // --- Önceki mantık sonu ---
 
-    // Ek içgörüler...
+    // --- YENİ EKLENEN GRAFİK BESLEME İÇGÖRÜSÜ ---
+    // Eğer henüz hiç içgörü üretilmediyse veya belirli bir aralıkla üretmek istiyorsak
+    if (insights.empty() || !is_on_cooldown("ai_confidence_graph", std::chrono::seconds(5))) { // Her 5 saniyede bir yeni güven içgörüsü üret
+        if (!current_sequence.latent_cryptofig_vector.empty()) {
+            float avg_latent_confidence = 0.0f;
+            for (float val : current_sequence.latent_cryptofig_vector) {
+                avg_latent_confidence += val;
+            }
+            avg_latent_confidence /= current_sequence.latent_cryptofig_vector.size();
 
-    if (insights.empty()) {
+            float normalized_confidence = std::max(0.0f, std::min(1.0f, avg_latent_confidence));
+
+            AIInsight confidence_insight;
+            confidence_insight.id = "AI_Confidence_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count());
+            confidence_insight.observation = "AI sisteminin anlık güven seviyesi: " + std::to_string(normalized_confidence);
+            confidence_insight.context = "Sistem Genel Performans Metriği"; // LearningModule tarafından GraphData olarak yorumlanacak
+            confidence_insight.recommended_action = "Grafiği gözlemlemeye devam et.";
+            confidence_insight.type = InsightType::None; // Genel bir içgörü tipi
+            confidence_insight.urgency = UrgencyLevel::None;
+            confidence_insight.associated_cryptofig = current_sequence.latent_cryptofig_vector;
+            confidence_insight.related_capsule_ids.push_back(current_sequence.id);
+
+            insights.push_back(confidence_insight);
+            insight_cooldowns["ai_confidence_graph"] = now; // Cooldown'u güncelle
+            LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: AI Güven Seviyesi içgörüsü (grafik için) üretildi: " << normalized_confidence);
+        } else {
+             LOG_DEFAULT(LogLevel::WARNING, "AIInsightsEngine::generate_insights: Latent cryptofig vector boş, AI güven içgörüsü (grafik için) üretilemiyor.");
+        }
+    }
+
+    if (insights.empty()) { // Eğer yukarıdaki koşulların hiçbiriyle içgörü üretilemediyse, genel stabil durum içgörüsü
         if (!is_on_cooldown("stable_state", std::chrono::seconds(300))) {
             insights.push_back({"Ic durumum stabil gorunuyor. Yeni ogrenme firsatlari icin hazirim.", "Genel Durum", "Sistem Sağlığı", "Yeni özellik geliştirme veya derinlemesine öğrenme moduna geç.", InsightType::None, UrgencyLevel::Low, {}, {}});
             insight_cooldowns["stable_state"] = now;
