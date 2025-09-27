@@ -22,7 +22,13 @@ CryptoManager::CryptoManager() :
     my_ed25519_public_key(nullptr, EVP_PKEY_free)
 {
     LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Initializing. Attempting to load or generate identity keys.");
-    generate_or_load_identity_keys("my_ed25519_private.pem", "my_ed25519_public.pem");
+    try { // generate_or_load_identity_keys metodunu da try-catch ile sarmalıyoruz
+        generate_or_load_identity_keys("my_ed25519_private.pem", "my_ed25519_public.pem");
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Anahtar olusturma/yukleme sirasinda kritik hata: " << e.what());
+        // Bu noktada uygulamayı durdurmak veya kurtarma mekanizması devreye sokmak gerekebilir.
+        // throw; // Geçici olarak exception'ı tekrar fırlatabiliriz.
+    }
 }
 
 CryptoManager::~CryptoManager() {
@@ -30,17 +36,32 @@ CryptoManager::~CryptoManager() {
 }
 
 void CryptoManager::generate_or_load_identity_keys(const std::string& private_key_path, const std::string& public_key_path) {
-    // Önce anahtarları yüklemeyi dene
+    // Anahtarları yüklemeyi dene
+    // Dosyadan yüklemede hata olsa bile, new ile oluşturulan anahtarın resetlemesi gerekebilir.
+    // Bu yüzden try-catch blokları ile daha kontrollü hale getiriyoruz.
+
+    bool loaded_successfully = false;
     try {
-        my_ed25519_private_key.reset(load_private_key_from_pem(private_key_path));
-        my_ed25519_public_key.reset(load_public_key_from_pem(public_key_path));
-        LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Identity keys loaded from files.");
-        return;
+        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> temp_private_key(load_private_key_from_pem(private_key_path), EVP_PKEY_free);
+        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> temp_public_key(load_public_key_from_pem(public_key_path), EVP_PKEY_free);
+        
+        if (temp_private_key && temp_public_key) {
+            my_ed25519_private_key = std::move(temp_private_key);
+            my_ed25519_public_key = std::move(temp_public_key);
+            LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Identity keys loaded from files.");
+            loaded_successfully = true;
+        } else {
+            LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Key files found but invalid. Generating new ones.");
+        }
     } catch (const std::runtime_error& e) {
         LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Could not load identity keys from files: " << e.what() << ". Generating new ones.");
     }
 
-    // Yüklenemezse yeni anahtarlar oluştur
+    if (loaded_successfully) {
+        return;
+    }
+
+    // Yüklenemezse veya geçersizse yeni anahtarlar oluştur
     my_ed25519_private_key.reset(generate_ed25519_keypair().release());
     if (!my_ed25519_private_key) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to generate Ed25519 keypair.");
@@ -50,15 +71,12 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
 
     // Açık anahtarı özel anahtardan türetme (EVP_PKEY_public_copy yerine alternatif)
     size_t pub_key_len = 0;
-    // İlk çağrı, uzunluğu almak için
     if (EVP_PKEY_get_raw_public_key(my_ed25519_private_key.get(), NULL, &pub_key_len) <= 0) {
-        // Hata oluşursa logla ve istisna fırlat
         unsigned long err_code = ERR_get_error();
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to get Ed25519 public key length. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to get Ed25519 public key length.");
     }
     std::vector<unsigned char> raw_pub_key(pub_key_len);
-    // İkinci çağrı, ham genel anahtarı almak için
     if (EVP_PKEY_get_raw_public_key(my_ed25519_private_key.get(), raw_pub_key.data(), &pub_key_len) <= 0) {
         unsigned long err_code = ERR_get_error();
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to get Ed25519 raw public key. OpenSSL Error: " << ERR_error_string(err_code, NULL));
@@ -212,7 +230,6 @@ bool CryptoManager::ed25519_verify(const std::vector<unsigned char>& message, co
     return true;
 }
 
-// AES-256-GCM ile şifreleme
 AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::string& plaintext, const std::string& key_base64, const std::string& aad) const {
     return aes256_gcm_encrypt(str_to_vec(plaintext), str_to_vec(base64_decode(key_base64)), str_to_vec(aad));
 }
@@ -256,9 +273,7 @@ AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::vector<unsigned ch
     return {base64_encode(vec_to_str(ciphertext)), base64_encode(vec_to_str(tag)), base64_encode(vec_to_str(iv))};
 }
 
-// AES-256-GCM ile şifre çözme (string tabanlı parametreler için implementasyon)
 std::string CryptoManager::aes256_gcm_decrypt(const AESGCMCiphertext& ct, const std::string& key_base64, const std::string& aad_str) const {
-    // AESGCMCiphertext objesinden base64 kodlu bileşenleri çözüp vektör tabanlı aşırı yüklemeye iletiyoruz.
     std::vector<unsigned char> decoded_ciphertext = str_to_vec(base64_decode(ct.ciphertext_base64));
     std::vector<unsigned char> decoded_tag = str_to_vec(base64_decode(ct.tag_base64));
     std::vector<unsigned char> decoded_iv = str_to_vec(base64_decode(ct.iv_base64));
@@ -275,7 +290,6 @@ std::string CryptoManager::aes256_gcm_decrypt(const AESGCMCiphertext& ct, const 
 
     return vec_to_str(decrypted_data);
 }
-
 
 std::vector<unsigned char> CryptoManager::aes256_gcm_decrypt(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& tag, const std::vector<unsigned char>& iv, const std::vector<unsigned char>& key, const std::vector<unsigned char>& aad) const {
     if (key.size() != 32) {
@@ -310,7 +324,6 @@ std::vector<unsigned char> CryptoManager::aes256_gcm_decrypt(const std::vector<u
     OPENSSL_CHECK(EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, tag.size(), const_cast<unsigned char*>(tag.data())));
 
     if (EVP_DecryptFinal_ex(ctx.get(), plaintext.data() + len, &len) <= 0) {
-        // Etiket doğrulama başarısız oldu
         LOG_ERROR_CERR(LogLevel::WARNING, "CryptoManager: AES-256-GCM etiket dogrulama basarisiz. OpenSSL Error: " << ERR_error_string(ERR_get_error(), NULL));
         throw std::runtime_error("AES-256-GCM tag verification failed.");
     }
