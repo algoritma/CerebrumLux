@@ -63,7 +63,15 @@ public:
     // Geçici olarak eklenen, ancak gelecekte AIInsightsEngine'ın bir üyesi olması beklenen metotlar
     // Bu metotların implementasyonları ai_insights_engine.cpp'de yer alacak.
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
-    IntentAnalyzer& get_analyzer() const; // AIInsightsEngine içinden analyzer'a erişim için getter
+    
+    // get_analyzer() metodunu VIRTUAL yapıyoruz, böylece DummyAIInsightsEngine onu override edebilir.
+    virtual IntentAnalyzer& get_analyzer() const; 
+
+    // get_learner() ve get_cryptofig_autoencoder() metotlarını da, eğer ileriye dönük olarak
+    // mock'lanmaları veya override edilmeleri bekleniyorsa, virtual olarak işaretliyoruz.
+    // Şimdilik default implementasyonlarını inline olarak veriyoruz, böylece .cpp'de tekrar tanımlamak gerekmez.
+    virtual IntentLearner& get_learner() const { return intent_learner; }
+    virtual CryptofigAutoencoder& get_cryptofig_autoencoder() const { return cryptofig_autoencoder; }
 
 private:
     IntentAnalyzer& intent_analyzer;
@@ -79,10 +87,6 @@ private:
     AIInsight analyze_performance(const DynamicSequence& current_sequence);
     AIInsight identify_learning_opportunity(const DynamicSequence& current_sequence);
     AIInsight detect_anomalies(const DynamicSequence& current_sequence);
-
-    // Kendi içindeki referansları döndüren yardımcı metotlar
-    IntentLearner& get_learner() const { return intent_learner; } // Geçici olarak eklendi, hataları gidermek için
-    CryptofigAutoencoder& get_cryptofig_autoencoder() const { return cryptofig_autoencoder; } // Geçici olarak eklendi
 };
 
 } // namespace CerebrumLux

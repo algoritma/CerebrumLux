@@ -10,13 +10,23 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/CerebrumLuxGUI.exe",
             "args": [],
-            "stopAtEntry": true,
-            //"cwd": "C:/Qt/6.9.2/mingw_64/bin",
-            "cwd": "${workspaceFolder}/build", // <--- DÜZELTİLDİ: Uygulamanın yürütülebilir dosyasının bulunduğu dizin
+            "stopAtEntry": true, // Uygulama main() fonksiyonunun başında dursun
+            "cwd": "${workspaceFolder}/build",
             "environment": [],
-            "externalConsole": false, // <--- DÜZELTİLDİ: Dahili konsol kullanmak daha istikrarlı olabilir
+            "externalConsole": true, // <--- KRİTİK DEĞİŞİKLİK: Harici konsol kullan
             "MIMode": "gdb",
-            "miDebuggerPath": "C:/Qt/tools/mingw1310_64/bin/gdb.exe"
+            "miDebuggerPath": "C:/Qt/tools/mingw1310_64/bin/gdb.exe",
+            // Ortam değişkenlerini doğrudan launch.json'a ekleyerek test edebiliriz
+            "setupCommands": [
+                {
+                    "text": "set environment QT_DEBUG_PLUGINS=1",
+                    "description": "Enable Qt plugin debugging"
+                },
+                {
+                    "text": "enable pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }

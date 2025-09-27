@@ -4,6 +4,7 @@
 #include <random>
 #include <thread>
 #include "logger.h" // LOG_DEFAULT için
+#include <ctime>   // std::time_t, std::localtime için
 
 namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
@@ -13,21 +14,44 @@ SafeRNG& SafeRNG::get_instance() {
     return instance;
 }
 
-SafeRNG::SafeRNG() : generator(rd()) {
-    // Kurucu
+// SafeRNG kurucusu: std::random_device yerine zaman tabanlı tohumlama
+SafeRNG::SafeRNG() : generator(std::chrono::system_clock::now().time_since_epoch().count()) {
+    LOG_DEFAULT(LogLevel::DEBUG, "SafeRNG: Initialized with time-based seed.");
 }
 
+// std::mt19937 generator'a erişim için public metot implementasyonu (GERİ EKLENDİ)
 std::mt19937& SafeRNG::get_generator() {
     return generator;
+}
+
+int SafeRNG::get_int(int min, int max) {
+    std::uniform_int_distribution<int> dist(min, max);
+    return dist(generator);
+}
+
+float SafeRNG::get_float(float min, float max) {
+    std::uniform_real_distribution<float> dist(min, max);
+    return dist(generator);
 }
 
 // === Zamanla İlgili Yardımcı Fonksiyonlar ===
 std::string get_current_timestamp_str() {
     auto now = std::chrono::system_clock::now();
-    std::time_t time = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm bt;
+#ifdef _WIN32
+    localtime_s(&bt, &t); // Windows için güvenli versiyon
+#else
+    // POSIX/Linux için, thread-safe olmayan localtime yerine localtime_r önerilir.
+    // Ancak MinGW genellikle localtime'ı güvenli bir bağlamda kullanır.
+    bt = *std::localtime(&t); 
+#endif
+    
+    std::ostringstream oss;
+    oss << std::put_time(&bt, "%Y-%m-%d %H:%M:%S");
+    oss << '.' << std::setw(3) << std::setfill('0') << ms.count();
+    return oss.str();
 }
 
 long long get_current_timestamp_us() {
@@ -37,11 +61,9 @@ long long get_current_timestamp_us() {
 }
 
 // === Hash Fonksiyonları ===
-unsigned short hash_string(const std::string& s) { // YENİ EKLENDİ
+unsigned short hash_string(const std::string& s) {
     std::hash<std::string> hasher;
-    // std::hash 64-bit bir hash döndürür, unsigned short'a sığması için kısaltıyoruz.
-    // Daha robust bir hash algoritması istenirse güncellenebilir.
-    return static_cast<unsigned short>(hasher(s) % 65521); // Prime sayı ile mod alarak dağıtımı artır
+    return static_cast<unsigned short>(hasher(s) % 65521);
 }
 
 // === Enum Dönüşüm Fonksiyonları ===
@@ -66,6 +88,14 @@ std::string intent_to_string(UserIntent intent) {
         case UserIntent::ShowStatus: return "ShowStatus";
         case UserIntent::ExplainConcept: return "ExplainConcept";
         case UserIntent::FastTyping: return "FastTyping";
+        case UserIntent::Programming: return "Programming";
+        case UserIntent::Gaming: return "Gaming";
+        case UserIntent::MediaConsumption: return "MediaConsumption";
+        case UserIntent::CreativeWork: return "CreativeWork";
+        case UserIntent::Research: return "Research";
+        case UserIntent::Communication: return "Communication";
+        case UserIntent::Editing: return "Editing";
+        case UserIntent::Unknown: return "Unknown";
         default: return "UnknownIntent";
     }
 }
@@ -82,6 +112,19 @@ std::string abstract_state_to_string(AbstractState state) {
         case AbstractState::Calibrating: return "Calibrating";
         case AbstractState::SelfReflecting: return "SelfReflecting";
         case AbstractState::SuspiciousActivity: return "SuspiciousActivity";
+        case AbstractState::NormalOperation: return "NormalOperation";
+        case AbstractState::SeekingInformation: return "SeekingInformation";
+        case AbstractState::PowerSaving: return "PowerSaving";
+        case AbstractState::FaultyHardware: return "FaultyHardware";
+        case AbstractState::Distracted: return "Distracted";
+        case AbstractState::Focused: return "Focused";
+        case AbstractState::HighProductivity: return "HighProductivity";
+        case AbstractState::LowProductivity: return "LowProductivity";
+        case AbstractState::Debugging: return "Debugging";
+        case AbstractState::CreativeFlow: return "CreativeFlow";
+        case AbstractState::PassiveConsumption: return "PassiveConsumption";
+        case AbstractState::SocialInteraction: return "SocialInteraction";
+        case AbstractState::Undefined: return "Undefined";
         default: return "UnknownState";
     }
 }
@@ -95,7 +138,7 @@ std::string goal_to_string(AIGoal goal) {
         case AIGoal::MaintainUserSatisfaction: return "MaintainUserSatisfaction";
         case AIGoal::ConserveResources: return "ConserveResources";
         case AIGoal::ExploreNewKnowledge: return "ExploreNewKnowledge";
-        case AIGoal::UndefinedGoal: return "UndefinedGoal"; // Yeni eklendi
+        case AIGoal::UndefinedGoal: return "UndefinedGoal";
         default: return "UnknownGoal";
     }
 }
@@ -131,6 +174,7 @@ std::string sensor_type_to_string(SensorType type) {
         case SensorType::SystemEvent: return "SystemEvent";
         case SensorType::Display: return "Display";
         case SensorType::Battery: return "Battery";
+        case SensorType::Count: return "Count";
         default: return "UnknownSensorType";
     }
 }
@@ -152,7 +196,7 @@ std::string key_event_type_to_string(KeyEventType type) {
         case KeyEventType::Press: return "Press";
         case KeyEventType::Release: return "Release";
         case KeyEventType::Hold: return "Hold";
-        case KeyEventType::UndefinedEvent: return "UndefinedEvent"; // Yeni eklendi
+        case KeyEventType::UndefinedEvent: return "UndefinedEvent";
         default: return "UnknownKeyEventType";
     }
 }
@@ -186,12 +230,12 @@ MessageData MessageQueue::dequeue() {
     return data;
 }
 
-bool MessageQueue::isEmpty() { // 'const' kaldırıldı
+bool MessageQueue::isEmpty() {
     std::lock_guard<std::mutex> lock(mutex);
     return queue.empty();
 }
 
-size_t MessageQueue::size() { // 'const' kaldırıldı
+size_t MessageQueue::size() {
     std::lock_guard<std::mutex> lock(mutex);
     return queue.size();
 }

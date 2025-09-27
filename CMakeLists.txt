@@ -30,13 +30,40 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/core/*.cpp"
     "${PROJECT_SRC_DIR}/data_models/*.cpp"
     "${PROJECT_SRC_DIR}/gui/panels/*.cpp"
-    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp"   # ✅ Burada eksikti, eklendi
+    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp"
     "${PROJECT_SRC_DIR}/meta/*.cpp"
     "${PROJECT_SRC_DIR}/planning_execution/*.cpp"
     "${PROJECT_SRC_DIR}/sensors/*.cpp"
     "${PROJECT_SRC_DIR}/user/*.cpp"
     "${PROJECT_SRC_DIR}/learning/*.cpp"
     "${PROJECT_SRC_DIR}/crypto/*.cpp"
+    "${PROJECT_SRC_DIR}/tools/nlp_online_trainer.cpp" # nlp_online_trainer.cpp'nin de CORE_SOURCES'a eklenmesi gerekiyorsa, buraya ekledik. Eğer ayrı bir executable ise aşağıda kalmalı.
+)
+
+# NOT: nlp_online_trainer.cpp ayrı bir executable olduğundan, CORE_SOURCES'tan çıkarılıp kendi hedefinde derlenmelidir.
+# Yukarıdaki GLOB_RECURSE içindeki "${PROJECT_SRC_DIR}/tools/*.cpp" ifadesi nlp_online_trainer.cpp'yi de otomatik olarak kapsayacaktır.
+# Ancak CMakeLists.txt'inizde nlp_online_trainer için ayrı bir add_executable hedefi var.
+# Bu durumda, nlp_online_trainer.cpp'yi CerebrumLuxCore statik kütüphanesine dahil etmemeliyiz,
+# aksi takdirde multiple definition hataları alabiliriz.
+# Bu satırı kaldırıyorum ve nlp_online_trainer.cpp'nin kendi hedefinde kalmasını sağlıyorum.
+# Ayrıca, glob'ların doğru çalışması için wildcard'ları düzeltiyorum.
+
+file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
+    "${PROJECT_SRC_DIR}/brain/*.cpp"
+    "${PROJECT_SRC_DIR}/communication/*.cpp"
+    "${PROJECT_SRC_DIR}/core/*.cpp"
+    "${PROJECT_SRC_DIR}/data_models/*.cpp"
+    "${PROJECT_SRC_DIR}/gui/panels/*.cpp"
+    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp"
+    "${PROJECT_SRC_DIR}/meta/*.cpp"
+    "${PROJECT_SRC_DIR}/planning_execution/*.cpp"
+    "${PROJECT_SRC_DIR}/sensors/*.cpp"
+    "${PROJECT_SRC_DIR}/user/*.cpp"
+    "${PROJECT_SRC_DIR}/learning/*.cpp"
+    "${PROJECT_SRC_DIR}/crypto/*.cpp"
+    # "${PROJECT_SRC_DIR}/tools/*.cpp" -> Bu nlp_online_trainer.cpp'yi de içerdiğinden, eğer bu bir tool değil de ana core'un parçasıysa dahil edilebilir.
+    # Ancak nlp_online_trainer ayrı bir executable olduğu için, CerebrumLuxCore içinde olmamalıdır.
+    # Bu nedenle, tools klasörünü burada dahil etmiyoruz.
 )
 
 add_library(CerebrumLuxCore STATIC ${CEREBRUMLUX_CORE_SOURCES})
@@ -52,7 +79,7 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}/meta"
     "${PROJECT_SRC_DIR}/planning_execution"
     "${PROJECT_SRC_DIR}/sensors"
-    "${PROJECT_SRC_DIR}/tools"
+    "${PROJECT_SRC_DIR}/tools" # Sadece header'lar için. Eğer cpp dosyaları varsa ayrı ayrı hedeflerle yönetilmelidir.
     "${PROJECT_SRC_DIR}/user"
     "${PROJECT_SRC_DIR}/learning"
     "${PROJECT_SRC_DIR}/crypto"

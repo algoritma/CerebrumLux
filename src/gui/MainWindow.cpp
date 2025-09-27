@@ -6,17 +6,16 @@
 #include <QMessageBox>
 #include <QDebug>
 
-// Kendi namespace'imizdeki sınıfları doğrudan kullanabilmek için
 #include "../core/logger.h"
-#include "../gui/panels/LogPanel.h" // YENİ EKLENDİ (MainWindow.cpp için)
-#include "../gui/panels/GraphPanel.h" // YENİ EKLENDİ (MainWindow.cpp için)
+#include "../gui/panels/LogPanel.h"
+#include "../gui/panels/GraphPanel.h"
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
-#include "../learning/LearningModule.h" // CerebrumLux::IngestReport, IngestResult için tam tanım
+#include "../learning/LearningModule.h"
 
-#include "../external/nlohmann/json.hpp" // JSON parsing için
+#include "../external/nlohmann/json.hpp"
 
 namespace CerebrumLux {
 
@@ -30,57 +29,74 @@ SimulationData MainWindow::convertCapsuleToSimulationData(const Capsule& capsule
 
 MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningModuleRef, QWidget *parent)
     : QMainWindow(parent),
-      ui(new Ui::MainWindow), // ui_MainWindow.h dahil edildiği için tam tanıma sahibiz
+      ui(new Ui::MainWindow),
       engine(engineRef),
       learningModule(learningModuleRef)
 {
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Kurucuya girildi.");
+    
     ui->setupUi(this);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: ui->setupUi(this) çağrıldı.");
 
-    qRegisterMetaType<CerebrumLux::IngestResult>("CerebrumLux::IngestResult");
-    qRegisterMetaType<CerebrumLux::IngestReport>("CerebrumLux::IngestReport");
-
-    // UI bileşenlerini oluşturma
     tabWidget = new QTabWidget(this);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTabWidget oluşturuldu. Adresi: " << tabWidget);
     setCentralWidget(tabWidget);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTabWidget merkezi widget olarak ayarlandı. isVisible(): " << tabWidget->isVisible());
 
-    // Panel sınıfları artık tam olarak bilindiği için 'new' çağrısı geçerli
-    logPanel = new CerebrumLux::LogPanel(this); // Namespace ile
-    graphPanel = new CerebrumLux::GraphPanel(this); // Namespace ile
-    simulationPanel = new CerebrumLux::SimulationPanel(this); // Namespace ile
-    capsuleTransferPanel = new CerebrumLux::CapsuleTransferPanel(this); // Namespace ile
+    logPanel = new CerebrumLux::LogPanel(this);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: LogPanel oluşturuldu. Adresi: " << logPanel << ", isVisible(): " << logPanel->isVisible());
+    graphPanel = new CerebrumLux::GraphPanel(this);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GraphPanel oluşturuldu. Adresi: " << graphPanel << ", isVisible(): " << graphPanel->isVisible());
+    simulationPanel = new CerebrumLux::SimulationPanel(this);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel oluşturuldu. Adresi: " << simulationPanel << ", isVisible(): " << simulationPanel->isVisible());
+    capsuleTransferPanel = new CerebrumLux::CapsuleTransferPanel(this);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel oluşturuldu. Adresi: " << capsuleTransferPanel << ", isVisible(): " << capsuleTransferPanel->isVisible());
 
     tabWidget->addTab(logPanel, "Log");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Log tab'ı eklendi. Aktif widget: " << tabWidget->currentWidget());
     tabWidget->addTab(graphPanel, "Graph");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Graph tab'ı eklendi.");
     tabWidget->addTab(simulationPanel, "Simulation");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Simulation tab'ı eklendi.");
     tabWidget->addTab(capsuleTransferPanel, "Capsule Transfer");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Capsule Transfer tab'ı eklendi. Tab sayısı: " << tabWidget->count());
 
-    // Sinyal/slot bağlantıları
-    connect(logPanel, &CerebrumLux::LogPanel::logCleared, this, [this](){ // Namespace ile
+    setWindowTitle("Cerebrum Lux");
+    resize(1024, 768);
+
+    connect(logPanel, &CerebrumLux::LogPanel::logCleared, this, [this](){
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "GUI Log cleared by user.");
     });
-    connect(simulationPanel, &CerebrumLux::SimulationPanel::commandEntered, this, &CerebrumLux::MainWindow::onSimulationCommandEntered); // Namespace ile
-    connect(simulationPanel, &CerebrumLux::SimulationPanel::startSimulationTriggered, this, &CerebrumLux::MainWindow::onStartSimulationTriggered); // Namespace ile
-    connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered); // Namespace ile
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: LogPanel connect tamamlandı.");
 
-    connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest); // Namespace ile
-    connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::fetchWebCapsuleRequest, this, &CerebrumLux::MainWindow::onFetchWebCapsuleRequest); // Namespace ile
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::commandEntered, this, &CerebrumLux::MainWindow::onSimulationCommandEntered);
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::startSimulationTriggered, this, &CerebrumLux::MainWindow::onStartSimulationTriggered);
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel connect tamamlandı.");
 
-    // GUI güncelleme zamanlayıcısı
+    connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest);
+    connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::fetchWebCapsuleRequest, this, &CerebrumLux::MainWindow::onFetchWebCapsuleRequest);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel connect tamamlandı.");
+
     guiUpdateTimer = new QTimer(this);
-    connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui); // Namespace ile
-    guiUpdateTimer->start(100); // Her 100 ms'de bir GUI'yi güncelle
+    connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
+    guiUpdateTimer->start(100);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı.");
 
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: GUI Initialized.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Kurucu çıkışı. isVisible(): " << isVisible() << ", geometry: " << geometry().width() << "x" << geometry().height());
 }
 
 MainWindow::~MainWindow()
 {
     guiUpdateTimer->stop();
-    delete ui; // Ui::MainWindow artık tam olarak tanımlı olduğu için delete güvenli
+    delete ui;
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Destructor called.");
 }
 
-LogPanel* MainWindow::getLogPanel() const { return logPanel; }
+LogPanel* MainWindow::getLogPanel() const {
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: getLogPanel() çağrıldı. LogPanel adresi: " << logPanel);
+    return logPanel;
+}
 GraphPanel* MainWindow::getGraphPanel() const { return graphPanel; }
 SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel; }
 CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
@@ -105,25 +121,36 @@ void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationDa
 
 void MainWindow::updateGui() {
     // KnowledgeBase'den simülasyon verilerini al
-    std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().search_by_topic("StepSimulation");
+    std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().semantic_search("StepSimulation", 100);
     QVector<CerebrumLux::SimulationData> sim_data;
     for (const auto& cap : capsules_for_sim) {
         sim_data.append(convertCapsuleToSimulationData(cap));
     }
-    simulationPanel->updateSimulationHistory(sim_data);
+    if (simulationPanel) {
+        simulationPanel->updateSimulationHistory(sim_data);
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: simulationPanel null. Simülasyon verisi güncellenemedi.");
+    }
+
 
     // KnowledgeBase'den grafik verilerini al
-    auto capsules_for_graph = learningModule.search_by_topic("StepSimulation");
+    auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search("GraphData", 100);
     QMap<qreal, qreal> graph_data;
     for (const auto& cap : capsules_for_graph) {
         graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), cap.confidence);
     }
-    graphPanel->updateData("Confidence Over Time", graph_data);
-
+    if (graphPanel) {
+        graphPanel->updateData("Confidence Over Time", graph_data);
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: graphPanel null. Grafik verisi güncellenemedi.");
+    }
+    
     auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
     if (!results.empty()) {
-        //LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Semantic search results: " << results[0].content.substr(0, 50));
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: Semantic search results: " << results[0].content.substr(0, std::min((size_t)50, results[0].content.length())));
     }
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: GUI güncellendi.");
 }
 
 void MainWindow::onSimulationCommandEntered(const QString& command) {
@@ -148,19 +175,27 @@ void MainWindow::onIngestCapsuleRequest(const QString& capsuleJson, const QStrin
         CerebrumLux::Capsule incoming_capsule = j.get<CerebrumLux::Capsule>();
 
         CerebrumLux::IngestReport report = learningModule.ingest_envelope(incoming_capsule, signature.toStdString(), senderId.toStdString());
-        capsuleTransferPanel->displayIngestReport(report);
+        if (capsuleTransferPanel) {
+            capsuleTransferPanel->displayIngestReport(report);
+        } else {
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onIngestCapsuleRequest: capsuleTransferPanel null. Ingest raporu gösterilemedi.");
+        }
     } catch (const nlohmann::json::parse_error& e) {
         LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "MainWindow: JSON Parse Error on ingest request: " << e.what());
         CerebrumLux::IngestReport error_report;
         error_report.result = CerebrumLux::IngestResult::SchemaMismatch;
         error_report.message = "Invalid JSON format: " + std::string(e.what());
-        capsuleTransferPanel->displayIngestReport(error_report);
+        if (capsuleTransferPanel) {
+            capsuleTransferPanel->displayIngestReport(error_report);
+        }
     } catch (const std::exception& e) {
         LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "MainWindow: Error ingesting capsule: " << e.what());
         CerebrumLux::IngestReport error_report;
         error_report.result = CerebrumLux::IngestResult::UnknownError;
         error_report.message = "An unknown error occurred: " + std::string(e.what());
-        capsuleTransferPanel->displayIngestReport(error_report);
+        if (capsuleTransferPanel) {
+            capsuleTransferPanel->displayIngestReport(error_report);
+        }
     }
 }
 
@@ -171,7 +206,11 @@ void MainWindow::onFetchWebCapsuleRequest(const QString& query) {
     CerebrumLux::IngestReport dummy_report;
     dummy_report.result = CerebrumLux::IngestResult::Success;
     dummy_report.message = "Web capsule fetch initiated for: " + query.toStdString();
-    capsuleTransferPanel->displayIngestReport(dummy_report);
+    if (capsuleTransferPanel) {
+            capsuleTransferPanel->displayIngestReport(dummy_report);
+        } else {
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onFetchWebCapsuleRequest: capsuleTransferPanel null. Web fetch raporu gösterilemedi.");
+        }
 }
 
 } // namespace CerebrumLux
