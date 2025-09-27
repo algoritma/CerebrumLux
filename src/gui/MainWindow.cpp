@@ -133,18 +133,20 @@ void MainWindow::updateGui() {
     }
 
 
-    // KnowledgeBase'den grafik verilerini al
+    // KnowledgeBase'den grafik verilerini al - ARTIK AKTİF HALE GETİRİLİYOR
     auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search("GraphData", 100);
     QMap<qreal, qreal> graph_data;
     for (const auto& cap : capsules_for_graph) {
         graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), cap.confidence);
     }
     if (graphPanel) {
-        graphPanel->updateData("Confidence Over Time", graph_data);
+        graphPanel->updateData("AI Confidence", graph_data); // SeriesName "AI Confidence" olarak ayarlandı
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: GraphPanel güncellendi. Veri noktası sayısı: " << graph_data.size());
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: graphPanel null. Grafik verisi güncellenemedi.");
     }
     
+    // Semantic search'in log çıktısı
     auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
     if (!results.empty()) {
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: Semantic search results: " << results[0].content.substr(0, std::min((size_t)50, results[0].content.length())));
