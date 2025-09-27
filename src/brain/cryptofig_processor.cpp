@@ -1,72 +1,76 @@
 #include "cryptofig_processor.h"
-#include "../core/logger.h"
-#include "../core/utils.h"
-#include "../data_models/dynamic_sequence.h"
-#include "intent_learner.h" // IntentLearner için
-#include "intent_analyzer.h"
-#include "autoencoder.h" // CryptofigAutoencoder tanımı için
-#include <numeric>
-#include <iostream>
-#include <sstream>
+#include "../core/logger.h" // LOG_DEFAULT için
+#include "../core/enums.h" // LogLevel için
+#include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM, LATENT_DIM için
+#include "../core/utils.h" // SafeRNG için
+#include <algorithm> // std::min için
+#include <stdexcept> // std::runtime_error için
+
 
 namespace CerebrumLux {
 
-// === CryptofigProcessor Implementasyonlari ===
-// Kurucu
-CerebrumLux::CryptofigProcessor::CryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAutoencoder& cryptofig_autoencoder_ref)
-    : intent_analyzer(analyzer_ref),
-      cryptofig_autoencoder(cryptofig_autoencoder_ref)
+CryptofigProcessor::CryptofigProcessor(IntentAnalyzer& analyzer_ref, CryptofigAutoencoder& autoencoder_ref)
+    : intent_analyzer(analyzer_ref), cryptofig_autoencoder(autoencoder_ref)
 {
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "CryptofigProcessor: Initialized.");
+    LOG_DEFAULT(LogLevel::INFO, "CryptofigProcessor: Initialized.");
 }
 
-// process_sequence metodu
-void CerebrumLux::CryptofigProcessor::process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate) {
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "CryptofigProcessor::process_sequence: Latent kriptofig Autoencoder ile olusturuluyor ve ogrenme tetikleniyor.\n");
-    if (sequence.statistical_features_vector.empty() || sequence.statistical_features_vector.size() != CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "CryptofigProcessor::process_sequence: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Autoencoder işlemi atlanıyor.\n");
-        sequence.latent_cryptofig_vector.assign(CerebrumLux::CryptofigAutoencoder::LATENT_DIM, 0.0f);
-        return;
-    }
-    this->cryptofig_autoencoder.encode(sequence.statistical_features_vector);
-    this->cryptofig_autoencoder.adjust_weights_on_error(sequence.statistical_features_vector, autoencoder_learning_rate);
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "CryptofigProcessor::process_sequence: Latent kriptofig olusturuldu ve Autoencoder ogrenme adimi tamamlandi.\n");
+std::vector<float> CryptofigProcessor::process_atomic_signal(const AtomicSignal& signal) {
+    // Bu metod şu an için kullanılmıyor, ancak gelecekte tekil sinyalleri işlemek için eklenebilir.
+    // Şimdilik dummy bir vektör döndürüyoruz.
+    LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::process_atomic_signal: Dummy implementasyon çağrıldı.");
+    return {SafeRNG::get_instance().get_float(0.0f, 1.0f), SafeRNG::get_instance().get_float(0.0f, 1.0f), SafeRNG::get_instance().get_float(0.0f, 1.0f)};
 }
 
-// apply_cryptofig_for_learning metodu
-void CerebrumLux::CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, CerebrumLux::UserIntent target_intent) const {
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "CryptofigProcessor::apply_cryptofig_for_learning: Niyet " << CerebrumLux::intent_to_string(target_intent) << " için kriptofig ile öğrenme başlatıldı.\n");
-    std::vector<float> current_weights = this->intent_analyzer.get_intent_weights(target_intent);
-    if (current_weights.empty() || current_weights.size() != received_cryptofig.size()) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "apply_cryptofig_for_learning: Boyut uyuşmazlığı veya boş ağırlıklar. İlerleme durduruldu.\n");
+void CryptofigProcessor::process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate) {
+    LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::process_sequence: Latent kriptofig Autoencoder ile olusturuluyor ve ogrenme tetikleniyor.");
+
+    if (sequence.statistical_features_vector.empty() || sequence.statistical_features_vector.size() != CryptofigAutoencoder::INPUT_DIM) {
+        LOG_DEFAULT(LogLevel::WARNING, "CryptofigProcessor::process_sequence: DynamicSequence.statistical_features_vector boş veya boyut uyuşmuyor. Autoencoder işlemi atlanıyor.");
+        sequence.latent_cryptofig_vector.clear(); // Vektörü temizle
         return;
     }
 
-    float assimilation_rate = learner.get_learning_rate() * 5.0f;
-    assimilation_rate = std::min(0.5f, assimilation_rate);
+    try {
+        // Statistical features'ı autoencoder ile latent kriptofige dönüştür
+        std::vector<float> latent_features = cryptofig_autoencoder.encode(sequence.statistical_features_vector);
+        
+        // latent_features'ı DynamicSequence'e kaydet
+        sequence.latent_cryptofig_vector = latent_features; // BU SATIR EKLENDİ/DÜZELTİLDİ
 
-    for (size_t i = 0; i < current_weights.size(); ++i) {
-        current_weights[i] += assimilation_rate * (received_cryptofig[i] - current_weights[i]);
-        current_weights[i] = std::min(5.0f, std::max(-5.0f, current_weights[i]));
+        // Autoencoder'ın ağırlıklarını hataya göre ayarla (öğrenme adımı)
+        std::vector<float> reconstructed_features = cryptofig_autoencoder.decode(latent_features);
+        float reconstruction_error = cryptofig_autoencoder.calculate_reconstruction_error(sequence.statistical_features_vector, reconstructed_features);
+        cryptofig_autoencoder.adjust_weights_on_error(sequence.statistical_features_vector, autoencoder_learning_rate);
+        
+        LOG_DEFAULT(LogLevel::DEBUG, "CryptofigAutoencoder: Agirliklar hataya gore ayarlandi. Hata: " << reconstruction_error);
+        LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::process_sequence: Latent kriptofig olusturuldu ve Autoencoder ogrenme adimi tamamlandi.");
+
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptofigProcessor::process_sequence: Autoencoder işlemi sırasında hata: " << e.what());
+        sequence.latent_cryptofig_vector.clear(); // Hata durumunda vektörü temizle
+    } catch (...) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptofigProcessor::process_sequence: Autoencoder işlemi sırasında bilinmeyen hata.");
+        sequence.latent_cryptofig_vector.clear(); // Hata durumunda vektörü temizle
     }
-    this->intent_analyzer.update_template_weights(target_intent, current_weights);
-
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme tamamlandı.\n");
 }
 
-// get_autoencoder() const metodu
-const CerebrumLux::CryptofigAutoencoder& CerebrumLux::CryptofigProcessor::get_autoencoder() const {
-    return this->cryptofig_autoencoder;
+void CryptofigProcessor::process_expert_cryptofig(const std::vector<float>& expert_cryptofig, IntentLearner& learner) {
+    LOG_DEFAULT(LogLevel::INFO, "CryptofigProcessor::process_expert_cryptofig: Uzman kriptofig işleniyor (henüz implemente edilmedi).");
+    // Gelecekte, uzman kriptofig'leri öğrenme modülüne yönlendirme mantığı eklenebilir.
 }
 
-// get_autoencoder() non-const metodu
-CerebrumLux::CryptofigAutoencoder& CerebrumLux::CryptofigProcessor::get_autoencoder() {
-    return this->cryptofig_autoencoder;
+const CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() const {
+    return cryptofig_autoencoder;
 }
 
-// process_expert_cryptofig metodu
-void CerebrumLux::CryptofigProcessor::process_expert_cryptofig(const std::vector<float>& expert_cryptofig, CerebrumLux::IntentLearner& learner) {
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[CryptofigProcessor] Uzman kriptofigi işleniyor. Boyut: " << expert_cryptofig.size() << ". Bu, AI'nın meta-evrim sürecinin bir parçası olarak harici bilgi aktarımını temsil eder.\n");
+CryptofigAutoencoder& CryptofigProcessor::get_autoencoder() {
+    return cryptofig_autoencoder;
+}
+
+void CryptofigProcessor::apply_cryptofig_for_learning(IntentLearner& learner, const std::vector<float>& received_cryptofig, CerebrumLux::UserIntent target_intent) const {
+    LOG_DEFAULT(LogLevel::INFO, "CryptofigProcessor::apply_cryptofig_for_learning: Öğrenme için kriptofig uygulanıyor (henüz implemente edilmedi).");
+    // Gelecekte, gelen kriptofiglerin öğrenme modülüne nasıl entegre edileceği mantığı eklenebilir.
 }
 
 } // namespace CerebrumLux
