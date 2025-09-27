@@ -9,10 +9,6 @@
 
 namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
-// Statik üyenin tanımlanması (SensorType::Count'a göre)
-// Constructor'da başlatılacağı için burada tanımlıyoruz.
-// s_sensor_selection_distrib(0, static_cast<int>(CerebrumLux::SensorType::Count) - 1); // Constructor içinde olacak.
-
 CerebrumLux::SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor()
     : is_capturing(false),
       generator(CerebrumLux::SafeRNG::get_instance().get_generator()),
@@ -25,8 +21,6 @@ CerebrumLux::SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor()
       network_protocols({"HTTP", "HTTPS", "TCP"}),
       distrib_battery_level(10, 100),
       distrib_display_status(0, 1), // 0:Normal, 1:Uyku
-      // SensorType::Count enum değerine göre dağıtımı başlatıyoruz.
-      // SensorType::Count'ın kendisi geçerli bir sensör tipi olmadığı için -1 yapıyoruz.
       s_sensor_selection_distrib(0, static_cast<int>(CerebrumLux::SensorType::Count) - 1) 
 {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulatedAtomicSignalProcessor: Initialized.");
@@ -38,7 +32,7 @@ CerebrumLux::SimulatedAtomicSignalProcessor::~SimulatedAtomicSignalProcessor() {
 
 bool CerebrumLux::SimulatedAtomicSignalProcessor::start_capture() {
     is_capturing = true;
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Simulasyon baslatildi. Tuslara basin (Q ile ├ºikis).\n");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Simulasyon baslatildi.\n");
     return true;
 }
 
@@ -63,7 +57,7 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::create_ke
     signal.type = CerebrumLux::SensorType::Keyboard;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
     signal.value = std::string(1, ch);
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.7f, 1.0f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.7f, 1.0f);
 
     if (std::isalnum(static_cast<unsigned char>(ch))) {
         signal.key_type = CerebrumLux::KeyType::Alphanumeric;
@@ -72,14 +66,13 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::create_ke
     } else {
         signal.key_type = CerebrumLux::KeyType::Other;
     }
-    signal.event_type = CerebrumLux::KeyEventType::Press; // Basitlik için sadece press
+    signal.event_type = CerebrumLux::KeyEventType::Press;
 
     return signal;
 }
 
 
 CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::capture_next_signal() {
-    // Rastgele bir sensör türü seç
     int sensor_type_int = s_sensor_selection_distrib(generator);
     CerebrumLux::SensorType selected_sensor_type = static_cast<CerebrumLux::SensorType>(sensor_type_int);
 
@@ -124,22 +117,32 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::capture_n
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulatedAtomicSignalProcessor: AI İçsel sinyal üretildi. Type: " << signal.ai_internal_event_type);
             return signal;
         }
-        case CerebrumLux::SensorType::SystemEvent: { // Genel sistem olayları (şimdiki simulate_system_event'e karşılık)
+        case CerebrumLux::SensorType::SystemEvent: {
              CerebrumLux::AtomicSignal signal = simulate_system_event();
              LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulatedAtomicSignalProcessor: Sistem olayı sinyali üretildi. Type: " << signal.system_event_type);
              return signal;
         }
-        case CerebrumLux::SensorType::Count: // Count'ı simüle etmiyoruz
-            break;
+        case CerebrumLux::SensorType::EyeTracker: {
+            CerebrumLux::AtomicSignal signal = simulate_eye_tracker_event();
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulatedAtomicSignalProcessor: Göz takip sinyali üretildi. Pos: (" << signal.mouse_x << "," << signal.mouse_y << ")");
+            return signal;
+        }
+        case CerebrumLux::SensorType::BioSensor: {
+            CerebrumLux::AtomicSignal signal = simulate_bio_sensor_event();
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulatedAtomicSignalProcessor: Biyosensör sinyali üretildi. Data: " << signal.value);
+            return signal;
+        }
+        case CerebrumLux::SensorType::Count: // Count'ı simüle etmiyoruz, bu yüzden varsayılan davranışı tetikleyelim.
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulatedAtomicSignalProcessor: SensorType::Count seçildi, varsayılan bir iç AI sinyali üretiliyor.");
+            return simulate_internal_ai_event();
     }
 
-    // Varsayılan boş sinyal (eğer yukarıdaki hiçbir şeye uymazsa veya hata olursa)
     CerebrumLux::AtomicSignal empty_signal;
     empty_signal.id = generate_random_string(8);
-    empty_signal.type = CerebrumLux::SensorType::InternalAI; // Varsayılan olarak AI sinyali
+    empty_signal.type = CerebrumLux::SensorType::InternalAI; 
     empty_signal.value = "Empty or Unhandled Signal Type";
     empty_signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    empty_signal.confidence = 0.0f; // Güven değeri
+    empty_signal.confidence = 0.0f; 
     LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulatedAtomicSignalProcessor: Tanimsiz veya islenemeyen sensor tipi icin bos sinyal uretildi.");
     return empty_signal;
 }
@@ -149,15 +152,13 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Mouse;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.6f, 0.9f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.6f, 0.9f);
 
-    // Fare koordinatları ve hareketleri için rastgele değerler
-    signal.mouse_x = CerebrumLux::SafeRNG::get_instance().get_int(0, 1920); // Örnek ekran genişliği
-    signal.mouse_y = CerebrumLux::SafeRNG::get_instance().get_int(0, 1080); // Örnek ekran yüksekliği
+    signal.mouse_x = CerebrumLux::SafeRNG::get_instance().get_int(0, 1920);
+    signal.mouse_y = CerebrumLux::SafeRNG::get_instance().get_int(0, 1080);
     signal.mouse_delta_x = distrib_mouse_delta(generator);
     signal.mouse_delta_y = distrib_mouse_delta(generator);
     
-    // Rastgele düğme durumu
     int btn_choice = std::uniform_int_distribution<int>(0, 3)(generator);
     if (btn_choice == 0) signal.mouse_button_state = CerebrumLux::MouseButtonState::Left;
     else if (btn_choice == 1) signal.mouse_button_state = CerebrumLux::MouseButtonState::Right;
@@ -168,12 +169,12 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_
     return signal;
 }
 
-CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_display_event() {
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_display_event() {
     CerebrumLux::AtomicSignal signal;
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Display;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.8f, 1.0f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.8f, 1.0f);
     
     int status = distrib_display_status(generator);
     if (status == 0) {
@@ -188,56 +189,56 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_
     return signal;
 }
 
-CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_battery_event() {
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_battery_event() {
     CerebrumLux::AtomicSignal signal;
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Battery;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.7f, 1.0f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.7f, 1.0f);
     
     signal.system_event_type = "BatteryLevel";
-    signal.network_activity_level = distrib_battery_level(generator); // Seviye için network_activity_level'ı kullanıyoruz
+    signal.network_activity_level = distrib_battery_level(generator);
     signal.value = std::to_string(signal.network_activity_level) + "%";
     return signal;
 }
 
-CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_network_event() {
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_network_event() {
     CerebrumLux::AtomicSignal signal;
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Network;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.5f, 0.9f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.5f, 0.9f);
 
-    signal.current_network_active = (CerebrumLux::SafeRNG::get_instance().get_int(0, 1) == 1); // 0 veya 1
+    signal.current_network_active = (CerebrumLux::SafeRNG::get_instance().get_int(0, 1) == 1);
     signal.network_activity_level = distrib_network_activity(generator);
     signal.network_protocol = network_protocols[distrib_network_protocol(generator)];
     signal.value = signal.network_protocol + ":" + std::to_string(signal.network_activity_level);
     return signal;
 }
 
-CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_microphone_event() {
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_microphone_event() {
     CerebrumLux::AtomicSignal signal;
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Microphone;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.3f, 0.8f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.3f, 0.8f);
     
     signal.value = "Simulated Audio Clip Hash: " + generate_random_string(16);
     return signal;
 }
 
-CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_camera_event() {
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_camera_event() {
     CerebrumLux::AtomicSignal signal;
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Camera;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.3f, 0.8f); // Confidence eklendi
+    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.3f, 0.8f);
     
     signal.value = "Simulated Image Hash: " + generate_random_string(16);
     return signal;
 }
 
-// Yeni eklenen simülasyon metotları
+// Yeni eklenen simülasyon metotlarının implementasyonları
 CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_system_event() {
     AtomicSignal signal;
     signal.id = generate_random_string(8);
@@ -245,10 +246,10 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_system_event(
     signal.timestamp_us = get_current_timestamp_us();
     signal.confidence = SafeRNG::get_instance().get_float(0.8f, 1.0f);
 
-    std::uniform_int_distribution<int> event_dist(0, 2); // Event türü
+    std::uniform_int_distribution<int> event_dist(0, 2);
     switch (event_dist(generator)) {
         case 0: signal.system_event_type = "OS_STATUS_UPDATE"; signal.system_event_data = "CPU: " + std::to_string(SafeRNG::get_instance().get_int(10, 90)) + "%, RAM: " + std::to_string(SafeRNG::get_instance().get_int(20, 80)) + "%"; break;
-        case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(SafeRNG::get_instance().get_int(5, 20)) + "%"; break;
+        case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(CerebrumLux::SafeRNG::get_instance().get_int(5, 20)) + "%"; break; // Düzeltilmiş CerebrumLux::SafeRNG
         case 2: signal.system_event_type = "APPLICATION_CRASH"; signal.system_event_data = "App 'X' crashed."; break;
     }
     signal.value = signal.system_event_type;
@@ -277,7 +278,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_internal_ai_e
 CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_application_context_change() {
     AtomicSignal signal;
     signal.id = generate_random_string(8);
-    signal.type = SensorType::SystemEvent; // Uygulama bağlamı değişimi de bir sistem olayı sayılabilir
+    signal.type = SensorType::SystemEvent; 
     signal.timestamp_us = get_current_timestamp_us();
     signal.confidence = SafeRNG::get_instance().get_float(0.8f, 1.0f);
 
@@ -290,14 +291,39 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_application_c
     return signal;
 }
 
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_eye_tracker_event() {
+    AtomicSignal signal;
+    signal.id = generate_random_string(8);
+    signal.type = SensorType::EyeTracker;
+    signal.timestamp_us = get_current_timestamp_us();
+    signal.confidence = SafeRNG::get_instance().get_float(0.6f, 1.0f);
+    signal.mouse_x = SafeRNG::get_instance().get_int(0, 1920);
+    signal.mouse_y = SafeRNG::get_instance().get_int(0, 1080);
+    signal.value = "Gaze X:" + std::to_string(signal.mouse_x) + ", Y:" + std::to_string(signal.mouse_y);
+    return signal;
+}
 
-// Yardımcı fonksiyon
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_bio_sensor_event() {
+    AtomicSignal signal;
+    signal.id = generate_random_string(8);
+    signal.type = SensorType::BioSensor;
+    signal.timestamp_us = get_current_timestamp_us();
+    signal.confidence = SafeRNG::get_instance().get_float(0.5f, 1.0f);
+    std::uniform_int_distribution<int> bio_type_dist(0, 1);
+    if (bio_type_dist(generator) == 0) {
+        signal.value = "HeartRate:" + std::to_string(SafeRNG::get_instance().get_int(60, 120));
+    } else {
+        signal.value = "SkinConductance:" + std::to_string(SafeRNG::get_instance().get_float(0.1f, 5.0f));
+    }
+    return signal;
+}
+
 std::string CerebrumLux::SimulatedAtomicSignalProcessor::generate_random_string(size_t length) const {
     const std::string CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     std::string s = "";
     s.reserve(length);
     for (size_t i = 0; i < length; ++i) {
-        s += CHARS[CerebrumLux::SafeRNG::get_instance().get_int(0, CHARS.length() - 1)]; // get_generator() yerine get_int kullanıldı
+        s += CHARS[CerebrumLux::SafeRNG::get_instance().get_int(0, CHARS.length() - 1)];
     }
     return s;
 }

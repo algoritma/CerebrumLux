@@ -32,10 +32,12 @@ public:
     CerebrumLux::AtomicSignal simulate_microphone_event();
     CerebrumLux::AtomicSignal simulate_camera_event();
     
-    // Yeni eklenen simülasyon metotları için deklarasyonlar
+    // YENİ EKLENEN SİNYAL SİMÜLASYON METOTLARI İÇİN DEKLARASYONLAR
     CerebrumLux::AtomicSignal simulate_system_event();
     CerebrumLux::AtomicSignal simulate_internal_ai_event();
     CerebrumLux::AtomicSignal simulate_application_context_change();
+    CerebrumLux::AtomicSignal simulate_eye_tracker_event(); // YENİ EKLENDİ
+    CerebrumLux::AtomicSignal simulate_bio_sensor_event(); // YENİ EKLENDİ
 
 private:
     bool is_capturing;
@@ -60,9 +62,6 @@ private:
     std::uniform_int_distribution<int> distrib_battery_level;
     std::uniform_int_distribution<int> distrib_display_status;
     
-    // SensorType::Count enum değerini kullanmak için, enums.h'de olmalı.
-    // enum class SensorType'ın sonuna özel bir "Count" üyesi eklememiz gerekebilir
-    // veya dağıtım aralığını manuel olarak belirtmeliyiz.
     std::uniform_int_distribution<int> s_sensor_selection_distrib; // Constructor'da başlatılacak
 
     // Random string üretimi için (hash_string için)
