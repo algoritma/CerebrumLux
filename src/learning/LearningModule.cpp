@@ -8,16 +8,17 @@
 #include <algorithm> // std::min için
 #include <stdexcept> // std::runtime_error için
 
-#include <QCoreApplication> // QCoreApplication::postEvent için (QObject kullanılıyorsa)
+#include <QCoreApplication> 
+#include <QUrlQuery> // URL kodlama için gerekli
 
 namespace CerebrumLux {
 
 LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent)
-    : QObject(parent), // QObject kurucusu çağrıldı
+    : QObject(parent),
       knowledgeBase(kb), cryptoManager(cryptoMan),
       unicodeSanitizer(std::make_unique<UnicodeSanitizer>()),
       stegoDetector(std::make_unique<StegoDetector>()),
-      webFetcher(new WebFetcher(this)) // WebFetcher'ı oluştur ve parent olarak LearningModule ver
+      webFetcher(new WebFetcher(this))
 {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized with CryptoManager.");
     connect(webFetcher.get(), &CerebrumLux::WebFetcher::content_fetched, this, &CerebrumLux::LearningModule::on_web_content_fetched);
@@ -36,11 +37,11 @@ void LearningModule::learnFromText(const std::string& text,
 
     Capsule new_capsule;
     new_capsule.id = "text_" + std::to_string(get_current_timestamp_us());
-    new_capsule.content = text;
+    new_capsule.content = text; // Tam metin içeriğini kaydet
     new_capsule.source = source;
     new_capsule.topic = topic;
     new_capsule.confidence = confidence;
-    new_capsule.plain_text_summary = text.substr(0, std::min((size_t)100, text.length())) + "...";
+    new_capsule.plain_text_summary = text.substr(0, std::min((size_t)1000, text.length())) + "..."; // Özet uzunluğunu artırıldı
     new_capsule.timestamp_utc = std::chrono::system_clock::now();
 
     new_capsule.embedding = compute_embedding(new_capsule.content);
@@ -52,10 +53,27 @@ void LearningModule::learnFromText(const std::string& text,
 
 void LearningModule::learnFromWeb(const std::string& query) {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web'den öğrenme başlatıldı. Sorgu: " << query);
-    if (webFetcher) {
-        webFetcher->fetch_url(query);
+
+    std::string final_url_to_fetch = query;
+    if (query.find("http://") == std::string::npos && query.find("https://") == std::string::npos && query.find(".") == std::string::npos) {
+        QString encoded_query = QUrl::toPercentEncoding(QString::fromStdString(query));
+        final_url_to_fetch = "https://www.google.com/search?q=" + encoded_query.toStdString();
+        LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Sorgu Google arama URL'sine dönüştürüldü: " << final_url_to_fetch);
     } else {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: WebFetcher nesnesi null, web'den öğrenme başlatılamadı."); // Düzeltildi
+        QUrl temp_url(QString::fromStdString(query));
+        if (temp_url.isValid()) {
+             final_url_to_fetch = temp_url.toString(QUrl::FullyEncoded).toStdString();
+        } else {
+            QString encoded_query = QUrl::toPercentEncoding(QString::fromStdString(query));
+            final_url_to_fetch = "https://www.google.com/search?q=" + encoded_query.toStdString();
+            LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Girdi URL olarak gecersiz, Google arama URL'sine dönüştürüldü: " << final_url_to_fetch);
+        }
+    }
+    
+    if (webFetcher) {
+        webFetcher->fetch_url(final_url_to_fetch);
+    } else {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: WebFetcher nesnesi null, web'den öğrenme başlatılamadı.");
     }
 }
 
@@ -65,7 +83,7 @@ void LearningModule::on_web_content_fetched(const QString& url, const QString& c
 }
 
 void LearningModule::on_web_fetch_error(const QString& url, const QString& error_message) {
-    LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Web içerigi cekme hatası. URL: " << url.toStdString() << ", Hata: " << error_message.toStdString()); // Düzeltildi
+    LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Web içerigi cekme hatası. URL: " << url.toStdString() << ", Hata: " << error_message.toStdString());
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
@@ -97,7 +115,8 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             }
         }
 
-        insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)100, insight.observation.length())) + "...";
+
+        insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)1000, insight.observation.length())) + "..."; // Özet uzunluğunu artırıldı
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
         insight_capsule.embedding = compute_embedding(insight_capsule.content);
         insight_capsule.cryptofig_blob_base64 = cryptofig_encode(insight_capsule.embedding);

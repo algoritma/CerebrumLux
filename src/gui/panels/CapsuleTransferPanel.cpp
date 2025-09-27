@@ -73,7 +73,7 @@ void CapsuleTransferPanel::displayIngestReport(const IngestReport& report) {
                             .arg(QString::fromStdString(report.original_capsule.id));
 
     if (report.result == IngestResult::Success || report.result == IngestResult::SanitizationNeeded) {
-        reportMsg += "\n    İşlenmiş İçerik (ilk 200 karakter): " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)200, report.processed_capsule.content.length()))) + "...";
+        reportMsg += "\n    İşlenmiş İçerik (ilk 1000 karakter): " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)1000, report.processed_capsule.content.length()))) + "...";
     }
 
     reportOutput->append(reportMsg);
