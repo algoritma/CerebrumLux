@@ -11,7 +11,7 @@
 #include "../gui/panels/GraphPanel.h"
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
-#include "../gui/panels/KnowledgeBasePanel.h" // YENİ
+#include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
 #include "../learning/LearningModule.h"
@@ -52,7 +52,7 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel oluşturuldu. Adresi: " << simulationPanel << ", isVisible(): " << simulationPanel->isVisible());
     capsuleTransferPanel = new CerebrumLux::CapsuleTransferPanel(this);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel oluşturuldu. Adresi: " << capsuleTransferPanel << ", isVisible(): " << capsuleTransferPanel->isVisible());
-    knowledgeBasePanel = new CerebrumLux::KnowledgeBasePanel(learningModule, this); // YENİ: KnowledgeBasePanel oluşturuldu
+    knowledgeBasePanel = new CerebrumLux::KnowledgeBasePanel(learningModule, this);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBasePanel oluşturuldu. Adresi: " << knowledgeBasePanel << ", isVisible(): " << knowledgeBasePanel->isVisible());
 
 
@@ -64,7 +64,7 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Simulation tab'ı eklendi.");
     tabWidget->addTab(capsuleTransferPanel, "Capsule Transfer");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Capsule Transfer tab'ı eklendi.");
-    tabWidget->addTab(knowledgeBasePanel, "KnowledgeBase"); // YENİ: KnowledgeBase tab'ı eklendi
+    tabWidget->addTab(knowledgeBasePanel, "KnowledgeBase");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBase tab'ı eklendi. Tab sayısı: " << tabWidget->count());
 
 
@@ -84,6 +84,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest);
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::fetchWebCapsuleRequest, this, &CerebrumLux::MainWindow::onFetchWebCapsuleRequest);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel connect tamamlandı.");
+
+    connect(&learningModule, &CerebrumLux::LearningModule::webFetchCompleted, this, &CerebrumLux::MainWindow::onWebFetchCompleted);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: LearningModule::webFetchCompleted sinyali bağlandı.");
+
 
     guiUpdateTimer = new QTimer(this);
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
@@ -107,7 +111,7 @@ LogPanel* MainWindow::getLogPanel() const {
 GraphPanel* MainWindow::getGraphPanel() const { return graphPanel; }
 SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel; }
 CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
-KnowledgeBasePanel* MainWindow::getKnowledgeBasePanel() const { return knowledgeBasePanel; } // YENİ: KnowledgeBasePanel getter
+KnowledgeBasePanel* MainWindow::getKnowledgeBasePanel() const { return knowledgeBasePanel; }
 
 void MainWindow::appendLog(CerebrumLux::LogLevel level, const QString& message) {
     if (logPanel) {
@@ -128,7 +132,6 @@ void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationDa
 }
 
 void MainWindow::updateGui() {
-    // KnowledgeBase'den simülasyon verilerini al
     std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().semantic_search("StepSimulation", 100);
     QVector<CerebrumLux::SimulationData> sim_data;
     for (const auto& cap : capsules_for_sim) {
@@ -141,7 +144,6 @@ void MainWindow::updateGui() {
     }
 
 
-    // KnowledgeBase'den grafik verilerini al
     auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search("GraphData", 100);
     QMap<qreal, qreal> graph_data;
     for (const auto& cap : capsules_for_graph) {
@@ -155,8 +157,8 @@ void MainWindow::updateGui() {
     }
     
     // KnowledgeBasePanel'i güncelle
-    updateKnowledgeBasePanel(); // YENİ: KnowledgeBasePanel'i güncelle
-
+    updateKnowledgeBasePanel(); // Artık doğru metot çağrılıyor
+    
     auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
     if (!results.empty()) {
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: Semantic search results: " << results[0].content.substr(0, std::min((size_t)50, results[0].content.length())));
@@ -214,18 +216,17 @@ void MainWindow::onIngestCapsuleRequest(const QString& capsuleJson, const QStrin
 void MainWindow::onFetchWebCapsuleRequest(const QString& query) {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Fetch Web Capsule Request for query: " << query.toStdString());
     learningModule.learnFromWeb(query.toStdString());
-
-    CerebrumLux::IngestReport dummy_report;
-    dummy_report.result = CerebrumLux::IngestResult::Success;
-    dummy_report.message = "Web capsule fetch initiated for: " + query.toStdString();
-    if (capsuleTransferPanel) {
-            capsuleTransferPanel->displayIngestReport(dummy_report);
-        } else {
-            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onFetchWebCapsuleRequest: capsuleTransferPanel null. Web fetch raporu gösterilemedi.");
-        }
 }
 
-// YENİ: KnowledgeBasePanel'i güncelleyen metot implementasyonu
+void MainWindow::onWebFetchCompleted(const CerebrumLux::IngestReport& report) {
+    if (capsuleTransferPanel) {
+        capsuleTransferPanel->displayIngestReport(report);
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Web çekme raporu CapsuleTransferPanel'de gösterildi. Sonuç: " << static_cast<int>(report.result));
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onWebFetchCompleted: capsuleTransferPanel null. Web çekme raporu gösterilemedi.");
+    }
+}
+
 void MainWindow::updateKnowledgeBasePanel() {
     if (knowledgeBasePanel) {
         knowledgeBasePanel->updateKnowledgeBaseContent();

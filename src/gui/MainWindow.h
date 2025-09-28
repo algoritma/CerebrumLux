@@ -16,7 +16,7 @@
 #include "../gui/panels/GraphPanel.h"
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
-#include "../gui/panels/KnowledgeBasePanel.h" // YENİ: KnowledgeBasePanel için
+#include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/engine_integration.h"
 #include "../gui/DataTypes.h"
 #include "ui_MainWindow.h"
@@ -36,7 +36,7 @@ public:
     GraphPanel* getGraphPanel() const;
     SimulationPanel* getSimulationPanel() const;
     CapsuleTransferPanel* getCapsuleTransferPanel() const;
-    KnowledgeBasePanel* getKnowledgeBasePanel() const; // YENİ: KnowledgeBasePanel getter
+    KnowledgeBasePanel* getKnowledgeBasePanel() const;
 
 public slots:
     void appendLog(CerebrumLux::LogLevel level, const QString& message);
@@ -50,7 +50,9 @@ public slots:
 
 private slots:
     void updateGui();
-    void updateKnowledgeBasePanel(); // YENİ: KnowledgeBasePanel'i güncelleyen metot
+    // void updateCapsuleTransferPanel(); // KALDIRILDI: Bu metod artık kullanılmıyor, KnowledgeBasePanel'e taşındı.
+    void updateKnowledgeBasePanel();
+    void onWebFetchCompleted(const CerebrumLux::IngestReport& report); // 'private slots:' bölümünde kalacak
 
 private:
     Ui::MainWindow *ui;
@@ -59,7 +61,7 @@ private:
     GraphPanel *graphPanel;
     SimulationPanel *simulationPanel;
     CapsuleTransferPanel *capsuleTransferPanel;
-    KnowledgeBasePanel *knowledgeBasePanel; // YENİ: KnowledgeBasePanel üyesi
+    KnowledgeBasePanel *knowledgeBasePanel;
 
     EngineIntegration& engine;
     LearningModule& learningModule;

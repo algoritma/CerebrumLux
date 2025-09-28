@@ -90,7 +90,7 @@ void CapsuleTransferPanel::displayIngestReport(const IngestReport& report) {
     status += "Mesaj: " + QString::fromStdString(report.message) + "\n";
     status += "Kaynak Eş ID: " + QString::fromStdString(report.source_peer_id) + "\n";
     status += "Orijinal Kapsül ID: " + QString::fromStdString(report.original_capsule.id) + "\n";
-    status += "    İşlenmiş İçerik (ilk 200 karakter): " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)200, report.processed_capsule.content.length()))) + "...\n";
+    status += "    İşlenmiş İçerik (ilk 500 karakter): " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)500, report.processed_capsule.content.length()))) + "...\n";
     reportMessageDisplay->setText(status);
 
     LogLevel level = (report.result == IngestResult::Success) ? LogLevel::INFO : LogLevel::ERR_CRITICAL;
