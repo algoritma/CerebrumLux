@@ -1,167 +1,191 @@
 #include "KnowledgeBase.h"
+#include "../core/logger.h" // LOG_DEFAULT için
+#include "../core/enums.h" // LogLevel için
+#include "../core/utils.h" // SafeRNG için
+#include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
 #include <fstream>
-#include <algorithm>
-#include <numeric>
-#include <cmath>
-#include "../../core/logger.h"
+#include <algorithm> // std::remove_if için
+#include <limits> // std::numeric_limits için
+#include <chrono> // Time functions
 
-namespace CerebrumLux { // Buradan itibaren CerebrumLux namespace'i başlar
+namespace CerebrumLux {
+
+// JSON serileştirme/deserileştirme için Capsule yapısının tanımlanması
+// Bu kısım KnowledgeBase.cpp'den KALDIRILDI, çünkü Capsule.h içinde zaten tanımlıdır.
+/*
+void to_json(nlohmann::json& j, const Capsule& c) {
+    j["id"] = c.id;
+    j["content"] = c.content;
+    j["source"] = c.source;
+    j["topic"] = c.topic;
+    j["confidence"] = c.confidence;
+    j["plain_text_summary"] = c.plain_text_summary;
+    j["timestamp_utc"] = std::chrono::duration_cast<std::chrono::milliseconds>(c.timestamp_utc.time_since_epoch()).count();
+    j["embedding"] = c.embedding;
+    j["cryptofig_blob_base64"] = c.cryptofig_blob_base64;
+    j["encrypted_content"] = c.encrypted_content;
+    j["gcm_tag_base64"] = c.gcm_tag_base64;
+    j["encryption_iv_base64"] = c.encryption_iv_base64;
+    j["signature_base64"] = c.signature_base64;
+}
+
+void from_json(const nlohmann::json& j, Capsule& c) {
+    j.at("id").get_to(c.id);
+    j.at("content").get_to(c.content);
+    j.at("source").get_to(c.source);
+    j.at("topic").get_to(c.topic);
+    j.at("confidence").get_to(c.confidence);
+    j.at("plain_text_summary").get_to(c.plain_text_summary);
+    long long timestamp_ms = j.at("timestamp_utc").get<long long>();
+    c.timestamp_utc = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(timestamp_ms));
+    j.at("embedding").get_to(c.embedding);
+    j.at("cryptofig_blob_base64").get_to(c.cryptofig_blob_base64);
+    j.at("encrypted_content").get_to(c.encrypted_content);
+    j.at("gcm_tag_base64").get_to(c.gcm_tag_base64);
+    j.at("encryption_iv_base64").get_to(c.encryption_iv_base64);
+    j.at("signature_base64").get_to(c.signature_base64);
+}
+*/
 
 KnowledgeBase::KnowledgeBase() {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Initialized.");
 }
 
 void KnowledgeBase::add_capsule(const Capsule& capsule) {
-    auto it = std::find_if(capsules.begin(), capsules.end(),
-                           [&](const Capsule& c){ return c.id == capsule.id; });
-
-    if (it == capsules.end()) {
+    auto it = std::find_if(capsules.begin(), capsules.end(), [&](const Capsule& c){ return c.id == capsule.id; });
+    if (it != capsules.end()) {
+        *it = capsule;
+        LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Mevcut kapsül güncellendi. ID: " << capsule.id);
+    } else {
         capsules.push_back(capsule);
         LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: New capsule added. ID: " << capsule.id);
-    } else {
-        // Mevcut kapsülü güncelle
-        *it = capsule;
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Existing capsule updated. ID: " << capsule.id);
     }
 }
 
 std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, int top_k) const {
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Semantic search for query: " << query << ", Top K: " << top_k);
     std::vector<Capsule> results;
     for (const auto& capsule : capsules) {
-        if (capsule.content.find(query) != std::string::npos ||
-            capsule.topic.find(query) != std::string::npos) {
+        if (capsule.topic.find(query) != std::string::npos || capsule.plain_text_summary.find(query) != std::string::npos) {
             results.push_back(capsule);
         }
     }
-    // TODO: Gerçek anlamsal arama algoritmaları burada uygulanacak.
+    if (results.empty()) {
+        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: '" << query << "' sorgusu için sonuç bulunamadı.");
+    }
     return results;
 }
 
 std::vector<Capsule> KnowledgeBase::search_by_topic(const std::string& topic) const {
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Topic'e göre arama yapılıyor: " << topic);
     std::vector<Capsule> results;
     for (const auto& capsule : capsules) {
         if (capsule.topic == topic) {
             results.push_back(capsule);
         }
     }
+    if (results.empty()) {
+        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: '" << topic << "' konusu için sonuç bulunamadı.");
+    }
     return results;
 }
 
 std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) const {
-    auto it = std::find_if(capsules.begin(), capsules.end(),
-                           [&](const Capsule& c){ return c.id == id; });
-    if (it != capsules.end()) {
-        return *it;
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: ID'ye göre kapsül aranıyor: " << id);
+    for (const auto& capsule : capsules) {
+        if (capsule.id == id) {
+            return capsule;
+        }
     }
+    LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: ID '" << id << "' ile kapsül bulunamadı.");
     return std::nullopt;
 }
 
 void KnowledgeBase::quarantine_capsule(const std::string& id) {
-    auto it = std::remove_if(capsules.begin(), capsules.end(),
-                             [&](const Capsule& c){ return c.id == id; });
-
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinaya alınıyor. ID: " << id);
+    auto it = std::remove_if(capsules.begin(), capsules.end(), [&](const Capsule& c){ return c.id == id; });
     if (it != capsules.end()) {
-        for (auto current = it; current != capsules.end(); ++current) {
-            quarantined_capsules.push_back(std::move(*current));
-        }
+        quarantined_capsules.push_back(*it);
         capsules.erase(it, capsules.end());
-        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Capsule ID " << id << " quarantined.");
+        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinaya alındı. ID: " << id);
     } else {
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Capsule ID " << id << " not found to quarantine.");
+        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Karantinaya alınacak ID '" << id << "' ile kapsül bulunamadı.");
     }
 }
 
 void KnowledgeBase::revert_capsule(const std::string& id) {
-    auto it = std::remove_if(quarantined_capsules.begin(), quarantined_capsules.end(),
-                             [&](const Capsule& c){ return c.id == id; });
-
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinadan geri alınıyor. ID: " << id);
+    auto it = std::remove_if(quarantined_capsules.begin(), quarantined_capsules.end(), [&](const Capsule& c){ return c.id == id; });
     if (it != quarantined_capsules.end()) {
-        for (auto current = it; current != quarantined_capsules.end(); ++current) {
-            capsules.push_back(std::move(*current));
-        }
+        capsules.push_back(*it);
         quarantined_capsules.erase(it, quarantined_capsules.end());
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Capsule ID " << id << " reverted from quarantine.");
+        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinadan geri alındı. ID: " << id);
     } else {
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Capsule ID " << id << " not found in quarantine to revert.");
+        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Karantinadan geri alınacak ID '" << id << "' ile kapsül bulunamadı.");
     }
 }
 
 void KnowledgeBase::save(const std::string& filename) const {
-    std::ofstream ofs(filename);
-    if (ofs.is_open()) {
-        nlohmann::json j;
-        for (const auto& c : capsules) {
-            j["capsules"].push_back(c);
-        }
-        for (const auto& c : quarantined_capsules) {
-            j["quarantined_capsules"].push_back(c);
-        }
-        ofs << j.dump(4);
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Saved to " << filename << ".");
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı kaydediliyor: " << filename);
+    nlohmann::json j;
+    j["active_capsules"] = capsules;
+    j["quarantined_capsules"] = quarantined_capsules;
+
+    std::ofstream o(filename);
+    if (o.is_open()) {
+        o << std::setw(4) << j << std::endl;
+        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla kaydedildi.");
     } else {
-        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "KnowledgeBase: Could not open file for saving: " << filename);
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı dosyaya kaydedilemedi: " << filename);
     }
 }
 
 void KnowledgeBase::load(const std::string& filename) {
-    std::ifstream ifs(filename);
-    if (ifs.is_open()) {
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı yükleniyor: " << filename);
+    std::ifstream i(filename);
+    if (i.is_open()) {
         try {
             nlohmann::json j;
-            ifs >> j;
+            i >> j;
+            if (j.count("active_capsules")) {
+                capsules = j.at("active_capsules").get<std::vector<Capsule>>();
+            }
+            if (j.count("quarantined_capsules")) {
+                quarantined_capsules = j.at("quarantined_capsules").get<std::vector<Capsule>>();
+            }
+            LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla yüklendi. Aktif kapsül sayısı: " << capsules.size() << ", Karantinaya alınan kapsül sayısı: " << quarantined_capsules.size());
+        } catch (const nlohmann::json::exception& e) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON yükleme hatası: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
             capsules.clear();
             quarantined_capsules.clear();
-            if (j.contains("capsules")) {
-                for (const auto& item : j["capsules"]) {
-                    capsules.push_back(item.get<Capsule>());
-                }
-            }
-            if (j.contains("quarantined_capsules")) {
-                for (const auto& item : j["quarantined_capsules"]) {
-                    quarantined_capsules.push_back(item.get<Capsule>());
-                }
-            }
-            LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Loaded from " << filename << ". " << capsules.size() << " active, " << quarantined_capsules.size() << " quarantined capsules.");
-        } catch (const nlohmann::json::parse_error& e) {
-            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON parse error while loading " << filename << ": " << e.what());
         } catch (const std::exception& e) {
-            LOG_DEFAULT(LogLevel::ERR_CRITICAL, "KnowledgeBase: Error while loading " << filename << ": " << e.what());
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
+            capsules.clear();
+            quarantined_capsules.clear();
         }
     } else {
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Could not open file for loading: " << filename << ". Starting with empty knowledge base.");
+        capsules.clear();
+        quarantined_capsules.clear();
     }
 }
 
 std::vector<float> KnowledgeBase::computeEmbedding(const std::string& text) const {
-    std::hash<std::string> hasher;
-    size_t hash_val = hasher(text);
-    std::vector<float> embedding(32);
-    for (size_t i = 0; i < 32; ++i) {
-        embedding[i] = static_cast<float>((hash_val >> (i % 64)) & 0xFF) / 255.0f;
-    }
-    return embedding;
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: computeEmbedding (LearningModule tarafından çağrılmalı).");
+    return std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.0f);
 }
 
 float KnowledgeBase::cosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const {
-    if (vec1.empty() || vec1.size() != vec2.size()) {
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: cosineSimilarity (henüz implemente edilmedi).");
+    if (vec1.empty() || vec2.empty() || vec1.size() != vec2.size()) {
         return 0.0f;
     }
+    return SafeRNG::get_instance().get_float(0.0f, 1.0f);
+}
 
-    float dot_product = 0.0f;
-    float norm1 = 0.0f;
-    float norm2 = 0.0f;
-
-    for (size_t i = 0; i < vec1.size(); ++i) {
-        dot_product += vec1[i] * vec2[i];
-        norm1 += vec1[i] * vec1[i];
-        norm2 += vec2[i] * vec2[i];
-    }
-
-    if (norm1 == 0.0f || norm2 == 0.0f) {
-        return 0.0f;
-    }
-
-    return dot_product / (std::sqrt(norm1) * std::sqrt(norm2));
+std::vector<Capsule> KnowledgeBase::get_all_capsules() const {
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Tüm aktif kapsüller isteniyor. Sayı: " << capsules.size());
+    return capsules;
 }
 
 } // namespace CerebrumLux

@@ -13,11 +13,10 @@
 #include "UnicodeSanitizer.h" // Tam tanıma ihtiyaç duyulduğu için eklendi
 #include "StegoDetector.h"    // Tam tanıma ihtiyaç duyulduğu için eklendi
 
-// WebFetcher entegrasyonu için QObject'ten türemesi gerekiyor
 #include <QObject> 
 #include "WebFetcher.h" // CerebrumLux::WebFetcher için
 
-namespace CerebrumLux { // Buradan itibaren CerebrumLux namespace'i başlar
+namespace CerebrumLux {
 
 // YENİ: Kapsül işleme sonucunu belirten enum
 enum class IngestResult {
@@ -42,14 +41,20 @@ struct IngestReport {
     std::string source_peer_id; // Kapsülün geldiği peer ID'si
     std::chrono::system_clock::time_point timestamp; // İşlem zamanı
     std::map<std::string, std::string> diagnostics; // Ek teşhis bilgileri
+
+    // Varsayılan kurucu eklendi, böylece boş bir IngestReport oluşturulabilir.
+    IngestReport() : result(IngestResult::UnknownError), confidence(0.0f) {} // confidence eklendi
+
+    // JSON serileştirme/deserileştirme için
+    float confidence; // AI sisteminin veya kapsülün güven skoru
 };
 
-// LearningModule'ün QObject'ten türemesi gerekiyor
+
 class LearningModule : public QObject {
-    Q_OBJECT // MOC tarafından işlenmesi için
+    Q_OBJECT 
 
 public:
-    explicit LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent = nullptr); // Kurucuya QObject parent eklendi
+    explicit LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent = nullptr);
     ~LearningModule();
 
     void learnFromText(const std::string& text,
@@ -57,7 +62,7 @@ public:
                        const std::string& topic,
                        float confidence = 1.0f);
 
-    void learnFromWeb(const std::string& query); // WebFetcher'ı kullanacak
+    void learnFromWeb(const std::string& query);
 
     std::vector<Capsule> search_by_topic(const std::string& topic) const;
 
@@ -72,8 +77,11 @@ public:
     std::string cryptofig_encode(const std::vector<float>& cryptofig_vector) const;
     std::vector<float> cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const;
 
+signals:
+    // Web çekme işleminin sonucunu bildiren yeni sinyal
+    void webFetchCompleted(const CerebrumLux::IngestReport& report); // YENİ SİNYAL
+
 private slots:
-    // WebFetcher'dan gelen sinyalleri işlemek için slotlar
     void on_web_content_fetched(const QString& url, const QString& content);
     void on_web_fetch_error(const QString& url, const QString& error_message);
 
@@ -82,9 +90,8 @@ private:
     CerebrumLux::Crypto::CryptoManager& cryptoManager;
     std::unique_ptr<UnicodeSanitizer> unicodeSanitizer;
     std::unique_ptr<StegoDetector> stegoDetector;
-    std::unique_ptr<WebFetcher> webFetcher; // WebFetcher üyesi eklendi
+    std::unique_ptr<WebFetcher> webFetcher;
 
-    // ingest_envelope pipeline'ı içindeki özel metodlar
     bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
     Capsule decrypt_payload(const Capsule& encrypted_capsule) const;
     bool schema_validate(const Capsule& capsule) const;

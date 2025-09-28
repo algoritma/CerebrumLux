@@ -23,6 +23,8 @@ public:
     std::vector<float> computeEmbedding(const std::string& text) const;
     float cosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const;
 
+    std::vector<Capsule> get_all_capsules() const; // YENİ: Tüm kapsülleri döndüren metot
+
 private:
     std::vector<Capsule> capsules;
     std::vector<Capsule> quarantined_capsules; // Karantinaya alınan kapsüller

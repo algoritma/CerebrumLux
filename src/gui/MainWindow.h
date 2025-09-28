@@ -7,9 +7,8 @@
 #include <QPushButton>
 #include <QMap>
 #include <QVector>
-#include <QTimer> // QTimer için eklendi
+#include <QTimer>
 
-// Tüm bağımlı sınıfların tam tanımları için başlık dosyalarını dahil ediyoruz
 #include "../data_models/sequence_manager.h"
 #include "../learning/LearningModule.h"
 #include "../learning/KnowledgeBase.h"
@@ -17,15 +16,13 @@
 #include "../gui/panels/GraphPanel.h"
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
-#include "../gui/engine_integration.h" // EngineIntegration için
-#include "../gui/DataTypes.h" // CerebrumLux::SimulationData için (yeniden tanımlama olmaması için burada bırakıldı)
-#include "ui_MainWindow.h" // Ui::MainWindow için (ÖNEMLİ: Bu dosya uic tarafından üretilir)
+#include "../gui/panels/KnowledgeBasePanel.h" // YENİ: KnowledgeBasePanel için
+#include "../gui/engine_integration.h"
+#include "../gui/DataTypes.h"
+#include "ui_MainWindow.h"
 
 
 namespace CerebrumLux {
-
-// SimulationData artık sadece DataTypes.h'den gelecek, burada yeniden tanımlamayacağız.
-// struct SimulationData { ... }; // BU BLOK KALDIRILDI
 
 class MainWindow : public QMainWindow
 {
@@ -35,16 +32,16 @@ public:
     explicit MainWindow(EngineIntegration& engine, LearningModule& learningModule, QWidget *parent = nullptr);
     ~MainWindow();
 
-    // Getter metotları için tam türleri kullanıyoruz
     LogPanel* getLogPanel() const;
     GraphPanel* getGraphPanel() const;
     SimulationPanel* getSimulationPanel() const;
     CapsuleTransferPanel* getCapsuleTransferPanel() const;
+    KnowledgeBasePanel* getKnowledgeBasePanel() const; // YENİ: KnowledgeBasePanel getter
 
 public slots:
-    void appendLog(CerebrumLux::LogLevel level, const QString& message); // LogLevel namespace ile
+    void appendLog(CerebrumLux::LogLevel level, const QString& message);
     void updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data);
-    void updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data); // SimulationData namespace ile
+    void updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data);
     void onSimulationCommandEntered(const QString& command);
     void onStartSimulationTriggered();
     void onStopSimulationTriggered();
@@ -53,21 +50,23 @@ public slots:
 
 private slots:
     void updateGui();
+    void updateKnowledgeBasePanel(); // YENİ: KnowledgeBasePanel'i güncelleyen metot
 
 private:
-    Ui::MainWindow *ui; // Ui::MainWindow tam tanımına artık sahibiz
+    Ui::MainWindow *ui;
     QTabWidget *tabWidget;
-    LogPanel *logPanel; // Tam tanıma artık sahibiz
-    GraphPanel *graphPanel; // Tam tanıma artık sahibiz
-    SimulationPanel *simulationPanel; // Tam tanıma artık sahibiz
-    CapsuleTransferPanel *capsuleTransferPanel; // Tam tanıma artık sahibiz
+    LogPanel *logPanel;
+    GraphPanel *graphPanel;
+    SimulationPanel *simulationPanel;
+    CapsuleTransferPanel *capsuleTransferPanel;
+    KnowledgeBasePanel *knowledgeBasePanel; // YENİ: KnowledgeBasePanel üyesi
 
     EngineIntegration& engine;
     LearningModule& learningModule;
 
     QTimer *guiUpdateTimer;
 
-    SimulationData convertCapsuleToSimulationData(const Capsule& capsule); // Namespace ile
+    SimulationData convertCapsuleToSimulationData(const Capsule& capsule);
 };
 
 } // namespace CerebrumLux

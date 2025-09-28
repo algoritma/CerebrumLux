@@ -11,6 +11,7 @@
 #include "../gui/panels/GraphPanel.h"
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
+#include "../gui/panels/KnowledgeBasePanel.h" // YENİ
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
 #include "../learning/LearningModule.h"
@@ -51,6 +52,9 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel oluşturuldu. Adresi: " << simulationPanel << ", isVisible(): " << simulationPanel->isVisible());
     capsuleTransferPanel = new CerebrumLux::CapsuleTransferPanel(this);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel oluşturuldu. Adresi: " << capsuleTransferPanel << ", isVisible(): " << capsuleTransferPanel->isVisible());
+    knowledgeBasePanel = new CerebrumLux::KnowledgeBasePanel(learningModule, this); // YENİ: KnowledgeBasePanel oluşturuldu
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBasePanel oluşturuldu. Adresi: " << knowledgeBasePanel << ", isVisible(): " << knowledgeBasePanel->isVisible());
+
 
     tabWidget->addTab(logPanel, "Log");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Log tab'ı eklendi. Aktif widget: " << tabWidget->currentWidget());
@@ -59,7 +63,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     tabWidget->addTab(simulationPanel, "Simulation");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Simulation tab'ı eklendi.");
     tabWidget->addTab(capsuleTransferPanel, "Capsule Transfer");
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Capsule Transfer tab'ı eklendi. Tab sayısı: " << tabWidget->count());
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Capsule Transfer tab'ı eklendi.");
+    tabWidget->addTab(knowledgeBasePanel, "KnowledgeBase"); // YENİ: KnowledgeBase tab'ı eklendi
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBase tab'ı eklendi. Tab sayısı: " << tabWidget->count());
+
 
     setWindowTitle("Cerebrum Lux");
     resize(1024, 768);
@@ -80,8 +87,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
 
     guiUpdateTimer = new QTimer(this);
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
-    guiUpdateTimer->start(100);
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı.");
+    guiUpdateTimer->start(1000);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms).");
 
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Kurucu çıkışı. isVisible(): " << isVisible() << ", geometry: " << geometry().width() << "x" << geometry().height());
 }
@@ -100,6 +107,7 @@ LogPanel* MainWindow::getLogPanel() const {
 GraphPanel* MainWindow::getGraphPanel() const { return graphPanel; }
 SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel; }
 CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
+KnowledgeBasePanel* MainWindow::getKnowledgeBasePanel() const { return knowledgeBasePanel; } // YENİ: KnowledgeBasePanel getter
 
 void MainWindow::appendLog(CerebrumLux::LogLevel level, const QString& message) {
     if (logPanel) {
@@ -133,20 +141,22 @@ void MainWindow::updateGui() {
     }
 
 
-    // KnowledgeBase'den grafik verilerini al - ARTIK AKTİF HALE GETİRİLİYOR
+    // KnowledgeBase'den grafik verilerini al
     auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search("GraphData", 100);
     QMap<qreal, qreal> graph_data;
     for (const auto& cap : capsules_for_graph) {
         graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), cap.confidence);
     }
     if (graphPanel) {
-        graphPanel->updateData("AI Confidence", graph_data); // SeriesName "AI Confidence" olarak ayarlandı
+        graphPanel->updateData("AI Confidence", graph_data);
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: GraphPanel güncellendi. Veri noktası sayısı: " << graph_data.size());
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: graphPanel null. Grafik verisi güncellenemedi.");
     }
     
-    // Semantic search'in log çıktısı
+    // KnowledgeBasePanel'i güncelle
+    updateKnowledgeBasePanel(); // YENİ: KnowledgeBasePanel'i güncelle
+
     auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
     if (!results.empty()) {
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: Semantic search results: " << results[0].content.substr(0, std::min((size_t)50, results[0].content.length())));
@@ -213,6 +223,16 @@ void MainWindow::onFetchWebCapsuleRequest(const QString& query) {
         } else {
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onFetchWebCapsuleRequest: capsuleTransferPanel null. Web fetch raporu gösterilemedi.");
         }
+}
+
+// YENİ: KnowledgeBasePanel'i güncelleyen metot implementasyonu
+void MainWindow::updateKnowledgeBasePanel() {
+    if (knowledgeBasePanel) {
+        knowledgeBasePanel->updateKnowledgeBaseContent();
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateKnowledgeBasePanel: KnowledgeBasePanel güncellendi.");
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateKnowledgeBasePanel: knowledgeBasePanel null. KnowledgeBase listesi güncellenemedi.");
+    }
 }
 
 } // namespace CerebrumLux

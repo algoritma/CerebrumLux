@@ -37,11 +37,11 @@ void LearningModule::learnFromText(const std::string& text,
 
     Capsule new_capsule;
     new_capsule.id = "text_" + std::to_string(get_current_timestamp_us());
-    new_capsule.content = text; // Tam metin içeriğini kaydet
+    new_capsule.content = text;
     new_capsule.source = source;
     new_capsule.topic = topic;
     new_capsule.confidence = confidence;
-    new_capsule.plain_text_summary = text.substr(0, std::min((size_t)1000, text.length())) + "..."; // Özet uzunluğunu artırıldı
+    new_capsule.plain_text_summary = text.substr(0, std::min((size_t)500, text.length())) + "...";
     new_capsule.timestamp_utc = std::chrono::system_clock::now();
 
     new_capsule.embedding = compute_embedding(new_capsule.content);
@@ -74,16 +74,36 @@ void LearningModule::learnFromWeb(const std::string& query) {
         webFetcher->fetch_url(final_url_to_fetch);
     } else {
         LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: WebFetcher nesnesi null, web'den öğrenme başlatılamadı.");
+        IngestReport report;
+        report.message = "WebFetcher nesnesi null, web'den öğrenme başlatılamadı.";
+        report.result = IngestResult::UnknownError;
+        emit webFetchCompleted(report); // Hata durumunda da sinyal yayınla
     }
 }
 
 void LearningModule::on_web_content_fetched(const QString& url, const QString& content) {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web içerigi alındı. URL: " << url.toStdString() << ", İçerik Uzunluğu: " << content.length());
-    learnFromText(content.toStdString(), url.toStdString(), "WebSearch", 0.7f);
+    // Alınan içeriği bir kapsüle dönüştür ve bilgi tabanına ekle
+    learnFromText(content.toStdString(), url.toStdString(), "WebSearch", 0.7f); // Güven seviyesi varsayılan
+
+    IngestReport report;
+    report.message = "Web içerigi başarıyla çekildi ve KnowledgeBase'e eklendi.";
+    report.result = IngestResult::Success;
+    report.source_peer_id = url.toStdString();
+    report.original_capsule.content = content.toStdString(); // Orijinal içeriği de rapora ekleyebiliriz
+    report.processed_capsule.content = content.toStdString();
+    report.timestamp = std::chrono::system_clock::now();
+    emit webFetchCompleted(report); // Başarı durumunda sinyal yayınla
 }
 
 void LearningModule::on_web_fetch_error(const QString& url, const QString& error_message) {
     LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Web içerigi cekme hatası. URL: " << url.toStdString() << ", Hata: " << error_message.toStdString());
+    IngestReport report;
+    report.message = "Web içerigi cekme hatası: " + error_message.toStdString();
+    report.result = IngestResult::UnknownError; // Veya daha spesifik bir hata türü
+    report.source_peer_id = url.toStdString();
+    report.timestamp = std::chrono::system_clock::now();
+    emit webFetchCompleted(report); // Hata durumunda da sinyal yayınla
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
@@ -116,7 +136,7 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         }
 
 
-        insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)1000, insight.observation.length())) + "..."; // Özet uzunluğunu artırıldı
+        insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)500, insight.observation.length())) + "...";
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
         insight_capsule.embedding = compute_embedding(insight_capsule.content);
         insight_capsule.cryptofig_blob_base64 = cryptofig_encode(insight_capsule.embedding);

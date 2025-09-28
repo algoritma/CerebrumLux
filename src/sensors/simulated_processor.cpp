@@ -21,6 +21,8 @@ CerebrumLux::SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor()
       network_protocols({"HTTP", "HTTPS", "TCP"}),
       distrib_battery_level(10, 100),
       distrib_display_status(0, 1), // 0:Normal, 1:Uyku
+      // SensorType::Count enum değerine göre dağıtımı başlatıyoruz.
+      // SensorType::Count'ın kendisi geçerli bir sensör tipi olmadığı için -1 yapıyoruz.
       s_sensor_selection_distrib(0, static_cast<int>(CerebrumLux::SensorType::Count) - 1) 
 {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulatedAtomicSignalProcessor: Initialized.");
@@ -75,6 +77,8 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::create_ke
 CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::capture_next_signal() {
     int sensor_type_int = s_sensor_selection_distrib(generator);
     CerebrumLux::SensorType selected_sensor_type = static_cast<CerebrumLux::SensorType>(sensor_type_int);
+
+    // LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "SimulatedAtomicSignalProcessor: Sensor tipi seçimi: " << sensor_type_to_string(selected_sensor_type)); // Detaylı log
 
     switch (selected_sensor_type) {
         case CerebrumLux::SensorType::Keyboard: {
@@ -147,7 +151,7 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::capture_n
     return empty_signal;
 }
 
-CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::simulate_mouse_event() {
+CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event() {
     CerebrumLux::AtomicSignal signal;
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Mouse;
@@ -238,7 +242,6 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_camera_event(
     return signal;
 }
 
-// Yeni eklenen simülasyon metotlarının implementasyonları
 CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_system_event() {
     AtomicSignal signal;
     signal.id = generate_random_string(8);
@@ -249,7 +252,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_system_event(
     std::uniform_int_distribution<int> event_dist(0, 2);
     switch (event_dist(generator)) {
         case 0: signal.system_event_type = "OS_STATUS_UPDATE"; signal.system_event_data = "CPU: " + std::to_string(SafeRNG::get_instance().get_int(10, 90)) + "%, RAM: " + std::to_string(SafeRNG::get_instance().get_int(20, 80)) + "%"; break;
-        case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(CerebrumLux::SafeRNG::get_instance().get_int(5, 20)) + "%"; break; // Düzeltilmiş CerebrumLux::SafeRNG
+        case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(CerebrumLux::SafeRNG::get_instance().get_int(5, 20)) + "%"; break;
         case 2: signal.system_event_type = "APPLICATION_CRASH"; signal.system_event_data = "App 'X' crashed."; break;
     }
     signal.value = signal.system_event_type;
