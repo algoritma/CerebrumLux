@@ -51,36 +51,39 @@ void Logger::init(LogLevel level, const std::string& log_file_path, const std::s
 // Mesajı loglar
 void Logger::log(LogLevel level, const std::string& message, const char* file, int line) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (level < level_) { // Belirlenen seviyenin altındaki logları yoksay
+    if (level < level_) {
         return;
     }
 
     std::string formatted_message = format_log_message(level, message, file, line);
 
     if (m_guiLogTextEdit) {
-        m_guiLogTextEdit->append(QString::fromStdString(formatted_message));
+        // Doğrudan QTextEdit'e append ediyoruz. Bu, LogPanel'in kendi appendLog'unu dolaylı olarak çağırır
+        // ve LogPanel'in formatlama mantığı (renkler vb.) bu mesajı alıp işleyecektir.
+        m_guiLogTextEdit->append(QString::fromStdString(formatted_message)); // YORUM SATIRI KALDIRILDI
     } else {
-        log_buffer_.push_back(formatted_message); // GUI'ye bağlanana kadar buffer'da tut
+        log_buffer_.push_back(formatted_message);
     }
 
     if (log_file_.is_open()) {
         log_file_ << formatted_message << std::endl;
         log_file_.flush();
     } else {
-        std::cout << formatted_message << std::endl; // Dosya açılamazsa konsola yaz
+        std::cout << formatted_message << std::endl;
     }
 }
 
 void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (level < level_) { // Belirlenen seviyenin altındaki logları yoksay
+    if (level < level_) {
         return;
     }
 
     std::string formatted_message = format_log_message(level, message, file, line);
 
     if (m_guiLogTextEdit) {
-        m_guiLogTextEdit->append(QString::fromStdString(formatted_message));
+        // Doğrudan QTextEdit'e append ediyoruz.
+        m_guiLogTextEdit->append(QString::fromStdString(formatted_message)); // YORUM SATIRI KALDIRILDI
     } else {
         log_buffer_.push_back(formatted_message);
     }
@@ -89,7 +92,7 @@ void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const
         log_file_ << formatted_message << std::endl;
         log_file_.flush();
     } else {
-        std::cerr << formatted_message << std::endl; // Hata loglarını her zaman stderr'e yaz
+        std::cerr << formatted_message << std::endl;
     }
 }
 
@@ -97,7 +100,7 @@ void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const
 void Logger::set_log_panel_text_edit(QTextEdit* text_edit) {
     std::lock_guard<std::mutex> lock(mutex_);
     m_guiLogTextEdit = text_edit;
-    flush_buffered_logs(); // Buffer'daki logları hemen GUI'ye aktar
+    flush_buffered_logs();
 }
 
 void Logger::flush_buffered_logs() {
