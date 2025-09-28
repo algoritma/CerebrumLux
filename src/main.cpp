@@ -162,7 +162,8 @@ int main(int argc, char *argv[])
     early_diagnostic_log.flush();
 
     // --- GUI entegrasyonu ---
-    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb);
+    //    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb);
+    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb, nlp, goal_manager, responder); // YENİ: nlp, goal_manager, responder eklendi
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] EngineIntegration initialized." << std::endl;
     early_diagnostic_log.flush();
 
@@ -231,7 +232,6 @@ int main(int argc, char *argv[])
         }
     });
     signalCaptureTimer->start(500); // Her 500 ms'de bir simüle sinyal yakala
-
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Entering QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();

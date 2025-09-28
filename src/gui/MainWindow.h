@@ -50,9 +50,9 @@ public slots:
 
 private slots:
     void updateGui();
-    // void updateCapsuleTransferPanel(); // KALDIRILDI: Bu metod artık kullanılmıyor, KnowledgeBasePanel'e taşındı.
     void updateKnowledgeBasePanel();
-    void onWebFetchCompleted(const CerebrumLux::IngestReport& report); // 'private slots:' bölümünde kalacak
+    void onWebFetchCompleted(const CerebrumLux::IngestReport& report);
+    void onChatMessageReceived(const QString& message); // YENİ: Chat mesajı işleme slotu
 
 private:
     Ui::MainWindow *ui;

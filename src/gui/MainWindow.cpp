@@ -79,6 +79,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(simulationPanel, &CerebrumLux::SimulationPanel::commandEntered, this, &CerebrumLux::MainWindow::onSimulationCommandEntered);
     connect(simulationPanel, &CerebrumLux::SimulationPanel::startSimulationTriggered, this, &CerebrumLux::MainWindow::onStartSimulationTriggered);
     connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered);
+    // YENİ: SimulationPanel'den gelen chat mesajı sinyalini bağla
+    connect(simulationPanel, &CerebrumLux::SimulationPanel::chatMessageEntered, this, &CerebrumLux::MainWindow::onChatMessageReceived);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel connect tamamlandı.");
 
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest);
@@ -156,8 +158,7 @@ void MainWindow::updateGui() {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: graphPanel null. Grafik verisi güncellenemedi.");
     }
     
-    // KnowledgeBasePanel'i güncelle
-    updateKnowledgeBasePanel(); // Artık doğru metot çağrılıyor
+    updateKnowledgeBasePanel();
     
     auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
     if (!results.empty()) {
@@ -226,6 +227,29 @@ void MainWindow::onWebFetchCompleted(const CerebrumLux::IngestReport& report) {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onWebFetchCompleted: capsuleTransferPanel null. Web çekme raporu gösterilemedi.");
     }
 }
+
+void MainWindow::onChatMessageReceived(const QString& message) { // YENİ SLOT IMPLEMENTASYONU
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Chat mesajı alındı: " << message.toStdString());
+    // NLP ile yanıt üret
+    CerebrumLux::UserIntent user_intent = engine.getNlpProcessor().infer_intent_from_text(message.toStdString());
+    CerebrumLux::AbstractState current_abstract_state = CerebrumLux::AbstractState::Idle; // Şimdilik varsayılan
+    CerebrumLux::AIGoal current_goal = engine.getGoalManager().get_current_goal();
+    
+    // EngineIntegration'dan güncel sekansı alabiliriz
+    const CerebrumLux::DynamicSequence& current_sequence = engine.getSequenceManager().get_current_sequence_ref();
+    
+    // Yanıt üretmek için NLP'yi kullan
+    std::string nlp_response = engine.getResponseEngine().generate_response(user_intent, current_abstract_state, current_goal, current_sequence);
+
+    // Yanıtı SimulationPanel'e geri gönder
+    if (simulationPanel) {
+        simulationPanel->appendChatMessage("CerebrumLux", QString::fromStdString(nlp_response));
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onChatMessageReceived: simulationPanel null. NLP yanıtı gösterilemedi.");
+    }
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: NLP yanıtı üretildi: " << nlp_response);
+}
+
 
 void MainWindow::updateKnowledgeBasePanel() {
     if (knowledgeBasePanel) {
