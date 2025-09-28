@@ -77,33 +77,32 @@ void LearningModule::learnFromWeb(const std::string& query) {
         IngestReport report;
         report.message = "WebFetcher nesnesi null, web'den öğrenme başlatılamadı.";
         report.result = IngestResult::UnknownError;
-        emit webFetchCompleted(report); // Hata durumunda da sinyal yayınla
+        emit webFetchCompleted(report);
     }
 }
 
 void LearningModule::on_web_content_fetched(const QString& url, const QString& content) {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web içerigi alındı. URL: " << url.toStdString() << ", İçerik Uzunluğu: " << content.length());
-    // Alınan içeriği bir kapsüle dönüştür ve bilgi tabanına ekle
-    learnFromText(content.toStdString(), url.toStdString(), "WebSearch", 0.7f); // Güven seviyesi varsayılan
+    learnFromText(content.toStdString(), url.toStdString(), "WebSearch", 0.7f);
 
     IngestReport report;
     report.message = "Web içerigi başarıyla çekildi ve KnowledgeBase'e eklendi.";
     report.result = IngestResult::Success;
     report.source_peer_id = url.toStdString();
-    report.original_capsule.content = content.toStdString(); // Orijinal içeriği de rapora ekleyebiliriz
+    report.original_capsule.content = content.toStdString();
     report.processed_capsule.content = content.toStdString();
     report.timestamp = std::chrono::system_clock::now();
-    emit webFetchCompleted(report); // Başarı durumunda sinyal yayınla
+    emit webFetchCompleted(report);
 }
 
 void LearningModule::on_web_fetch_error(const QString& url, const QString& error_message) {
     LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Web içerigi cekme hatası. URL: " << url.toStdString() << ", Hata: " << error_message.toStdString());
     IngestReport report;
     report.message = "Web içerigi cekme hatası: " + error_message.toStdString();
-    report.result = IngestResult::UnknownError; // Veya daha spesifik bir hata türü
+    report.result = IngestResult::UnknownError;
     report.source_peer_id = url.toStdString();
     report.timestamp = std::chrono::system_clock::now();
-    emit webFetchCompleted(report); // Hata durumunda da sinyal yayınla
+    emit webFetchCompleted(report);
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
@@ -115,6 +114,13 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] AI Insights isleniyor: " << insights.size() << " adet içgörü.");
 
     for (const auto& insight : insights) {
+        LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] İçgörü Detay: ID=" << insight.id
+                                    << ", Gözlem: " << insight.observation
+                                    << ", Bağlam: " << insight.context
+                                    << ", Önerilen Eylem: " << insight.recommended_action
+                                    << ", Tip: " << static_cast<int>(insight.type)
+                                    << ", Aciliyet: " << static_cast<int>(insight.urgency)); // YENİ: Detaylı içgörü logu
+
         Capsule insight_capsule;
         insight_capsule.id = insight.id;
         insight_capsule.content = insight.observation;
