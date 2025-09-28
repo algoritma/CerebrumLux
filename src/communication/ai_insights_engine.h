@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <map> // Cooldown mekanizması için
+#include <chrono> // Cooldown mekanizması için
 
 #include "../brain/intent_analyzer.h"
 #include "../brain/intent_learner.h"
@@ -11,6 +13,8 @@
 #include "../brain/cryptofig_processor.h"
 #include "../data_models/dynamic_sequence.h"
 #include "../core/enums.h" // InsightType, UrgencyLevel için (CerebrumLux namespace'i içinde)
+#include "../core/logger.h" // LOG_DEFAULT için
+#include "../core/utils.h" // SafeRNG için
 
 #include "../external/nlohmann/json.hpp" // JSON için
 
@@ -60,16 +64,10 @@ public:
 
     std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence);
     
-    // Geçici olarak eklenen, ancak gelecekte AIInsightsEngine'ın bir üyesi olması beklenen metotlar
-    // Bu metotların implementasyonları ai_insights_engine.cpp'de yer alacak.
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
     
-    // get_analyzer() metodunu VIRTUAL yapıyoruz, böylece DummyAIInsightsEngine onu override edebilir.
     virtual IntentAnalyzer& get_analyzer() const; 
 
-    // get_learner() ve get_cryptofig_autoencoder() metotlarını da, eğer ileriye dönük olarak
-    // mock'lanmaları veya override edilmeleri bekleniyorsa, virtual olarak işaretliyoruz.
-    // Şimdilik default implementasyonlarını inline olarak veriyoruz, böylece .cpp'de tekrar tanımlamak gerekmez.
     virtual IntentLearner& get_learner() const { return intent_learner; }
     virtual CryptofigAutoencoder& get_cryptofig_autoencoder() const { return cryptofig_autoencoder; }
 
@@ -80,13 +78,16 @@ private:
     CryptofigAutoencoder& cryptofig_autoencoder;
     CryptofigProcessor& cryptofig_processor;
 
-    // Cooldown mekanizması için
     std::map<std::string, std::chrono::system_clock::time_point> insight_cooldowns;
     bool is_on_cooldown(const std::string& key, std::chrono::seconds cooldown_duration) const;
 
-    AIInsight analyze_performance(const DynamicSequence& current_sequence);
-    AIInsight identify_learning_opportunity(const DynamicSequence& current_sequence);
-    AIInsight detect_anomalies(const DynamicSequence& current_sequence);
+    // YENİ YARDIMCI İÇGÖRÜ ÜRETİM METOTLARI DEKLARASYONLARI
+    AIInsight generate_reconstruction_error_insight(const DynamicSequence& current_sequence);
+    AIInsight generate_learning_rate_insight(const DynamicSequence& current_sequence);
+    AIInsight generate_system_resource_insight(const DynamicSequence& current_sequence);
+    AIInsight generate_network_activity_insight(const DynamicSequence& current_sequence);
+    AIInsight generate_application_context_insight(const DynamicSequence& current_sequence);
+    AIInsight generate_unusual_behavior_insight(const DynamicSequence& current_sequence); // Daha sonra geliştirilebilir
 };
 
 } // namespace CerebrumLux

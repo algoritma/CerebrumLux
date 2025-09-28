@@ -21,8 +21,6 @@ CerebrumLux::SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor()
       network_protocols({"HTTP", "HTTPS", "TCP"}),
       distrib_battery_level(10, 100),
       distrib_display_status(0, 1), // 0:Normal, 1:Uyku
-      // SensorType::Count enum değerine göre dağıtımı başlatıyoruz.
-      // SensorType::Count'ın kendisi geçerli bir sensör tipi olmadığı için -1 yapıyoruz.
       s_sensor_selection_distrib(0, static_cast<int>(CerebrumLux::SensorType::Count) - 1) 
 {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulatedAtomicSignalProcessor: Initialized.");
@@ -76,8 +74,15 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::create_ke
 
 CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::capture_next_signal() {
     int sensor_type_int = s_sensor_selection_distrib(generator);
-    CerebrumLux::SensorType selected_sensor_type = static_cast<CerebrumLux::SensorType>(sensor_type_int);
+    CerebrumLux::SensorType selected_sensor_type; // YENİ: Değişken burada deklare edildi.
 
+    // Eğer seçilen tip Count ise, varsayılan bir tipi seç (örn. InternalAI)
+    if (sensor_type_int == static_cast<int>(CerebrumLux::SensorType::Count)) {
+        selected_sensor_type = CerebrumLux::SensorType::InternalAI;
+    } else {
+        selected_sensor_type = static_cast<CerebrumLux::SensorType>(sensor_type_int);
+    }
+    
     // LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "SimulatedAtomicSignalProcessor: Sensor tipi seçimi: " << sensor_type_to_string(selected_sensor_type)); // Detaylı log
 
     switch (selected_sensor_type) {
@@ -136,7 +141,7 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::capture_n
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulatedAtomicSignalProcessor: Biyosensör sinyali üretildi. Data: " << signal.value);
             return signal;
         }
-        case CerebrumLux::SensorType::Count: // Count'ı simüle etmiyoruz, bu yüzden varsayılan davranışı tetikleyelim.
+        case CerebrumLux::SensorType::Count: 
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulatedAtomicSignalProcessor: SensorType::Count seçildi, varsayılan bir iç AI sinyali üretiliyor.");
             return simulate_internal_ai_event();
     }
