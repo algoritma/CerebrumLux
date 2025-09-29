@@ -6,7 +6,8 @@
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include <numeric> // std::accumulate için
 #include <algorithm> // std::min, std::max için
-#include <random> // std::uniform_int_distribution için
+#include <random> // std::uniform_int_distribution, std::normal_distribution için
+ 
 
 // ÖNEMLİ: Tüm AIInsightsEngine implementasyonu bu namespace içinde olacak.
 namespace CerebrumLux {
@@ -54,6 +55,22 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Yeni içgörüler uretiliyor.\n");
     std::vector<AIInsight> insights;
     auto now = std::chrono::system_clock::now();
+
+    // YENİ KOD: Kod Karmaşıklığı Simülasyonu
+    // AI'ın kendi içsel kod tabanı veya dinamik süreçlerinden gelen metrikleri simüle ediyoruz.
+    // Her döngüde karmaşıklığı hafifçe değiştir.
+    if (!is_on_cooldown("code_complexity_simulation", std::chrono::seconds(10))) { // Her 10 saniyede bir güncelle
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::normal_distribution<float> d(0.0f, 0.05f); // Ortalama 0, standart sapma 0.05
+        
+        last_simulated_code_complexity += d(gen);
+        // Karmaşıklık değerini 0.0 ile 1.0 arasında tut
+        last_simulated_code_complexity = std::max(0.0f, std::min(1.0f, last_simulated_code_complexity));
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: Simüle Kod Karmaşıklığı Güncellendi: " << last_simulated_code_complexity);
+        insight_cooldowns["code_complexity_simulation"] = now;
+    }
+    // END YENİ KOD: Kod Karmaşıklığı Simülasyonu
 
     // --- Genel Performans Metriği (Grafik Besleme) - Her zaman üretilir (cooldown ile sınırlı) ---
     if (!current_sequence.latent_cryptofig_vector.empty() && !is_on_cooldown("ai_confidence_graph", std::chrono::seconds(5))) {
@@ -180,11 +197,25 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         });
     }
 
-    // YENİ EKLENEN KOD: Kod Geliştirme Önerisi
-    if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[0] < 0.5 && current_sequence.statistical_features_vector[1] < 0.5) {
+    // YENİ EKLENEN KOD: Kod Geliştirme Önerisi (Simüle edilmiş karmaşıklığa göre daha spesifik)
+    // Daha önce eklenen basit koşul yerine, simüle edilmiş kod karmaşıklığına odaklanıyoruz.
+    if (last_simulated_code_complexity > 0.8f && !is_on_cooldown("high_code_complexity_suggestion", std::chrono::seconds(60))) { // Yüksek karmaşıklık ve cooldown yoksa
+        insight_cooldowns["high_code_complexity_suggestion"] = now;
+        insights.push_back({
+            "CodeDevSuggest_HighComplexity_" + std::to_string(now.time_since_epoch().count()), // id
+            "Yüksek kod karmaşıklığı tespit edildi (" + std::to_string(last_simulated_code_complexity) + "). Modülerlik iyileştirmeleri ve refaktör fırsatları ACİL olabilir.", // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
+            "Karmaşık modülleri belirleyin ve küçük, yönetilebilir fonksiyonlara veya sınıflara ayırın. Kodun okunabilirliğini artırın.", // recommended_action
+            CerebrumLux::InsightType::CodeDevelopmentSuggestion,                    // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),// urgency (UrgencyLevel'a çevrildi)
+            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
+            {current_sequence.id}                                                   // related_capsule_ids
+        });
+    } else if (last_simulated_code_complexity > 0.6f && !is_on_cooldown("medium_code_complexity_suggestion", std::chrono::seconds(120))) { // Orta seviye karmaşıklık ve cooldown yoksa
+        insight_cooldowns["medium_code_complexity_suggestion"] = now;
         insights.push_back({
             "CodeDevSuggestion_" + std::to_string(now.time_since_epoch().count()), // id
-            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir.", // observation
+            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir (Mevcut karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ").", // observation
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
             "Kod tabanını analiz ederek potansiyel modülerlik veya refaktör alanlarını belirleyin.", // recommended_action
             CerebrumLux::InsightType::CodeDevelopmentSuggestion,                    // type

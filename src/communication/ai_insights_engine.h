@@ -100,6 +100,9 @@ private:
     AIInsight generate_network_activity_insight(const DynamicSequence& current_sequence);
     AIInsight generate_application_context_insight(const DynamicSequence& current_sequence);
     AIInsight generate_unusual_behavior_insight(const DynamicSequence& current_sequence); // Daha sonra geliştirilebilir
+
+    // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod karmaşıklığı değerini tutar
+    float last_simulated_code_complexity = 0.5f; // Başlangıç değeri
 };
 
 } // namespace CerebrumLux
