@@ -125,14 +125,6 @@ int main(int argc, char *argv[])
     CerebrumLux::Planner planner(analyzer, suggester, goal_manager, predictor, insights_engine);
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Planner init complete." << std::endl;
     early_diagnostic_log.flush();
-
-    CerebrumLux::ResponseEngine responder(analyzer, goal_manager, insights_engine, &nlp);
-    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] ResponseEngine init complete." << std::endl;
-    early_diagnostic_log.flush();
-
-    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] All core AI components initialized." << std::endl;
-    early_diagnostic_log.flush();
-
  
 
     // --- Kripto Yöneticisi ---
@@ -151,11 +143,19 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Learning Module initialized." << std::endl;
     early_diagnostic_log.flush();
 
+    // Response Engine oluşturulurken NaturalLanguageProcessor'ın bir unique_ptr'ı verilmeli
+    CerebrumLux::ResponseEngine responder(std::make_unique<CerebrumLux::NaturalLanguageProcessor>(goal_manager, kb));
+    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] ResponseEngine init complete." << std::endl;
+    early_diagnostic_log.flush();
+    
+    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] All core AI components initialized." << std::endl;
+    early_diagnostic_log.flush();
+
     // --- Meta Engine ---
     CerebrumLux::MetaEvolutionEngine meta_engine(
         analyzer,
         learner,
-        predictor,
+        predictor, // prediction_engine yerine predictor kullanıldı
         goal_manager,
         cryptofig_processor,
         insights_engine,
@@ -166,10 +166,9 @@ int main(int argc, char *argv[])
 
     // --- GUI entegrasyonu ---
     //    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb);
-    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb, nlp, goal_manager, responder); // YENİ: nlp, goal_manager, responder eklendi
+    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb, nlp, goal_manager, responder);
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] EngineIntegration initialized." << std::endl;
     early_diagnostic_log.flush();
-
     CerebrumLux::MainWindow window(integration, learning_module);
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] MainWindow created." << std::endl;
     early_diagnostic_log.flush();

@@ -239,15 +239,22 @@ void MainWindow::onChatMessageReceived(const QString& message) {
     const CerebrumLux::DynamicSequence& current_sequence = engine.getSequenceManager().get_current_sequence_ref();
     
     // Yanıt üretmek için NLP'yi kullan
-    std::string nlp_response = engine.getResponseEngine().generate_response(user_intent, current_abstract_state, current_goal, current_sequence, learningModule.getKnowledgeBase());
+    // DEĞİŞTİRİLEN KOD: generate_response'dan ChatResponse objesi al
+    CerebrumLux::ChatResponse nlp_chat_response = engine.getResponseEngine().generate_response(user_intent, current_abstract_state, current_goal, current_sequence, learningModule.getKnowledgeBase());
+
+    // DİKKAT: SimulationPanel'in appendChatMessage metodunu da ChatResponse alacak şekilde güncellemeniz gerekebilir.
+    // Şimdilik sadece text kısmını gönderiyoruz.
 
     // Yanıtı SimulationPanel'e geri gönder
     if (simulationPanel) {
-        simulationPanel->appendChatMessage("CerebrumLux", QString::fromStdString(nlp_response));
+        simulationPanel->appendChatMessage("CerebrumLux", nlp_chat_response); // DEĞİŞTİRİLDİ: Doğrudan ChatResponse objesini gönder
+        // İleride, nlp_chat_response.reasoning ve nlp_chat_response.needs_clarification da burada görüntülenebilir.
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onChatMessageReceived: simulationPanel null. NLP yanıtı gösterilemedi.");
     }
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: NLP yanıtı üretildi: " << nlp_response);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: NLP yanıtı üretildi (metin): " << nlp_chat_response.text.substr(0, std::min((size_t)50, nlp_chat_response.text.length()))
+        << ", Gerekçe: " << nlp_chat_response.reasoning.substr(0, std::min((size_t)50, nlp_chat_response.reasoning.length()))
+        << ", Açıklama Gerekli: " << (nlp_chat_response.needs_clarification ? "Evet" : "Hayır"));
 }
 
 void MainWindow::updateKnowledgeBasePanel() {

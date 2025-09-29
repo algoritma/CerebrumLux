@@ -96,10 +96,39 @@ void CerebrumLux::SimulationPanel::updateSimulationHistory(const QVector<Cerebru
 }
 
 // YENİ: Chat mesajı ekleme slotu
-void CerebrumLux::SimulationPanel::appendChatMessage(const QString& sender, const QString& message) {
-    QString time = QDateTime::currentDateTime().toString("hh:mm:ss");
-    QString formattedMessage = QString("[%1] <b>%2:</b> %3").arg(time, sender, message);
-    chatHistoryDisplay->append(formattedMessage);
+void CerebrumLux::SimulationPanel::appendChatMessage(const QString& sender, const CerebrumLux::ChatResponse& chatResponse) {
+    // Chat geçmişini HTML olarak oluşturacağız
+    QString messageHtml = chatHistoryDisplay->toHtml();
+    
+    // Zaman damgasını al
+    QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
+
+    // Mesajı sender'a göre farklı renklendir ve HTML formatında ekle
+    if (sender == "CerebrumLux") {
+        messageHtml += QString("<p style=\"margin-bottom:0;\"><b><font color=\"#007bff\">%1 %2:</font></b> %3</p>")
+                       .arg(timestamp).arg(sender).arg(QString::fromStdString(chatResponse.text));
+        
+        // Gerekçeyi daha küçük ve soluk renkte ekle (eğer varsa)
+        if (!chatResponse.reasoning.empty()) {
+            messageHtml += QString("<p style=\"margin-left:20px; font-size:0.8em; color:#6c757d; margin-top:0;\"><i>Gerekçe: %1</i></p>")
+                           .arg(QString::fromStdString(chatResponse.reasoning));
+        }
+        // Açıklama gerekliyse bir uyarı ekle
+        if (chatResponse.needs_clarification) {
+            messageHtml += QString("<p style=\"margin-left:20px; font-size:0.8em; color:#ffc107; margin-top:0;\"><i>(Bu yanıt belirsiz olabilir, ek bilgi sağlamak ister misiniz?)</i></p>");
+        }
+    } else { // Kullanıcı mesajı
+        messageHtml += QString("<p><b><font color=\"#28a745\">%1 %2:</font></b> %3</p>")
+                       .arg(timestamp).arg(sender).arg(QString::fromStdString(chatResponse.text));
+    }
+
+    chatHistoryDisplay->setHtml(messageHtml);
+
+    // Otomatik olarak en alta kaydır
+    QScrollBar *sb = chatHistoryDisplay->verticalScrollBar();
+    if (sb) {
+        sb->setValue(sb->maximum());
+    }
 }
 
 
@@ -107,14 +136,12 @@ void CerebrumLux::SimulationPanel::appendChatMessage(const QString& sender, cons
 void CerebrumLux::SimulationPanel::onCommandLineEditReturnPressed() {
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulationPanel: onCommandLineEditReturnPressed slot triggered.");
     QString command = this->commandLineEdit->text();
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulationPanel: CommandLineEdit text: '" << command.toStdString() << "' (isEmpty: " << command.isEmpty() << ")");
-
     if (!command.isEmpty()) {
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Command entered: " << command.toStdString());
         emit commandEntered(command);
         this->commandLineEdit->clear();
     } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulationPanel: Command entered was empty.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulationPanel: Boş komut girildi.");
     }
 }
 
@@ -135,11 +162,14 @@ void CerebrumLux::SimulationPanel::onChatMessageLineEditReturnPressed() {
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "SimulationPanel: onChatMessageLineEditReturnPressed slot triggered.");
     QString message = chatMessageLineEdit->text();
     if (!message.isEmpty()) {
-        appendChatMessage("User", message);
+        // Kullanıcı mesajı için bir ChatResponse objesi oluştur
+        CerebrumLux::ChatResponse userChatResponse;
+        userChatResponse.text = message.toStdString();
+        appendChatMessage("User", userChatResponse); // Yeni imzaya uygun çağrı
         emit chatMessageEntered(message);
         chatMessageLineEdit->clear();
     } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulationPanel: Chat message was empty.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "SimulationPanel: Boş chat mesajı girildi.");
     }
 }
 

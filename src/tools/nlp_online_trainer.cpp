@@ -18,6 +18,7 @@
 #include "../brain/cryptofig_processor.h"
 #include "../user/user_profile_manager.h" // UserProfileManager için
 #include "../communication/suggestion_engine.h" // SuggestionEngine için
+#include "../communication/natural_language_processor.h" // CerebrumLux::ChatResponse için
 #include "../data_models/sequence_manager.h" // SequenceManager için
 #include "../sensors/atomic_signal.h" // AtomicSignal için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
@@ -208,16 +209,20 @@ public:
     // NaturalLanguageProcessor'ın yeni kurucusuna uyacak şekilde güncellendi
     DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm, CerebrumLux::KnowledgeBase& kb) : CerebrumLux::NaturalLanguageProcessor(gm, kb) {}
 
-    std::string generate_response_text(
-        CerebrumLux::UserIntent current_intent,
-        CerebrumLux::AbstractState current_abstract_state,
-        CerebrumLux::AIGoal current_goal,
-        const CerebrumLux::DynamicSequence& sequence,
-        const std::vector<std::string>& relevant_keywords,
-        const CerebrumLux::KnowledgeBase& kb
-    ) const override {
-        return "Dummy NLP yanıtı.";
-    }
+    CerebrumLux::ChatResponse generate_response_text( // Dönüş tipi std::string'den ChatResponse'a değişti
+         CerebrumLux::UserIntent current_intent,
+         CerebrumLux::AbstractState current_abstract_state,
+         CerebrumLux::AIGoal current_goal,
+         const CerebrumLux::DynamicSequence& sequence,
+         const std::vector<std::string>& relevant_keywords,
+         const CerebrumLux::KnowledgeBase& kb
+    ) const override { // 'override' hatasını düzeltmek için return tipi güncellendi
+        CerebrumLux::ChatResponse dummy_response;
+        dummy_response.text = "Dummy NLP yanıtı.";
+        dummy_response.reasoning = "Dummy gerekçe.";
+        dummy_response.needs_clarification = false;
+        return dummy_response;
+     }
 
     CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const { return CerebrumLux::UserIntent::Undefined; }
     CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const { return CerebrumLux::AbstractState::Undefined; }

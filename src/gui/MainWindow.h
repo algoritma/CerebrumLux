@@ -17,6 +17,7 @@
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
 #include "../gui/panels/KnowledgeBasePanel.h"
+#include "../communication/natural_language_processor.h" // CerebrumLux::ChatResponse için
 #include "../gui/engine_integration.h"
 #include "../gui/DataTypes.h"
 #include "ui_MainWindow.h"
