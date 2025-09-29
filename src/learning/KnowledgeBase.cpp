@@ -7,6 +7,7 @@
 #include <algorithm> // std::remove_if için
 #include <limits> // std::numeric_limits için
 #include <chrono> // Time functions
+#include <filesystem> // YENİ: std::filesystem için eklendi
 
 namespace CerebrumLux {
 
@@ -126,23 +127,45 @@ void KnowledgeBase::revert_capsule(const std::string& id) {
 }
 
 void KnowledgeBase::save(const std::string& filename) const {
-    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı kaydediliyor: " << filename);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı kaydediliyor: " << filename);
     nlohmann::json j;
     j["active_capsules"] = capsules;
     j["quarantined_capsules"] = quarantined_capsules;
 
-    std::ofstream o(filename);
+    // YENİ: Tam dosya yolunu logla
+    std::filesystem::path current_path = std::filesystem::current_path();
+    std::filesystem::path file_path = current_path / filename;
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Kaydedilmeye calisilan tam dosya yolu: " << file_path.string());
+
+    std::ofstream o(file_path); // file_path kullan
     if (o.is_open()) {
         o << std::setw(4) << j << std::endl;
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla kaydedildi.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla kaydedildi.");
     } else {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı dosyaya kaydedilemedi: " << filename);
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı dosyaya kaydedilemedi: " << file_path.string());
     }
 }
 
 void KnowledgeBase::load(const std::string& filename) {
-    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı yükleniyor: " << filename);
-    std::ifstream i(filename);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı yükleniyor: " << filename);
+
+    // YENİ DİYAGNOSTİK KOD:
+    std::filesystem::path current_path = std::filesystem::current_path();
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Uygulama calisma dizini: " << current_path.string());
+    std::filesystem::path file_path = current_path / filename;
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Yuklenmeye calisilan tam dosya yolu: " << file_path.string());
+
+    if (!std::filesystem::exists(file_path)) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: Dosya bulunamadi: " << file_path.string() << ". Bos bilgi tabani ile baslatiliyor.");
+        capsules.clear();
+        quarantined_capsules.clear();
+        return; // Dosya yoksa daha fazla deneme
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Dosya var: " << file_path.string());
+    }
+    // END YENİ DİYAGNOSTİK KOD
+
+    std::ifstream i(file_path); // YENİ: Tam dosya yolunu kullanın
     if (i.is_open()) {
         try {
             nlohmann::json j;
@@ -153,18 +176,20 @@ void KnowledgeBase::load(const std::string& filename) {
             if (j.count("quarantined_capsules")) {
                 quarantined_capsules = j.at("quarantined_capsules").get<std::vector<Capsule>>();
             }
-            LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla yüklendi. Aktif kapsül sayısı: " << capsules.size() << ", Karantinaya alınan kapsül sayısı: " << quarantined_capsules.size());
+            LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla yüklendi. Aktif kapsül sayısı: " << capsules.size() << ", Karantinaya alınan kapsül sayısı: " << quarantined_capsules.size());
         } catch (const nlohmann::json::exception& e) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON yükleme hatası: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON yükleme hatası: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
             capsules.clear();
             quarantined_capsules.clear();
         } catch (const std::exception& e) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
             capsules.clear();
             quarantined_capsules.clear();
         }
     } else {
-        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Could not open file for loading: " << filename << ". Starting with empty knowledge base.");
+        // Bu blok artık sadece 'std::filesystem::exists' true döndürmesine rağmen 'is_open()' başarısız olursa çalışır.
+        // Bu durumda ya izin sorunudur ya da dosya kilitlidir.
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: Dosya acilamadi: " << file_path.string() << ". Dosya var ancak acilamiyor (izin veya kilit sorunu olabilir). Bos bilgi tabani ile baslatiliyor.");
         capsules.clear();
         quarantined_capsules.clear();
     }

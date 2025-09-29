@@ -25,9 +25,8 @@ KnowledgeBasePanel::~KnowledgeBasePanel() {
 
 void KnowledgeBasePanel::setupUi() {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0); // Layout'un kenar boşluklarını sıfırla - YENİ
+    mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    // Başlık
     mainLayout->addWidget(new QLabel("KnowledgeBase İçeriği:", this));
 
     // Arama kutusu ve temizle butonu
@@ -35,7 +34,7 @@ void KnowledgeBasePanel::setupUi() {
     searchLineEdit = new QLineEdit(this);
     searchLineEdit->setPlaceholderText("Kapsüllerde ara (ID, Konu, Özet)...");
     connect(searchLineEdit, &QLineEdit::textChanged, this, &CerebrumLux::KnowledgeBasePanel::onSearchTextChanged);
-    
+
     clearSearchButton = new QPushButton("Temizle", this);
     connect(clearSearchButton, &QPushButton::clicked, this, &CerebrumLux::KnowledgeBasePanel::onClearSearchClicked);
 
@@ -43,40 +42,79 @@ void KnowledgeBasePanel::setupUi() {
     searchLayout->addWidget(clearSearchButton);
     mainLayout->addLayout(searchLayout);
 
-    QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
-    splitter->setStretchFactor(0, 1); // Liste için esneklik - YENİ
-    splitter->setStretchFactor(1, 2); // Detaylar için daha fazla esneklik - YENİ
+    // YENİ KOD: Filtreleme kontrolleri
+    QHBoxLayout *filterLayout = new QHBoxLayout();
 
-    // Kapsül Listesi
+    filterLayout->addWidget(new QLabel("Konu:", this));
+    topicFilterComboBox = new QComboBox(this);
+    topicFilterComboBox->addItem("Tümü"); // Tüm konuları göster seçeneği
+    connect(topicFilterComboBox, &QComboBox::currentTextChanged, this, &CerebrumLux::KnowledgeBasePanel::onTopicFilterChanged);
+    filterLayout->addWidget(topicFilterComboBox);
+
+    filterLayout->addWidget(new QLabel("Başlangıç Tarihi:", this));
+    // DÜZELTME: Daha geniş bir varsayılan tarih aralığı
+    startDateEdit = new QDateEdit(QDate(2000, 1, 1), this); // Çok eski bir başlangıç tarihi
+    startDateEdit->setCalendarPopup(true);
+    connect(startDateEdit, &QDateEdit::dateChanged, this, &CerebrumLux::KnowledgeBasePanel::onStartDateChanged);
+    filterLayout->addWidget(startDateEdit);
+
+    filterLayout->addWidget(new QLabel("Bitiş Tarihi:", this));
+    // DÜZELTME: Gelecekteki bir tarihi varsayılan bitiş tarihi yapalım
+    endDateEdit = new QDateEdit(QDate::currentDate().addYears(1), this); // Bugün + 1 yıl
+    endDateEdit->setCalendarPopup(true);
+    connect(endDateEdit, &QDateEdit::dateChanged, this, &CerebrumLux::KnowledgeBasePanel::onEndDateChanged);
+    filterLayout->addWidget(endDateEdit);
+
+    filterLayout->addStretch();
+
+    mainLayout->addLayout(filterLayout);
+
+    QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 2);
+
     capsuleListWidget = new QListWidget(this);
     capsuleListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     connect(capsuleListWidget, &QListWidget::currentItemChanged, this, &CerebrumLux::KnowledgeBasePanel::onSelectedCapsuleChanged);
     splitter->addWidget(capsuleListWidget);
 
-    // Kapsül Detayları
     capsuleDetailDisplay = new QTextEdit(this);
     capsuleDetailDisplay->setReadOnly(true);
     splitter->addWidget(capsuleDetailDisplay);
 
-    mainLayout->addWidget(splitter); // Splitter'ı ana layout'a ekle
+    mainLayout->addWidget(splitter);
 
-    mainLayout->addStretch(1); // En alta esnek boşluk ekle - YENİ
+    mainLayout->addStretch(1);
 
     setLayout(mainLayout);
 }
 
 void KnowledgeBasePanel::updateKnowledgeBaseContent() {
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBasePanel: KnowledgeBase içeriği güncelleniyor.");
-    
-    // Seçili kapsülün ID'sini kaydet
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: KnowledgeBase içeriği güncelleniyor.");
+
     QString selectedCapsuleId;
     if (capsuleListWidget->currentItem()) {
         selectedCapsuleId = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
-        LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBasePanel: Mevcut secili kapsul ID: " << selectedCapsuleId.toStdString());
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Mevcut secili kapsul ID: " << selectedCapsuleId.toStdString());
     }
 
     currentDisplayedCapsules = learningModule.getKnowledgeBase().get_all_capsules(); // Tüm kapsülleri al
-    filterAndDisplayCapsules(searchLineEdit->text()); // Mevcut filtreyle yeniden listele
+
+    // YENİ KOD: Konu filtreleme ComboBox'ını doldur ve varsayılan değerleri ayarla
+    QSet<QString> uniqueTopics;
+    for (const auto& capsule : currentDisplayedCapsules) {
+        uniqueTopics.insert(QString::fromStdString(capsule.topic));
+    }
+    topicFilterComboBox->blockSignals(true); // Sinyalleri geçici olarak engelle
+    topicFilterComboBox->clear();
+    topicFilterComboBox->addItem("Tümü");
+    for (const QString& topic : uniqueTopics) {
+        topicFilterComboBox->addItem(topic);
+    }
+    topicFilterComboBox->blockSignals(false); // Sinyalleri tekrar etkinleştir
+
+    // Mevcut filtrelerle listeyi yeniden doldur
+    filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), startDateEdit->date(), endDateEdit->date());
 
     // Seçimi geri yükle
     if (!selectedCapsuleId.isEmpty()) {
@@ -90,17 +128,16 @@ void KnowledgeBasePanel::updateKnowledgeBaseContent() {
         }
         if (itemToSelect) {
             capsuleListWidget->setCurrentItem(itemToSelect);
-            LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBasePanel: Secim geri yuklendi. ID: " << selectedCapsuleId.toStdString());
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Secim geri yuklendi. ID: " << selectedCapsuleId.toStdString());
         } else {
-            // Eğer önceki seçili kapsül artık listede yoksa, detayları temizle
             capsuleDetailDisplay->clear();
-            LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBasePanel: Onceki secili kapsul listede bulunamadi, detaylar temizlendi.");
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Onceki secili kapsul listede bulunamadi, detaylar temizlendi.");
         }
     } else {
-        capsuleDetailDisplay->clear(); // Hiçbir şey seçili değilse detayları temizle
+        capsuleDetailDisplay->clear();
     }
 
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBasePanel: KnowledgeBase içeriği güncellendi. Toplam kapsül: " << currentDisplayedCapsules.size());
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: KnowledgeBase içeriği güncellendi. Toplam kapsül: " << currentDisplayedCapsules.size());
 }
 
 void KnowledgeBasePanel::onSelectedCapsuleChanged(QListWidgetItem* current, QListWidgetItem* previous) {
@@ -122,52 +159,78 @@ void KnowledgeBasePanel::onSelectedCapsuleChanged(QListWidgetItem* current, QLis
 }
 
 void KnowledgeBasePanel::onSearchTextChanged(const QString& text) {
-    filterAndDisplayCapsules(text);
+    // Mevcut filtreleri koruyarak arama filtresini uygula
+    filterAndDisplayCapsules(text, topicFilterComboBox->currentText(), startDateEdit->date(), endDateEdit->date());
 }
 
 void KnowledgeBasePanel::onClearSearchClicked() {
     searchLineEdit->clear();
-    filterAndDisplayCapsules("");
+    // Mevcut filtreleri koruyarak arama filtresini temizle
+    filterAndDisplayCapsules(QString(), topicFilterComboBox->currentText(), startDateEdit->date(), endDateEdit->date());
 }
 
-void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText) {
+// YENİ SLOTLARIN İMPLEMENTASYONLARI
+void KnowledgeBasePanel::onTopicFilterChanged(const QString& topic) {
+    filterAndDisplayCapsules(searchLineEdit->text(), topic, startDateEdit->date(), endDateEdit->date());
+}
+
+void KnowledgeBasePanel::onStartDateChanged(const QDate& date) {
+    filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), date, endDateEdit->date());
+}
+
+void KnowledgeBasePanel::onEndDateChanged(const QDate& date) {
+    filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), startDateEdit->date(), date);
+}
+
+void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText, const QString& topicFilter, const QDate& startDate, const QDate& endDate) {
     capsuleListWidget->clear();
-    displayedCapsuleDetails.clear(); // Detayları da temizle
+    displayedCapsuleDetails.clear();
 
     for (const auto& capsule : currentDisplayedCapsules) {
         QString capsuleId = QString::fromStdString(capsule.id);
         QString capsuleTopic = QString::fromStdString(capsule.topic);
-        QString capsuleSource = QString::fromStdString(capsule.source); // Kaynak için de arama yapabiliriz
+        QString capsuleSource = QString::fromStdString(capsule.source);
         QString capsuleSummary = QString::fromStdString(capsule.plain_text_summary);
+        QDateTime capsuleDateTime = QDateTime::fromSecsSinceEpoch(capsule.timestamp_utc.time_since_epoch().count());
+        QDate capsuleDate = capsuleDateTime.date();
+
+        bool textMatches = filterText.isEmpty() ||
+                           capsuleId.contains(filterText, Qt::CaseInsensitive) ||
+                           capsuleTopic.contains(filterText, Qt::CaseInsensitive) ||
+                           capsuleSource.contains(filterText, Qt::CaseInsensitive) ||
+                           capsuleSummary.contains(filterText, Qt::CaseInsensitive);
+
+        bool topicMatches = topicFilter.isEmpty() || topicFilter == "Tümü" || capsuleTopic.compare(topicFilter, Qt::CaseInsensitive) == 0;
         
-        if (filterText.isEmpty() ||
-            capsuleId.contains(filterText, Qt::CaseInsensitive) ||
-            capsuleTopic.contains(filterText, Qt::CaseInsensitive) ||
-            capsuleSource.contains(filterText, Qt::CaseInsensitive) || // Kaynakta da arama
-            capsuleSummary.contains(filterText, Qt::CaseInsensitive))
-        {
-            QString listItemText = QString("ID: %1 | Konu: %2 | Kaynak: %3")
+        bool dateMatches = (!startDate.isValid() || capsuleDate >= startDate) &&
+                           (!endDate.isValid() || capsuleDate <= endDate);
+
+        // DÜZELTME BAŞLANGICI: Filtre koşulunu kaldırarak tüm kapsüllerin eklenmesini sağla
+        // if (textMatches && topicMatches && dateMatches) // Bu satır yorum satırı yapıldı veya kaldırıldı
+        // DÜZELTME SONU
+        { // Tüm kapsüllerin listeye eklenmesini sağla (geçici olarak filtrelemeyi devre dışı bırak)
+
+            QString listItemText = QString("ID: %1 | Konu: %2 | Kaynak: %3 | Tarih: %4")
                                     .arg(capsuleId)
                                     .arg(capsuleTopic)
-                                    .arg(QString::fromStdString(capsule.source));
+                                    .arg(QString::fromStdString(capsule.source))
+                                    .arg(capsuleDateTime.toString("dd.MM.yyyy hh:mm"));
             
             QListWidgetItem *item = new QListWidgetItem(listItemText, capsuleListWidget);
             item->setData(Qt::UserRole, capsuleId);
 
-            // Detayları kolay erişim için dahili map'te sakla
             KnowledgeCapsuleDisplayData data;
             data.id = capsuleId;
             data.topic = capsuleTopic;
             data.source = QString::fromStdString(capsule.source);
             data.summary = capsuleSummary;
-            data.fullContent = QString::fromStdString(capsule.content);
-            data.cryptofigBlob = QString::fromStdString(capsule.cryptofig_blob_base64);
-            data.confidence = capsule.confidence;
+            data.fullContent = QString::fromStdString(capsule.content); // Corrected
+            data.cryptofigBlob = QString::fromStdString(capsule.cryptofig_blob_base64); // Corrected
+            data.confidence = capsule.confidence; // Corrected
             displayedCapsuleDetails[data.id] = data;
         }
     }
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül listesi filtrelendi. Görüntülenen kapsül sayısı: " << capsuleListWidget->count());
-    // capsuleDetailDisplay->clear(); // Seçili kapsül detayı da temizlensin (updateKnowledgeBaseContent() içinde hallediliyor)
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül listesi filtrelendi. Görüntülenen kapsül sayısı: " << capsuleListWidget->count());
 }
 
 void KnowledgeBasePanel::displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data) {

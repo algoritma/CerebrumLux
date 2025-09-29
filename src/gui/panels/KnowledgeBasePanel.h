@@ -5,15 +5,17 @@
 #include <QListWidget>
 #include <QTextEdit>
 #include <QSplitter>
-#include <QLineEdit> // Arama/süzme için
-#include <QPushButton> // Temizle butonu için
-#include <map> // std::map için
-#include <vector> // std::vector için
+#include <QLineEdit>
+#include <QPushButton>
+#include <QComboBox>
+#include <QDateEdit>
+#include <map>
+#include <vector>
 
-#include "../../core/logger.h" // LOG_DEFAULT için
-#include "../../learning/KnowledgeBase.h" // CerebrumLux::KnowledgeBase için
-#include "../../learning/Capsule.h" // CerebrumLux::Capsule için
-#include "../../learning/LearningModule.h" // Semantic search için
+#include "../../core/logger.h"
+#include "../../learning/KnowledgeBase.h"
+#include "../../learning/Capsule.h"
+#include "../../learning/LearningModule.h"
 
 
 namespace CerebrumLux {
@@ -27,7 +29,6 @@ struct KnowledgeCapsuleDisplayData {
     QString fullContent;
     QString cryptofigBlob;
     float confidence;
-    // Diğer detaylar eklenebilir
 };
 
 class KnowledgeBasePanel : public QWidget
@@ -37,30 +38,37 @@ public:
     explicit KnowledgeBasePanel(LearningModule& learningModuleRef, QWidget *parent = nullptr);
     virtual ~KnowledgeBasePanel();
 
-    void updateKnowledgeBaseContent(); // YENİ: KnowledgeBase içeriğini günceller
+    void updateKnowledgeBaseContent();
 
 signals:
-    // Gelecekte KnowledgeBase ile ilgili olaylar için sinyaller eklenebilir (örn. kapsül silindi, karantinaya alındı)
+    // Sinyaller
 
 private slots:
     void onSelectedCapsuleChanged(QListWidgetItem* current, QListWidgetItem* previous);
-    void onSearchTextChanged(const QString& text); // Arama/süzme slotu
-    void onClearSearchClicked(); // Arama kutusunu temizle butonu için
+    void onSearchTextChanged(const QString& text);
+    void onClearSearchClicked();
+    void onTopicFilterChanged(const QString& topic);
+    void onStartDateChanged(const QDate& date);
+    void onEndDateChanged(const QDate& date);
 
 private:
-    LearningModule& learningModule; // KnowledgeBase'e erişim için
+    LearningModule& learningModule;
 
     QListWidget *capsuleListWidget;
     QTextEdit *capsuleDetailDisplay;
-    QLineEdit *searchLineEdit; // YENİ: Arama kutusu
-    QPushButton *clearSearchButton; // YENİ: Arama kutusunu temizleme butonu
+    QLineEdit *searchLineEdit;
+    QPushButton *clearSearchButton;
+    QComboBox *topicFilterComboBox;
+    QDateEdit *startDateEdit;
+    QDateEdit *endDateEdit;
 
-    std::vector<Capsule> currentDisplayedCapsules; // Şu anda görüntülenen tüm kapsüller
-    std::map<QString, KnowledgeCapsuleDisplayData> displayedCapsuleDetails; // Detayları saklar
+    std::vector<Capsule> currentDisplayedCapsules;
+    std::map<QString, KnowledgeCapsuleDisplayData> displayedCapsuleDetails;
+    std::string selectedCapsuleId_;
 
     void setupUi();
     void displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data);
-    void filterAndDisplayCapsules(const QString& filterText);
+    void filterAndDisplayCapsules(const QString& filterText = QString(), const QString& topicFilter = QString(), const QDate& startDate = QDate(), const QDate& endDate = QDate());
 };
 
 } // namespace CerebrumLux
