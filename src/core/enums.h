@@ -166,6 +166,26 @@ enum class KeyEventType : unsigned char {
     UndefinedEvent
 };
 
+// Bilgi ve içgörüleri kategorize etmek için
+enum class KnowledgeTopic : unsigned char {
+    SystemPerformance,
+    LearningStrategy,
+    ResourceManagement,
+    CyberSecurity,
+    UserBehavior,
+    CodeDevelopment,
+    General // Genel bir kategori olarak eklendi
+};
+
+// İçgörülerin önem derecesini belirlemek için
+enum class InsightSeverity : unsigned char {
+    Low,
+    Medium,
+    High,
+    Critical,
+    None
+};
+
 // MouseButtonState
 enum class MouseButtonState : unsigned char {
     Left,

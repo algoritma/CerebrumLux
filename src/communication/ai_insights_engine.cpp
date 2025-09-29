@@ -1,13 +1,42 @@
 #include "ai_insights_engine.h"
 #include "../core/logger.h"
-#include "../core/enums.h" // InsightType, UrgencyLevel, UserIntent, AIAction için
+#include "../core/enums.h" // InsightType, UrgencyLevel, UserIntent, AIAction, KnowledgeTopic, InsightSeverity için
 #include "../core/utils.h" // intent_to_string, SafeRNG için
 #include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
+#include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include <numeric> // std::accumulate için
 #include <algorithm> // std::min, std::max için
 #include <random> // std::uniform_int_distribution için
 
-namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
+// ÖNEMLİ: Tüm AIInsightsEngine implementasyonu bu namespace içinde olacak.
+namespace CerebrumLux {
+
+// Yardımcı fonksiyonlar: KnowledgeTopic'i string'e dönüştürmek için
+static std::string knowledge_topic_to_string(KnowledgeTopic topic) {
+    switch (topic) {
+        case CerebrumLux::KnowledgeTopic::SystemPerformance: return "Sistem Performansı";
+        case CerebrumLux::KnowledgeTopic::LearningStrategy: return "Öğrenme Stratejisi";
+        case CerebrumLux::KnowledgeTopic::ResourceManagement: return "Kaynak Yönetimi";
+        case CerebrumLux::KnowledgeTopic::CyberSecurity: return "Siber Güvenlik";
+        case CerebrumLux::KnowledgeTopic::UserBehavior: return "Kullanıcı Davranışı";
+        case CerebrumLux::KnowledgeTopic::CodeDevelopment: return "Kod Geliştirme";
+        case CerebrumLux::KnowledgeTopic::General: return "Genel";
+        default: return "Bilinmeyen Konu";
+    }
+}
+
+// Yardımcı fonksiyonlar: InsightSeverity'i UrgencyLevel'a dönüştürmek için
+static CerebrumLux::UrgencyLevel insight_severity_to_urgency_level(InsightSeverity severity) {
+    switch (severity) {
+        case CerebrumLux::InsightSeverity::Low: return CerebrumLux::UrgencyLevel::Low;
+        case CerebrumLux::InsightSeverity::Medium: return CerebrumLux::UrgencyLevel::Medium;
+        case CerebrumLux::InsightSeverity::High: return CerebrumLux::UrgencyLevel::High;
+        case CerebrumLux::InsightSeverity::Critical: return CerebrumLux::UrgencyLevel::Critical;
+        case CerebrumLux::InsightSeverity::None: return CerebrumLux::UrgencyLevel::None;
+        default: return CerebrumLux::UrgencyLevel::None;
+    }
+}
+
 
 AIInsightsEngine::AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& learner_ref, PredictionEngine& predictor_ref,
                                  CryptofigAutoencoder& autoencoder_ref, CryptofigProcessor& cryptofig_processor_ref)
@@ -17,15 +46,15 @@ AIInsightsEngine::AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& 
       cryptofig_autoencoder(autoencoder_ref),
       cryptofig_processor(cryptofig_processor_ref)
 {
-    LOG_DEFAULT(LogLevel::INFO, "AIInsightsEngine: Initialized.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "AIInsightsEngine: Initialized.");
 }
 
 // === Insight generation ===
 std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence& current_sequence) {
-    LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Yeni içgörüler uretiliyor.\n");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Yeni içgörüler uretiliyor.\n");
     std::vector<AIInsight> insights;
     auto now = std::chrono::system_clock::now();
-    
+
     // --- Genel Performans Metriği (Grafik Besleme) - Her zaman üretilir (cooldown ile sınırlı) ---
     if (!current_sequence.latent_cryptofig_vector.empty() && !is_on_cooldown("ai_confidence_graph", std::chrono::seconds(5))) {
         float avg_latent_confidence = 0.0f;
@@ -40,112 +69,132 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         confidence_insight.observation = "AI sisteminin anlık güven seviyesi: " + std::to_string(normalized_confidence);
         confidence_insight.context = "Sistem Genel Performans Metriği";
         confidence_insight.recommended_action = "Grafiği gözlemlemeye devam et.";
-        confidence_insight.type = InsightType::None;
-        confidence_insight.urgency = UrgencyLevel::None;
+        confidence_insight.type = CerebrumLux::InsightType::None; // Veya uygun bir tip
+        confidence_insight.urgency = CerebrumLux::UrgencyLevel::None; // Veya uygun bir seviye
         confidence_insight.associated_cryptofig = current_sequence.latent_cryptofig_vector;
         confidence_insight.related_capsule_ids.push_back(current_sequence.id);
         insights.push_back(confidence_insight);
         insight_cooldowns["ai_confidence_graph"] = now;
-        LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: AI Güven Seviyesi içgörüsü (grafik için) üretildi: " << normalized_confidence);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: AI Güven Seviyesi içgörüsü (grafik için) üretildi: " << normalized_confidence);
     }
 
 
     // --- Çeşitli İçgörü Türleri - Her biri kendi cooldown'ı ile üretilir ve hemen eklenir ---
 
-    AIInsight insight;
+    AIInsight insight_from_helper; // Geçici bir AIInsight objesi
 
-    insight = generate_reconstruction_error_insight(current_sequence);
-    if (!insight.id.empty()) insights.push_back(insight);
+    insight_from_helper = generate_reconstruction_error_insight(current_sequence);
+    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
 
-    insight = generate_learning_rate_insight(current_sequence);
-    if (!insight.id.empty()) insights.push_back(insight);
+    insight_from_helper = generate_learning_rate_insight(current_sequence);
+    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
 
-    insight = generate_system_resource_insight(current_sequence);
-    if (!insight.id.empty()) insights.push_back(insight);
+    insight_from_helper = generate_system_resource_insight(current_sequence);
+    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
 
-    insight = generate_network_activity_insight(current_sequence);
-    if (!insight.id.empty()) insights.push_back(insight);
+    insight_from_helper = generate_network_activity_insight(current_sequence);
+    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
 
-    insight = generate_application_context_insight(current_sequence);
-    if (!insight.id.empty()) insights.push_back(insight);
+    insight_from_helper = generate_application_context_insight(current_sequence);
+    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
 
-    insight = generate_unusual_behavior_insight(current_sequence);
-    if (!insight.id.empty()) insights.push_back(insight);
-    
+    insight_from_helper = generate_unusual_behavior_insight(current_sequence);
+    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+
     // Eğer yukarıdaki koşulların hiçbiriyle içgörü üretilemediyse ve stabil durum içgörüsü cooldown'da değilse
     if (insights.empty() && !is_on_cooldown("stable_state", std::chrono::seconds(300))) {
         insights.push_back({"StableState_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
-                            "Ic durumum stabil gorunuyor. Yeni ogrenme firsatlari icin hazirim.",
+                            "İç durumum stabil görünüyor. Yeni öğrenme fırsatları için hazırım.",
                             "Genel Durum", "Yeni özellik geliştirme veya derinlemesine öğrenme moduna geç.",
-                            InsightType::None, UrgencyLevel::Low, {}, {}});
+                            CerebrumLux::InsightType::None, CerebrumLux::UrgencyLevel::Low, {}, {}});
         insight_cooldowns["stable_state"] = now;
     }
 
     // Performans Anormalliği
-    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[0] > 0.8) {
+    if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[0] > 0.8) {
         insights.push_back({
-            InsightType::PerformanceAnomaly,
-            "Sistemde potansiyel performans anormalliği tespit edildi.",
-            CerebrumLux::KnowledgeTopic::SystemPerformance,
-            InsightSeverity::High
+            "PerformanceAnomaly_" + std::to_string(now.time_since_epoch().count()), // id
+            "Sistemde potansiyel performans anormalliği tespit edildi.",             // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::SystemPerformance), // context (string'e çevrildi)
+            "Performans izleme araçlarını kontrol edin ve anormal süreçleri belirleyin.", // recommended_action
+            CerebrumLux::InsightType::PerformanceAnomaly,                           // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),  // urgency (UrgencyLevel'a çevrildi)
+            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
+            {current_sequence.id}                                                   // related_capsule_ids
         });
     }
 
     // Öğrenme Fırsatı
-    if (!sequence.get_latent_cryptofig_vector().empty() && sequence.get_latent_cryptofig_vector()[0] < 0.2) {
+    if (!current_sequence.latent_cryptofig_vector.empty() && current_sequence.latent_cryptofig_vector[0] < 0.2) {
         insights.push_back({
-            InsightType::LearningOpportunity,
-            "Yeni bir öğrenme fırsatı belirlendi. Bilgi tabanının genişletilmesi önerilir.",
-            CerebrumLux::KnowledgeTopic::LearningStrategy,
-            InsightSeverity::Medium
+            "LearningOpportunity_" + std::to_string(now.time_since_epoch().count()), // id
+            "Yeni bir öğrenme fırsatı belirlendi. Bilgi tabanının genişletilmesi önerilir.", // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::LearningStrategy), // context (string'e çevrildi)
+            "Mevcut bilgi tabanını gözden geçirin ve yeni öğrenme kaynakları arayın.", // recommended_action
+            CerebrumLux::InsightType::LearningOpportunity,                          // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),// urgency (UrgencyLevel'a çevrildi)
+            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
+            {current_sequence.id}                                                   // related_capsule_ids
         });
     }
 
     // Kaynak Optimizasyonu
-    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[1] > 0.9) {
+    if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[1] > 0.9) {
         insights.push_back({
-            InsightType::ResourceOptimization,
-            "Yüksek kaynak kullanımı tespit edildi. Optimizasyon önerileri değerlendirilmeli.",
-            CerebrumLux::KnowledgeTopic::ResourceManagement,
-            InsightSeverity::Medium
+            "ResourceOptimization_" + std::to_string(now.time_since_epoch().count()), // id
+            "Yüksek kaynak kullanımı tespit edildi. Optimizasyon önerileri değerlendirilmeli.", // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::ResourceManagement), // context (string'e çevrildi)
+            "Arka plan uygulamalarını kontrol edin veya gereksiz işlemleri durdurun.", // recommended_action
+            CerebrumLux::InsightType::ResourceOptimization,                         // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),// urgency (UrgencyLevel'a çevrildi)
+            {},                                                                     // associated_cryptofig (bu içgörü için gerekli olmayabilir)
+            {current_sequence.id}                                                   // related_capsule_ids
         });
     }
-    
+
     // Güvenlik Uyarısı
-    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[2] < 0.1) {
+    if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[2] < 0.1) {
         insights.push_back({
-            InsightType::SecurityAlert,
-            "Potansiyel güvenlik açığı veya anormal davranış tespit edildi.",
-            CerebrumLux::KnowledgeTopic::CyberSecurity,
-            InsightSeverity::High
+            "SecurityAlert_" + std::to_string(now.time_since_epoch().count()),     // id
+            "Potansiyel güvenlik açığı veya anormal davranış tespit edildi.",        // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CyberSecurity),  // context (string'e çevrildi)
+            "Sistem loglarını inceleyin ve güvenlik taraması yapın.",               // recommended_action
+            CerebrumLux::InsightType::SecurityAlert,                                // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),  // urgency (UrgencyLevel'a çevrildi)
+            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
+            {current_sequence.id}                                                   // related_capsule_ids
         });
     }
 
     // Kullanıcı Bağlamı
-    if (!sequence.get_latent_cryptofig_vector().empty() && sequence.get_latent_cryptofig_vector()[1] > 0.7) {
+    if (!current_sequence.latent_cryptofig_vector.empty() && current_sequence.latent_cryptofig_vector[1] > 0.7) {
         insights.push_back({
-            InsightType::UserContext,
-            "Kullanıcı bağlamında önemli bir değişiklik gözlemlendi. Adaptif yanıtlar için analiz ediliyor.",
-            CerebrumLux::KnowledgeTopic::UserBehavior,
-            InsightSeverity::Low
+            "UserContext_" + std::to_string(now.time_since_epoch().count()),       // id
+            "Kullanıcı bağlamında önemli bir değişiklik gözlemlendi. Adaptif yanıtlar için analiz ediliyor.", // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::UserBehavior),   // context (string'e çevrildi)
+            "Kullanıcının mevcut aktivitesine göre adaptif yanıtlar hazırlayın.",    // recommended_action
+            CerebrumLux::InsightType::UserContext,                                  // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Low),   // urgency (UrgencyLevel'a çevrildi)
+            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
+            {current_sequence.id}                                                   // related_capsule_ids
         });
     }
 
     // YENİ EKLENEN KOD: Kod Geliştirme Önerisi
-    // Bu kısım, DynamicSequence'den gelen verilere dayanarak (şimdilik basitleştirilmiş bir örnekle) 
-    // kod geliştirme ile ilgili içgörüler üretecektir.
-    // Gelecekte, bu mantık AI'ın kod tabanı üzerindeki kendi analizlerini veya 
-    // meta-evrimsel süreçlerden elde ettiği çıkarımları içerecektir.
-    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[0] < 0.5 && sequence.get_statistical_features_vector()[1] < 0.5) { // Basit bir örnek koşul
+    if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[0] < 0.5 && current_sequence.statistical_features_vector[1] < 0.5) {
         insights.push_back({
-            InsightType::CodeDevelopmentSuggestion,
-            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir.",
-            CerebrumLux::KnowledgeTopic::CodeDevelopment,
-            InsightSeverity::Medium
+            "CodeDevSuggestion_" + std::to_string(now.time_since_epoch().count()), // id
+            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir.", // observation
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
+            "Kod tabanını analiz ederek potansiyel modülerlik veya refaktör alanlarını belirleyin.", // recommended_action
+            CerebrumLux::InsightType::CodeDevelopmentSuggestion,                    // type
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),// urgency (UrgencyLevel'a çevrildi)
+            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
+            {current_sequence.id}                                                   // related_capsule_ids
         });
     }
 
-    LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << "\n");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << "\n");
 
     return insights;
 }
@@ -164,7 +213,7 @@ bool AIInsightsEngine::is_on_cooldown(const std::string& key, std::chrono::secon
 
 float AIInsightsEngine::calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const {
     if (statistical_features.empty() || statistical_features.size() != CryptofigAutoencoder::INPUT_DIM) {
-        LOG_DEFAULT(LogLevel::WARNING, "AIInsightsEngine: Reconstruction error hesaplanamadi, statistical_features boş veya boyut uyuşmuyor.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "AIInsightsEngine: Reconstruction error hesaplanamadi, statistical_features boş veya boyut uyuşmuyor.");
         return 1.0f; // Yüksek bir hata değeri döndür
     }
     std::vector<float> reconstructed = this->cryptofig_autoencoder.reconstruct(statistical_features);
@@ -186,22 +235,25 @@ AIInsight AIInsightsEngine::generate_reconstruction_error_insight(const DynamicS
         float reconstruction_error = calculate_autoencoder_reconstruction_error(current_sequence.statistical_features_vector);
 
         if (reconstruction_error > 0.1f) {
+            this->insight_cooldowns["reconstruction_error_insight"] = now; // Insight üretildiğinde cooldown'a al
             return {"RecError_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                     "Kriptofig analizim, mevcut sensor verisindeki bazi desenleri tam olarak ogrenemiyor. Hata: " + std::to_string(reconstruction_error),
                     "Veri Temsili", "Autoencoder ogrenme oranini artir, daha fazla epoch calistir.",
-                    InsightType::PerformanceAnomaly, UrgencyLevel::High, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
+                    CerebrumLux::InsightType::PerformanceAnomaly, CerebrumLux::UrgencyLevel::High, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
         } else if (reconstruction_error < 0.01f) {
+            this->insight_cooldowns["reconstruction_error_insight"] = now; // Insight üretildiğinde cooldown'a al
             return {"RecErrorOpt_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                     "Autoencoder'im veriyi cok iyi yeniden yapilandiriyor. Latent uzayi kucultme onerisi.",
                     "Verimlilik", "Autoencoder latent boyutunu dusurme veya budama onerisi.",
-                    InsightType::EfficiencySuggestion, UrgencyLevel::Low, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
+                    CerebrumLux::InsightType::EfficiencySuggestion, CerebrumLux::UrgencyLevel::Low, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
         }
     } else {
-        if (!is_on_cooldown("no_stats_vector", std::chrono::seconds(15))) { // Daha kısa cooldown
+        if (!is_on_cooldown("no_stats_vector", std::chrono::seconds(15))) {
+            this->insight_cooldowns["no_stats_vector"] = now; // Insight üretildiğinde cooldown'a al
             return {"NoStats_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                     "Istatistiksel ozellik vektoru bos, Autoencoder performansi hakkinda yorum yapamiyorum.",
                     "Veri Kalitesi", "Giris verisi akisini kontrol et.",
-                    InsightType::PerformanceAnomaly, UrgencyLevel::Medium, {}, {current_sequence.id}};
+                    CerebrumLux::InsightType::PerformanceAnomaly, CerebrumLux::UrgencyLevel::Medium, {}, {current_sequence.id}};
         }
     }
     return {};
@@ -216,15 +268,17 @@ AIInsight AIInsightsEngine::generate_learning_rate_insight(const DynamicSequence
     float intent_confidence = this->intent_analyzer.get_last_confidence();
 
     if (intent_confidence > 0.8f) { // Yüksek güven, düşük öğrenme hızı önerisi
+         this->insight_cooldowns["learning_rate_insight"] = now; // Insight üretildiğinde cooldown'a al
          return {"LrnRateOpt_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Niyet algilama güvenim yuksek. Ogrenme oranini optimize edebilirim.",
                 "Ogrenme Stratejisi", "Ogrenme oranini azaltma veya adaptif olarak ayarlama onerisi.",
-                InsightType::EfficiencySuggestion, UrgencyLevel::Low, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
+                CerebrumLux::InsightType::EfficiencySuggestion, CerebrumLux::UrgencyLevel::Low, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
     } else if (intent_confidence < 0.6f) { // Düşük güven, öğrenme hızı artırma önerisi
+        this->insight_cooldowns["learning_rate_insight"] = now; // Insight üretildiğinde cooldown'a al
         return {"LrnRateBoost_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Niyet algilamamda güvenim düşük. Daha hizli ogrenmek icin ogrenme oranimi artirmaliyim.",
                 "Ogrenme Stratejisi", "Ogrenme oranini artirma onerisi.",
-                InsightType::LearningOpportunity, UrgencyLevel::High, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
+                CerebrumLux::InsightType::LearningOpportunity, CerebrumLux::UrgencyLevel::High, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
     }
     return {};
 }
@@ -235,15 +289,17 @@ AIInsight AIInsightsEngine::generate_system_resource_insight(const DynamicSequen
     if (is_on_cooldown("system_resource_insight", std::chrono::seconds(15))) return {};
 
     if (current_sequence.current_cpu_usage > 80 || current_sequence.current_ram_usage > 90) {
+        this->insight_cooldowns["system_resource_insight"] = now; // Insight üretildiğinde cooldown'a al
         return {"SysResHigh_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Sistem kaynaklari yÜksek kullanimda. Uygulama performansi etkilenebilir. CPU: " + std::to_string(current_sequence.current_cpu_usage) + "%, RAM: " + std::to_string(current_sequence.current_ram_usage) + "%",
                 "Sistem Performansi", "Arka plan uygulamalarini kontrol et veya gereksiz isleri durdur.",
-                InsightType::ResourceOptimization, UrgencyLevel::Medium, {}, {current_sequence.id}};
+                CerebrumLux::InsightType::ResourceOptimization, CerebrumLux::UrgencyLevel::Medium, {}, {current_sequence.id}};
     } else if (current_sequence.current_cpu_usage < 20 && current_sequence.current_ram_usage < 30) {
+        this->insight_cooldowns["system_resource_insight"] = now; // Insight üretildiğinde cooldown'a al
         return {"SysResLow_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Sistem kaynaklari boşta. Performansli isler icin hazir.",
                 "Sistem Performansi", "Yeni görevler atayabilirsin.",
-                InsightType::EfficiencySuggestion, UrgencyLevel::Low, {}, {current_sequence.id}};
+                CerebrumLux::InsightType::EfficiencySuggestion, CerebrumLux::UrgencyLevel::Low, {}, {current_sequence.id}};
     }
     return {};
 }
@@ -254,15 +310,17 @@ AIInsight AIInsightsEngine::generate_network_activity_insight(const DynamicSeque
     if (is_on_cooldown("network_activity_insight", std::chrono::seconds(20))) return {};
 
     if (current_sequence.current_network_active && current_sequence.network_activity_level > 70) {
+        this->insight_cooldowns["network_activity_insight"] = now; // Insight üretildiğinde cooldown'a al
         return {"NetActHigh_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "YÜksek ağ aktivitesi tespit edildi. Protokol: " + current_sequence.network_protocol + ", Seviye: " + std::to_string(current_sequence.network_activity_level) + "%",
                 "Ağ Güvenliği/Performansı", "Ağ trafiğini incele.",
-                InsightType::SecurityAlert, UrgencyLevel::Medium, {}, {current_sequence.id}};
+                CerebrumLux::InsightType::SecurityAlert, CerebrumLux::UrgencyLevel::Medium, {}, {current_sequence.id}};
     } else if (!current_sequence.current_network_active) {
+         this->insight_cooldowns["network_activity_insight"] = now; // Insight üretildiğinde cooldown'a al
          return {"NoNet_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Ağ bağlantısı yok veya çok düşük aktivite. İnternet erişimini kontrol et.",
                 "Sistem Durumu", "Ağ bağlantısını kontrol etme önerisi.",
-                InsightType::ResourceOptimization, UrgencyLevel::Low, {}, {current_sequence.id}};
+                CerebrumLux::InsightType::ResourceOptimization, CerebrumLux::UrgencyLevel::Low, {}, {current_sequence.id}};
     }
     return {};
 }
@@ -272,11 +330,12 @@ AIInsight AIInsightsEngine::generate_application_context_insight(const DynamicSe
     // cooldown kontrolünü metot içinde yapıyoruz
     if (is_on_cooldown("application_context_insight", std::chrono::seconds(30))) return {};
 
-    if (!current_sequence.current_application_context.empty() && current_sequence.current_application_context != "UnknownApp") { // Varsayılan değerden farklıysa
+    if (!current_sequence.current_application_context.empty() && current_sequence.current_application_context != "UnknownApp") {
+        this->insight_cooldowns["application_context_insight"] = now; // Insight üretildiğinde cooldown'a al
         return {"AppCtx_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Aktif uygulama bağlamı: " + current_sequence.current_application_context,
                 "Kullanıcı Bağlamı", "Kullanıcının aktif olduğu uygulamayı dikkate alarak yardımcı ol.",
-                InsightType::None, UrgencyLevel::Low, {}, {current_sequence.id}};
+                CerebrumLux::InsightType::None, CerebrumLux::UrgencyLevel::Low, {}, {current_sequence.id}};
     }
     return {};
 }
@@ -286,12 +345,12 @@ AIInsight AIInsightsEngine::generate_unusual_behavior_insight(const DynamicSeque
     // cooldown kontrolünü metot içinde yapıyoruz
     if (is_on_cooldown("unusual_behavior_insight", std::chrono::seconds(25))) return {};
 
-    // %10 ihtimalle rastgele bir anormal davranış içgörüsü üret
-    if (CerebrumLux::SafeRNG::get_instance().get_int(0, 100) < 10) { 
+    if (CerebrumLux::SafeRNG::get_instance().get_int(0, 100) < 10) {
+        this->insight_cooldowns["unusual_behavior_insight"] = now; // Insight üretildiğinde cooldown'a al
         return {"UnusualBehavior_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Sistemde alışılmadık bir davranış tespit edildi. Daha detaylı analiz gerekiyor.",
                 "Güvenlik", "Sistem loglarını incele.",
-                InsightType::SecurityAlert, UrgencyLevel::Critical, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
+                CerebrumLux::InsightType::SecurityAlert, CerebrumLux::UrgencyLevel::Critical, current_sequence.latent_cryptofig_vector, {current_sequence.id}};
     }
     return {};
 }

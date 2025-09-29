@@ -11,6 +11,7 @@
 #include "../brain/prediction_engine.h"
 #include "../brain/autoencoder.h" // CryptofigAutoencoder tanımı için
 #include "../brain/cryptofig_processor.h"
+// #include "../brain/autoencoder.h" // Tekrar eden include, kaldırıldı.
 #include "../data_models/dynamic_sequence.h"
 #include "../core/enums.h" // InsightType, UrgencyLevel için (CerebrumLux namespace'i içinde)
 #include "../core/logger.h" // LOG_DEFAULT için
@@ -29,8 +30,19 @@ struct AIInsight {
     InsightType type;        // İçgörünün türü (örneğin, "PerformanceAnomaly", "LearningOpportunity")
     UrgencyLevel urgency;    // İçgörünün aciliyet seviyesi
     std::vector<float> associated_cryptofig; // İlişkili kriptofig
-
     std::vector<std::string> related_capsule_ids;
+
+    // Default constructor for aggregate initialization
+    AIInsight() : id(""), observation(""), context(""), recommended_action(""),
+                  type(InsightType::None), urgency(UrgencyLevel::None) {}
+
+    // Complete constructor (mevcut push_back'leri desteklemek için eklendi/güncellendi)
+    AIInsight(std::string_view id_val, std::string_view observation_val, std::string_view context_val,
+              std::string_view recommended_action_val, InsightType type_val, UrgencyLevel urgency_val,
+              const std::vector<float>& cryptofig_val, const std::vector<std::string>& capsule_ids_val)
+        : id(id_val), observation(observation_val), context(context_val),
+          recommended_action(recommended_action_val), type(type_val), urgency(urgency_val),
+          associated_cryptofig(cryptofig_val), related_capsule_ids(capsule_ids_val) {}
 
     // NLOHMANN_DEFINE_TYPE_INTRUSIVE makrosu yerine manuel to_json ve from_json
     friend void to_json(nlohmann::json& j, const AIInsight& i) {
@@ -63,10 +75,10 @@ public:
                      CryptofigAutoencoder& autoencoder, CryptofigProcessor& cryptofig_processor);
 
     std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence);
-    
+
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
-    
-    virtual IntentAnalyzer& get_analyzer() const; 
+
+    virtual IntentAnalyzer& get_analyzer() const;
 
     virtual IntentLearner& get_learner() const { return intent_learner; }
     virtual CryptofigAutoencoder& get_cryptofig_autoencoder() const { return cryptofig_autoencoder; }
