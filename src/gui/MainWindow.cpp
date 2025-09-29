@@ -85,7 +85,7 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
 
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest);
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::fetchWebCapsuleRequest, this, &CerebrumLux::MainWindow::onFetchWebCapsuleRequest);
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel connect tamamlandı.");
+     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel connect tamamlandı.");
 
     connect(&learningModule, &CerebrumLux::LearningModule::webFetchCompleted, this, &CerebrumLux::MainWindow::onWebFetchCompleted);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: LearningModule::webFetchCompleted sinyali bağlandı.");
@@ -228,18 +228,18 @@ void MainWindow::onWebFetchCompleted(const CerebrumLux::IngestReport& report) {
     }
 }
 
-void MainWindow::onChatMessageReceived(const QString& message) { // YENİ SLOT IMPLEMENTASYONU
+void MainWindow::onChatMessageReceived(const QString& message) {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Chat mesajı alındı: " << message.toStdString());
-    // NLP ile yanıt üret
+    
     CerebrumLux::UserIntent user_intent = engine.getNlpProcessor().infer_intent_from_text(message.toStdString());
-    CerebrumLux::AbstractState current_abstract_state = CerebrumLux::AbstractState::Idle; // Şimdilik varsayılan
+    CerebrumLux::AbstractState current_abstract_state = CerebrumLux::AbstractState::Idle;// Şimdilik varsayılan
     CerebrumLux::AIGoal current_goal = engine.getGoalManager().get_current_goal();
     
     // EngineIntegration'dan güncel sekansı alabiliriz
     const CerebrumLux::DynamicSequence& current_sequence = engine.getSequenceManager().get_current_sequence_ref();
     
     // Yanıt üretmek için NLP'yi kullan
-    std::string nlp_response = engine.getResponseEngine().generate_response(user_intent, current_abstract_state, current_goal, current_sequence);
+    std::string nlp_response = engine.getResponseEngine().generate_response(user_intent, current_abstract_state, current_goal, current_sequence, learningModule.getKnowledgeBase());
 
     // Yanıtı SimulationPanel'e geri gönder
     if (simulationPanel) {
@@ -249,7 +249,6 @@ void MainWindow::onChatMessageReceived(const QString& message) { // YENİ SLOT I
     }
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: NLP yanıtı üretildi: " << nlp_response);
 }
-
 
 void MainWindow::updateKnowledgeBasePanel() {
     if (knowledgeBasePanel) {

@@ -40,14 +40,14 @@ ResponseEngine::ResponseEngine(CerebrumLux::IntentAnalyzer& analyzer_ref, Cerebr
     };
     
     // UserIntent::Unknown için (eğer enums.h'ye Unknown eklendiyse)
-    this->response_templates[CerebrumLux::UserIntent::Unknown][CerebrumLux::AbstractState::Undefined].responses = { // None yerine Undefined kullanıldı
+    this->response_templates[CerebrumLux::UserIntent::Unknown][CerebrumLux::AbstractState::Undefined].responses = { 
         "Niyetinizi tam anlayamadım. ",
         "Lütfen daha açık ifade edin. "
     };
-    this->response_templates[CerebrumLux::UserIntent::Unknown][CerebrumLux::AbstractState::LowProductivity].responses = { // this-> düzeltildi
+    this->response_templates[CerebrumLux::UserIntent::Unknown][CerebrumLux::AbstractState::LowProductivity].responses = { 
         "Niyetinizi anlayamıyorum ve verimliliğiniz düşük. "
     };
-    this->response_templates[CerebrumLux::UserIntent::Unknown][CerebrumLux::AbstractState::Distracted].responses = { // this-> düzeltildi
+    this->response_templates[CerebrumLux::UserIntent::Unknown][CerebrumLux::AbstractState::Distracted].responses = { 
         "Niyetinizi anlayamıyorum ve dikkat dağınıklığı algılıyorum. "
     };
 
@@ -119,11 +119,19 @@ ResponseEngine::ResponseEngine(CerebrumLux::IntentAnalyzer& analyzer_ref, Cerebr
 
 
 // Yanıt üretimi
-std::string ResponseEngine::generate_response(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state,
-                                              CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence) const {
+std::string ResponseEngine::generate_response(
+    CerebrumLux::UserIntent current_intent,
+    CerebrumLux::AbstractState current_abstract_state,
+    CerebrumLux::AIGoal current_goal,
+    const CerebrumLux::DynamicSequence& sequence,
+    const CerebrumLux::KnowledgeBase& kb // YENİ: KnowledgeBase parametresi kullanıldı
+) const { 
+    
+    LOG_DEFAULT(LogLevel::DEBUG, "ResponseEngine: Yanıt üretiliyor. Niyet: " << intent_to_string(current_intent) << ", Durum: " << abstract_state_to_string(current_abstract_state) << ", Hedef: " << goal_to_string(current_goal));
+
     std::string response_text;
 
-    // 1. Niyet ve Duruma Özel Yanıtlar
+    // 1. Niyet ve Duruma Özel Yanıtlar (kural tabanlı, KnowledgeBase'den sonra)
     auto intent_it = this->response_templates.find(current_intent);
     if (intent_it != this->response_templates.end()) {
         auto state_it = intent_it->second.find(current_abstract_state);
@@ -132,25 +140,31 @@ std::string ResponseEngine::generate_response(CerebrumLux::UserIntent current_in
         }
     }
 
-    // 2. NLP İşlemcisinden Ek Bağlamsal Yanıt
+    // 2. NLP İşlemcisinden Ek Bağlamsal Yanıt (KnowledgeBase'i kullanarak)
     if (this->nlp_processor) {
-        std::vector<std::string> keywords; // Dinamik olarak anahtar kelimeler oluşturulabilir
-        response_text += this->nlp_processor->generate_response_text(current_intent, current_abstract_state, current_goal, sequence, keywords);
+        std::vector<std::string> keywords; // Dinamik olarak anahtar kelimeler oluşturulabilir. Örnek:
+        // keywords.push_back(sequence.current_application_context); // Uygulama bağlamı anahtar kelime olabilir
+        // ... (diğer anahtar kelimeler) ...
+
+        // NLP Processor'ı çağırırken KnowledgeBase'i iletiyoruz
+        std::string nlp_generated_response = this->nlp_processor->generate_response_text(current_intent, current_abstract_state, current_goal, sequence, keywords, kb);
+        if (!nlp_generated_response.empty() && nlp_generated_response != "Anladım. Niyetinizi tam olarak anlayamadım.") { // NLP'den boş veya genel bir yanıt gelmediyse
+            response_text += nlp_generated_response; // Mevcut yanıta ekle
+        }
     }
 
     // 3. Eğer hala boşsa veya yetersizse, hedefe dayalı genel bir yanıt
-    if (response_text.empty() || response_text == "Anladım. ") { // NLP'nin varsayılan yanıtını da kontrol et
+    if (response_text.empty() || response_text == "Anladım. ") {
         if (current_goal == CerebrumLux::AIGoal::OptimizeProductivity) {
             response_text = "Verimliliğinizi optimize etmek için elimden geleni yapıyorum. ";
         } else if (current_goal == CerebrumLux::AIGoal::EnsureSecurity) {
             response_text = "Sisteminizin güvenliğini sağlıyorum. ";
         }
-        // ... diğer hedefler için
     }
 
-    // 4. Nihai Fallback
-    if (response_text.empty()) {
-        response_text = "Size nasıl yardımcı olabilirim?";
+    // 4. Nihai Fallback (nlp_processor üzerinden çağrıldı)
+    if (response_text.empty() || response_text == "Anladım. ") {
+        response_text = nlp_processor->fallback_response_for_intent(current_intent, current_abstract_state, sequence); // DÜZELTİLDİ
     }
 
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "ResponseEngine: Yanıt üretildi. Niyet: " << CerebrumLux::intent_to_string(current_intent)

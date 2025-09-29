@@ -117,7 +117,8 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] GoalManager init complete." << std::endl;
     early_diagnostic_log.flush();
 
-    CerebrumLux::NaturalLanguageProcessor nlp(goal_manager);
+    CerebrumLux::KnowledgeBase kb;
+    CerebrumLux::NaturalLanguageProcessor nlp(goal_manager, kb); // YENİ: kb referansı eklendi
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] NaturalLanguageProcessor init complete." << std::endl;
     early_diagnostic_log.flush();
 
@@ -132,19 +133,21 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] All core AI components initialized." << std::endl;
     early_diagnostic_log.flush();
 
+ 
+
     // --- Kripto Yöneticisi ---
     CerebrumLux::Crypto::CryptoManager cryptoManager;
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] CryptoManager initialized." << std::endl;
     early_diagnostic_log.flush();
 
     // --- Learning Module ---
-    CerebrumLux::KnowledgeBase kb;
+    //CerebrumLux::KnowledgeBase kb; // ORİJİNAL KONUM: Bu satır taşındı.
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase created." << std::endl;
     early_diagnostic_log.flush();
-    kb.load("knowledge.json");
+    kb.load("knowledge.json"); // kb artık yukarıda tanımlı
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase loaded." << std::endl;
     early_diagnostic_log.flush();
-    CerebrumLux::LearningModule learning_module(kb, cryptoManager);
+    CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app); // YENİ: &app parent olarak eklendi
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Learning Module initialized." << std::endl;
     early_diagnostic_log.flush();
 

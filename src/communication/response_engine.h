@@ -7,6 +7,7 @@
 #include "../core/enums.h" // UserIntent, AbstractState, AIGoal, AIAction için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "../brain/intent_analyzer.h" // IntentAnalyzer için
+#include "../learning/KnowledgeBase.h" // YENİ: KnowledgeBase için
 #include "../communication/ai_insights_engine.h" // AIInsightsEngine için
 #include "../planning_execution/goal_manager.h" // GoalManager için
 #include "../communication/natural_language_processor.h" // NaturalLanguageProcessor için
@@ -29,7 +30,7 @@ public:
                    CerebrumLux::AIInsightsEngine& insights_engine, CerebrumLux::NaturalLanguageProcessor* nlp);
 
     virtual std::string generate_response(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state,
-                                          CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence) const;
+                                          CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence, const CerebrumLux::KnowledgeBase& kb) const; // YENİ: KnowledgeBase parametresi eklendi
 
 private:
     CerebrumLux::IntentAnalyzer& intent_analyzer;

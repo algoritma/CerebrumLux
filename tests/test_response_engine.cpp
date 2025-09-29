@@ -176,16 +176,13 @@ public:
     CerebrumLux::IntentAnalyzer& get_analyzer() const override { static DummyIntentAnalyzer da; return da; }
     // get_learner ve get_cryptofig_autoencoder base class'ta virtual değil
     CerebrumLux::IntentLearner& get_learner() const {
-        static DummyIntentLearner dil(static_cast<CerebrumLux::IntentAnalyzer&>(static_cast<DummyIntentAnalyzer&>(get_analyzer())),
-                                     static_cast<CerebrumLux::SuggestionEngine&>(static_cast<DummySuggestionEngine&>(get_suggester())),
-                                     static_cast<CerebrumLux::UserProfileManager&>(static_cast<DummyUserProfileManager&>(get_user_profile_manager())));
+        static DummyIntentAnalyzer da;
+        static DummySuggestionEngine ds(da);
+        static DummyUserProfileManager dupm;
+        static DummyIntentLearner dil(da, ds, dupm);
         return dil;
     }
     CerebrumLux::CryptofigAutoencoder& get_cryptofig_autoencoder() const { static DummyCryptofigAutoencoder dca; return dca; }
-
-private:
-    CerebrumLux::SuggestionEngine& get_suggester() const { static DummySuggestionEngine ds(static_cast<CerebrumLux::IntentAnalyzer&>(static_cast<DummyIntentAnalyzer&>(get_analyzer()))); return ds; }
-    CerebrumLux::UserProfileManager& get_user_profile_manager() const { static DummyUserProfileManager dupm; return dupm; }
 };
 
 // Dummy GoalManager
@@ -200,18 +197,23 @@ public:
     void evaluate_goals() {}
 };
 
+// YENİ: Dummy KnowledgeBase sınıfı eklendi
+class DummyKnowledgeBase : public CerebrumLux::KnowledgeBase {
+public:
+    DummyKnowledgeBase() : CerebrumLux::KnowledgeBase() {}
+    std::vector<CerebrumLux::Capsule> get_all_capsules() const override { return {}; }
+};
+
+
 // Dummy NaturalLanguageProcessor
 class DummyNaturalLanguageProcessor : public CerebrumLux::NaturalLanguageProcessor {
 public:
-    DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm) : CerebrumLux::NaturalLanguageProcessor(gm) {}
-    // Tüm metotlar base class'ta virtual değil.
-    std::string generate_response_text(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence, const std::vector<std::string>& relevant_keywords) const { return "Dummy NLP yanıtı."; }
-    CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const { return CerebrumLux::UserIntent::Undefined; }
-    CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const { return CerebrumLux::AbstractState::Undefined; }
-    void update_model(const std::string& observed_text, CerebrumLux::UserIntent true_intent, const std::vector<float>& latent_cryptofig) {}
-    void trainIncremental(const std::string& input, const std::string& expected_intent) {}
-    void load_model(const std::string& path) { throw std::runtime_error("Dummy NLP modeli yüklenemedi."); }
-    void save_model(const std::string& path) const {}
+    // NaturalLanguageProcessor'ın yeni kurucusuna uyacak şekilde güncellendi
+    DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm, CerebrumLux::KnowledgeBase& kb) : CerebrumLux::NaturalLanguageProcessor(gm, kb) {}
+
+    std::string generate_response_text(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence, const std::vector<std::string>& relevant_keywords, const CerebrumLux::KnowledgeBase& kb) const override {
+        return "Dummy NLP yanıtı.";
+    }
 };
 
 
@@ -263,7 +265,9 @@ int main() {
     DummyPredictionEngine dummy_predictor(dummy_analyzer, dummy_sequence_manager);
     DummyAIInsightsEngine dummy_insights_engine(dummy_analyzer, dummy_learner, dummy_predictor, dummy_autoencoder, dummy_cryptofig_processor);
     DummyGoalManager dummy_goal_manager(dummy_insights_engine);
-    DummyNaturalLanguageProcessor dummy_nlp(dummy_goal_manager);
+
+    DummyKnowledgeBase dummy_kb; // YENİ: Dummy KnowledgeBase eklendi
+    DummyNaturalLanguageProcessor dummy_nlp(dummy_goal_manager, dummy_kb); // YENİ: Dummy KnowledgeBase parametresi eklendi
 
     // ResponseEngine'ı test için başlat
     CerebrumLux::ResponseEngine response_engine(dummy_analyzer, dummy_goal_manager, dummy_insights_engine, &dummy_nlp);
@@ -279,17 +283,17 @@ int main() {
     seq.current_application_context = "Testing";
 
     // Test Senaryosu 1: Genel yanıt
-    std::string r1 = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Idle, CerebrumLux::AIGoal::UndefinedGoal, seq);
+    std::string r1 = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Idle, CerebrumLux::AIGoal::UndefinedGoal, seq, dummy_kb); // YENİ: dummy_kb eklendi
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 1 (Genel): " << r1);
     assert(!r1.empty());
 
     // Test Senaryosu 2: Programlama niyeti ve odaklanmış durum
-    std::string r2 = response_engine.generate_response(CerebrumLux::UserIntent::Programming, CerebrumLux::AbstractState::Focused, CerebrumLux::AIGoal::OptimizeProductivity, seq);
+    std::string r2 = response_engine.generate_response(CerebrumLux::UserIntent::Programming, CerebrumLux::AbstractState::Focused, CerebrumLux::AIGoal::OptimizeProductivity, seq, dummy_kb); // YENİ: dummy_kb eklendi
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 2 (Programlama, Odaklanmış): " << r2);
     assert(!r2.empty());
 
     // Test Senaryosu 3: Hata algılandı
-    std::string r3 = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Error, CerebrumLux::AIGoal::MinimizeErrors, seq);
+    std::string r3 = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Error, CerebrumLux::AIGoal::MinimizeErrors, seq, dummy_kb); // YENİ: dummy_kb eklendi
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 3 (Hata): " << r3);
     assert(!r3.empty());
 
