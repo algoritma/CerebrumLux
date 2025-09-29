@@ -113,6 +113,8 @@ enum class InsightType : unsigned char {
     EfficiencySuggestion,
     ResourceOptimization,
     BehavioralDrift,
+    UserContext,
+    CodeDevelopmentSuggestion, // YENİ: Kod geliştirme önerisi içgörü tipi eklendi
     None
 };
 

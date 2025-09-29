@@ -81,7 +81,72 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         insight_cooldowns["stable_state"] = now;
     }
 
+    // Performans Anormalliği
+    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[0] > 0.8) {
+        insights.push_back({
+            InsightType::PerformanceAnomaly,
+            "Sistemde potansiyel performans anormalliği tespit edildi.",
+            CerebrumLux::KnowledgeTopic::SystemPerformance,
+            InsightSeverity::High
+        });
+    }
+
+    // Öğrenme Fırsatı
+    if (!sequence.get_latent_cryptofig_vector().empty() && sequence.get_latent_cryptofig_vector()[0] < 0.2) {
+        insights.push_back({
+            InsightType::LearningOpportunity,
+            "Yeni bir öğrenme fırsatı belirlendi. Bilgi tabanının genişletilmesi önerilir.",
+            CerebrumLux::KnowledgeTopic::LearningStrategy,
+            InsightSeverity::Medium
+        });
+    }
+
+    // Kaynak Optimizasyonu
+    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[1] > 0.9) {
+        insights.push_back({
+            InsightType::ResourceOptimization,
+            "Yüksek kaynak kullanımı tespit edildi. Optimizasyon önerileri değerlendirilmeli.",
+            CerebrumLux::KnowledgeTopic::ResourceManagement,
+            InsightSeverity::Medium
+        });
+    }
+    
+    // Güvenlik Uyarısı
+    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[2] < 0.1) {
+        insights.push_back({
+            InsightType::SecurityAlert,
+            "Potansiyel güvenlik açığı veya anormal davranış tespit edildi.",
+            CerebrumLux::KnowledgeTopic::CyberSecurity,
+            InsightSeverity::High
+        });
+    }
+
+    // Kullanıcı Bağlamı
+    if (!sequence.get_latent_cryptofig_vector().empty() && sequence.get_latent_cryptofig_vector()[1] > 0.7) {
+        insights.push_back({
+            InsightType::UserContext,
+            "Kullanıcı bağlamında önemli bir değişiklik gözlemlendi. Adaptif yanıtlar için analiz ediliyor.",
+            CerebrumLux::KnowledgeTopic::UserBehavior,
+            InsightSeverity::Low
+        });
+    }
+
+    // YENİ EKLENEN KOD: Kod Geliştirme Önerisi
+    // Bu kısım, DynamicSequence'den gelen verilere dayanarak (şimdilik basitleştirilmiş bir örnekle) 
+    // kod geliştirme ile ilgili içgörüler üretecektir.
+    // Gelecekte, bu mantık AI'ın kod tabanı üzerindeki kendi analizlerini veya 
+    // meta-evrimsel süreçlerden elde ettiği çıkarımları içerecektir.
+    if (!sequence.get_statistical_features_vector().empty() && sequence.get_statistical_features_vector()[0] < 0.5 && sequence.get_statistical_features_vector()[1] < 0.5) { // Basit bir örnek koşul
+        insights.push_back({
+            InsightType::CodeDevelopmentSuggestion,
+            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir.",
+            CerebrumLux::KnowledgeTopic::CodeDevelopment,
+            InsightSeverity::Medium
+        });
+    }
+
     LOG_DEFAULT(LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << "\n");
+
     return insights;
 }
 
