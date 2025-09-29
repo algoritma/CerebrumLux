@@ -103,6 +103,10 @@ private:
 
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod karmaşıklığı değerini tutar
     float last_simulated_code_complexity = 0.5f; // Başlangıç değeri
+    // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod okunabilirlik skoru
+    float last_simulated_code_readability = 0.7f; // Başlangıç değeri
+    // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod optimizasyon potansiyeli
+    float last_simulated_optimization_potential = 0.3f; // Başlangıç değeri
 };
 
 } // namespace CerebrumLux

@@ -72,6 +72,34 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     }
     // END YENİ KOD: Kod Karmaşıklığı Simülasyonu
 
+    // YENİ KOD: Kod Okunabilirlik Skoru Simülasyonu
+    if (!is_on_cooldown("code_readability_simulation", std::chrono::seconds(15))) { // Her 15 saniyede bir güncelle
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::normal_distribution<float> d(0.0f, 0.08f); // Ortalama 0, standart sapma 0.08
+        
+        last_simulated_code_readability += d(gen);
+        // Okunabilirlik değerini 0.0 ile 1.0 arasında tut
+        last_simulated_code_readability = std::max(0.0f, std::min(1.0f, last_simulated_code_readability));
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: Simüle Kod Okunabilirlik Skoru Güncellendi: " << last_simulated_code_readability);
+        insight_cooldowns["code_readability_simulation"] = now;
+    }
+    // END YENİ KOD: Kod Okunabilirlik Skoru Simülasyonu
+
+    // YENİ KOD: Kod Optimizasyon Potansiyeli Simülasyonu
+    if (!is_on_cooldown("code_optimization_potential_simulation", std::chrono::seconds(20))) { // Her 20 saniyede bir güncelle
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::normal_distribution<float> d(0.0f, 0.07f); // Ortalama 0, standart sapma 0.07
+        
+        last_simulated_optimization_potential += d(gen);
+        // Optimizasyon Potansiyeli değerini 0.0 ile 1.0 arasında tut
+        last_simulated_optimization_potential = std::max(0.0f, std::min(1.0f, last_simulated_optimization_potential));
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: Simüle Kod Optimizasyon Potansiyeli Güncellendi: " << last_simulated_optimization_potential);
+        insight_cooldowns["code_optimization_potential_simulation"] = now;
+    }
+    // END YENİ KOD: Kod Optimizasyon Potansiyeli Simülasyonu
+
     // --- Genel Performans Metriği (Grafik Besleme) - Her zaman üretilir (cooldown ile sınırlı) ---
     if (!current_sequence.latent_cryptofig_vector.empty() && !is_on_cooldown("ai_confidence_graph", std::chrono::seconds(5))) {
         float avg_latent_confidence = 0.0f;
@@ -197,29 +225,61 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         });
     }
 
-    // YENİ EKLENEN KOD: Kod Geliştirme Önerisi (Simüle edilmiş karmaşıklığa göre daha spesifik)
-    // Daha önce eklenen basit koşul yerine, simüle edilmiş kod karmaşıklığına odaklanıyoruz.
-    if (last_simulated_code_complexity > 0.8f && !is_on_cooldown("high_code_complexity_suggestion", std::chrono::seconds(60))) { // Yüksek karmaşıklık ve cooldown yoksa
-        insight_cooldowns["high_code_complexity_suggestion"] = now;
+    // YENİ EKLENEN KOD: Daha Spesifik Kod Geliştirme Önerileri (Çeşitli simüle metrikler bazında)
+    // 1. Yüksek Karmaşıklık ve Düşük Okunabilirlik
+    if (last_simulated_code_complexity > 0.8f && last_simulated_code_readability < 0.4f && !is_on_cooldown("high_complexity_low_readability_suggestion", std::chrono::seconds(60))) {
+        insight_cooldowns["high_complexity_low_readability_suggestion"] = now;
+        insights.push_back({
+            "CodeDev_HighComplexityLowReadability_" + std::to_string(now.time_since_epoch().count()),
+            "Kritik seviyede yüksek kod karmaşıklığı (" + std::to_string(last_simulated_code_complexity) + ") ve düşük okunabilirlik (" + std::to_string(last_simulated_code_readability) + ") tespit edildi. Modülerlik iyileştirmeleri ve refaktör ACİL!",
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
+            "Kritik karmaşıklığa sahip fonksiyonları/sınıfları belirleyin, sorumluğu tek olan parçalara bölün ve kod yorumlamasını artırın. İsimlendirme standartlarını gözden geçirin.",
+            CerebrumLux::InsightType::CodeDevelopmentSuggestion,
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),
+            current_sequence.latent_cryptofig_vector,
+            {current_sequence.id}
+        });
+    }
+    // 2. Yüksek Optimizasyon Potansiyeli
+    else if (last_simulated_optimization_potential > 0.7f && !is_on_cooldown("high_optimization_potential_suggestion", std::chrono::seconds(90))) {
+        insight_cooldowns["high_optimization_potential_suggestion"] = now;
+        insights.push_back({
+            "CodeDev_HighOptimizationPotential_" + std::to_string(now.time_since_epoch().count()),
+            "Yüksek performans optimizasyon potansiyeli tespit edildi (" + std::to_string(last_simulated_optimization_potential) + "). Bazı döngüler veya algoritmalar iyileştirilebilir.",
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
+            "Sıkça çağrılan ve zaman alan kod bloklarını profilleyin. Alternatif veri yapıları veya algoritmalar kullanarak performansı artırın.",
+            CerebrumLux::InsightType::CodeDevelopmentSuggestion,
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),
+            current_sequence.latent_cryptofig_vector,
+            {current_sequence.id}
+        });
+    }
+    // 3. Genel Modülerlik/Refaktör Fırsatları (Orta Karmaşıklık/Okunabilirlik)
+    else if (last_simulated_code_complexity > 0.6f && last_simulated_code_readability < 0.6f && !is_on_cooldown("medium_complexity_readability_suggestion", std::chrono::seconds(120))) {
+        insight_cooldowns["medium_complexity_readability_suggestion"] = now;
+        insights.push_back({
+            "CodeDev_MediumComplexityReadability_" + std::to_string(now.time_since_epoch().count()),
+            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ").",
+            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
+            "Kod tabanını analiz ederek potansiyel modülerlik veya refaktör alanlarını belirleyin. Benzer işlevselliğe sahip parçaları soyutlayın.",
+            CerebrumLux::InsightType::CodeDevelopmentSuggestion,
+            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),
+            current_sequence.latent_cryptofig_vector,
+            {current_sequence.id}
+        });
+    }
+    // 4. İyi Durumda Ama Küçük İyileştirmeler (Düşük Karmaşıklık, Yüksek Okunabilirlik)
+    else if (last_simulated_code_complexity < 0.3f && last_simulated_code_readability > 0.8f && last_simulated_optimization_potential < 0.2f && !is_on_cooldown("minor_code_improvement_suggestion", std::chrono::seconds(180))) {
+        insight_cooldowns["minor_code_improvement_suggestion"] = now;
         insights.push_back({
             "CodeDevSuggest_HighComplexity_" + std::to_string(now.time_since_epoch().count()), // id
-            "Yüksek kod karmaşıklığı tespit edildi (" + std::to_string(last_simulated_code_complexity) + "). Modülerlik iyileştirmeleri ve refaktör fırsatları ACİL olabilir.", // observation
+            "Mevcut kod tabanı iyi durumda. Ancak küçük çaplı stil veya dokümantasyon iyileştirmeleri yapılabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ").", // observation
+
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
-            "Karmaşık modülleri belirleyin ve küçük, yönetilebilir fonksiyonlara veya sınıflara ayırın. Kodun okunabilirliğini artırın.", // recommended_action
+            "Kodlama stil rehberini gözden geçirin ve tutarlılığı artırın. Eksik dokümantasyonu tamamlayın veya mevcut yorumları geliştirin.", // recommended_action
             CerebrumLux::InsightType::CodeDevelopmentSuggestion,                    // type
+
             insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),// urgency (UrgencyLevel'a çevrildi)
-            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
-            {current_sequence.id}                                                   // related_capsule_ids
-        });
-    } else if (last_simulated_code_complexity > 0.6f && !is_on_cooldown("medium_code_complexity_suggestion", std::chrono::seconds(120))) { // Orta seviye karmaşıklık ve cooldown yoksa
-        insight_cooldowns["medium_code_complexity_suggestion"] = now;
-        insights.push_back({
-            "CodeDevSuggestion_" + std::to_string(now.time_since_epoch().count()), // id
-            "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir (Mevcut karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ").", // observation
-            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
-            "Kod tabanını analiz ederek potansiyel modülerlik veya refaktör alanlarını belirleyin.", // recommended_action
-            CerebrumLux::InsightType::CodeDevelopmentSuggestion,                    // type
-            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),// urgency (UrgencyLevel'a çevrildi)
             current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
             {current_sequence.id}                                                   // related_capsule_ids
         });
