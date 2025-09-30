@@ -69,6 +69,8 @@ public:
     void process_ai_insights(const std::vector<AIInsight>& insights);
 
     KnowledgeBase& getKnowledgeBase();
+    // YENİ: Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
+    void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
     const KnowledgeBase& getKnowledgeBase() const;
 
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
@@ -79,7 +81,7 @@ public:
 
 signals:
     // Web çekme işleminin sonucunu bildiren yeni sinyal
-    void webFetchCompleted(const CerebrumLux::IngestReport& report); // YENİ SİNYAL
+    void webFetchCompleted(const CerebrumLux::IngestReport& report); // YENİ SİNYAL WebFetcher'dan sinyal
 
 private slots:
     void on_web_content_fetched(const QString& url, const QString& content);

@@ -56,13 +56,16 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     std::vector<AIInsight> insights;
     auto now = std::chrono::system_clock::now();
 
+    // YENİ TEŞHİS LOGU: Simüle edilmiş kod metriklerinin anlık değerlerini göster
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: Simüle Metrikler - Karmaşıklık: " << last_simulated_code_complexity << ", Okunabilirlik: " << last_simulated_code_readability << ", Optimizasyon Potansiyeli: " << last_simulated_optimization_potential);
+
     // YENİ KOD: Kod Karmaşıklığı Simülasyonu
     // AI'ın kendi içsel kod tabanı veya dinamik süreçlerinden gelen metrikleri simüle ediyoruz.
     // Her döngüde karmaşıklığı hafifçe değiştir.
     if (!is_on_cooldown("code_complexity_simulation", std::chrono::seconds(10))) { // Her 10 saniyede bir güncelle
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::normal_distribution<float> d(0.0f, 0.05f); // Ortalama 0, standart sapma 0.05
+        std::normal_distribution<float> d(0.0f, 0.30f); // Standart sapma ÇOK DAHA FAZLA artırıldı
         
         last_simulated_code_complexity += d(gen);
         // Karmaşıklık değerini 0.0 ile 1.0 arasında tut
@@ -71,12 +74,12 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         insight_cooldowns["code_complexity_simulation"] = now;
     }
     // END YENİ KOD: Kod Karmaşıklığı Simülasyonu
-
+   
     // YENİ KOD: Kod Okunabilirlik Skoru Simülasyonu
     if (!is_on_cooldown("code_readability_simulation", std::chrono::seconds(15))) { // Her 15 saniyede bir güncelle
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::normal_distribution<float> d(0.0f, 0.08f); // Ortalama 0, standart sapma 0.08
+        std::normal_distribution<float> d(0.0f, 0.35f); // Standart sapma ÇOK DAHA FAZLA artırıldı
         
         last_simulated_code_readability += d(gen);
         // Okunabilirlik değerini 0.0 ile 1.0 arasında tut
@@ -90,7 +93,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     if (!is_on_cooldown("code_optimization_potential_simulation", std::chrono::seconds(20))) { // Her 20 saniyede bir güncelle
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::normal_distribution<float> d(0.0f, 0.07f); // Ortalama 0, standart sapma 0.07
+        std::normal_distribution<float> d(0.0f, 0.30f); // Standart sapma ÇOK DAHA FAZLA artırıldı (hızlı değişim için)
         
         last_simulated_optimization_potential += d(gen);
         // Optimizasyon Potansiyeli değerini 0.0 ile 1.0 arasında tut
@@ -227,8 +230,10 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // YENİ EKLENEN KOD: Daha Spesifik Kod Geliştirme Önerileri (Çeşitli simüle metrikler bazında)
     // 1. Yüksek Karmaşıklık ve Düşük Okunabilirlik
+    // Bu kısma hata ayıklama logları eklendi.
     if (last_simulated_code_complexity > 0.8f && last_simulated_code_readability < 0.4f && !is_on_cooldown("high_complexity_low_readability_suggestion", std::chrono::seconds(60))) {
         insight_cooldowns["high_complexity_low_readability_suggestion"] = now;
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Yüksek Karmaşıklık/Düşük Okunabilirlik) tetiklendi!");
         insights.push_back({
             "CodeDev_HighComplexityLowReadability_" + std::to_string(now.time_since_epoch().count()),
             "Kritik seviyede yüksek kod karmaşıklığı (" + std::to_string(last_simulated_code_complexity) + ") ve düşük okunabilirlik (" + std::to_string(last_simulated_code_readability) + ") tespit edildi. Modülerlik iyileştirmeleri ve refaktör ACİL!",
@@ -239,10 +244,13 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
             current_sequence.latent_cryptofig_vector,
             {current_sequence.id}
         });
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 1 (Yüksek Karmaşıklık/Düşük Okunabilirlik) sağlanmadı. Comp: " << last_simulated_code_complexity << ", Read: " << last_simulated_code_readability);
     }
     // 2. Yüksek Optimizasyon Potansiyeli
-    else if (last_simulated_optimization_potential > 0.7f && !is_on_cooldown("high_optimization_potential_suggestion", std::chrono::seconds(90))) {
+    if (last_simulated_optimization_potential > 0.7f && !is_on_cooldown("high_optimization_potential_suggestion", std::chrono::seconds(90))) { // Ayrı if yapısı, çünkü birden fazla içgörü aynı anda tetiklenebilir
         insight_cooldowns["high_optimization_potential_suggestion"] = now;
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Yüksek Optimizasyon Potansiyeli) tetiklendi!");
         insights.push_back({
             "CodeDev_HighOptimizationPotential_" + std::to_string(now.time_since_epoch().count()),
             "Yüksek performans optimizasyon potansiyeli tespit edildi (" + std::to_string(last_simulated_optimization_potential) + "). Bazı döngüler veya algoritmalar iyileştirilebilir.",
@@ -253,10 +261,13 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
             current_sequence.latent_cryptofig_vector,
             {current_sequence.id}
         });
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 2 (Yüksek Optimizasyon Potansiyeli) sağlanmadı. Opt: " << last_simulated_optimization_potential);
     }
     // 3. Genel Modülerlik/Refaktör Fırsatları (Orta Karmaşıklık/Okunabilirlik)
-    else if (last_simulated_code_complexity > 0.6f && last_simulated_code_readability < 0.6f && !is_on_cooldown("medium_complexity_readability_suggestion", std::chrono::seconds(120))) {
+    if (last_simulated_code_complexity > 0.6f && last_simulated_code_readability < 0.6f && !is_on_cooldown("medium_complexity_readability_suggestion", std::chrono::seconds(120))) {
         insight_cooldowns["medium_complexity_readability_suggestion"] = now;
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Orta Karmaşıklık/Okunabilirlik) tetiklendi!");
         insights.push_back({
             "CodeDev_MediumComplexityReadability_" + std::to_string(now.time_since_epoch().count()),
             "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ").",
@@ -267,12 +278,16 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
             current_sequence.latent_cryptofig_vector,
             {current_sequence.id}
         });
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 3 (Orta Karmaşıklık/Okunabilirlik) sağlanmadı. Comp: " << last_simulated_code_complexity << ", Read: " << last_simulated_code_readability);
     }
-    // 4. İyi Durumda Ama Küçük İyileştirmeler (Düşük Karmaşıklık, Yüksek Okunabilirlik)
-    else if (last_simulated_code_complexity < 0.3f && last_simulated_code_readability > 0.8f && last_simulated_optimization_potential < 0.2f && !is_on_cooldown("minor_code_improvement_suggestion", std::chrono::seconds(180))) {
+    // 4. İyi Durumda Ama Küçük İyileştirmeler (Düşük Karmaşıklık, Yüksek Okunabilirlik) - TEST İÇİN KOLAY TETİKLENECEK KOD
+    // Bu koşulu test amaçlı olarak değiştiriyoruz. Sadece last_simulated_code_readability'nin 0.5'in üzerinde olması yeterli olacak.
+    if (last_simulated_code_readability > 0.5f && !is_on_cooldown("minor_code_improvement_suggestion", std::chrono::seconds(10))) { // Cooldown süresi de kısaltıldı
         insight_cooldowns["minor_code_improvement_suggestion"] = now;
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Minor Improvement) TEST KOŞULU tetiklendi!");
         insights.push_back({
-            "CodeDevSuggest_HighComplexity_" + std::to_string(now.time_since_epoch().count()), // id
+            "CodeDev_MinorImprovement_" + std::to_string(now.time_since_epoch().count()), // id (düzeltildi)
             "Mevcut kod tabanı iyi durumda. Ancak küçük çaplı stil veya dokümantasyon iyileştirmeleri yapılabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ").", // observation
 
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
@@ -283,7 +298,10 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
             current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
             {current_sequence.id}                                                   // related_capsule_ids
         });
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 4 (Minor Improvement) sağlanmadı. Read: " << last_simulated_code_readability);
     }
+
 
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << "\n");
 

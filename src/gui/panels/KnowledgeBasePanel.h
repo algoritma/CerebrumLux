@@ -51,6 +51,10 @@ private slots:
     void onStartDateChanged(const QDate& date);
     void onEndDateChanged(const QDate& date);
 
+    // YENİ SLOTLAR: Geri bildirim butonları için
+    void onAcceptSuggestionClicked();
+    void onRejectSuggestionClicked();
+
 private:
     LearningModule& learningModule;
 
@@ -62,6 +66,10 @@ private:
     QDateEdit *startDateEdit;
     QDateEdit *endDateEdit;
 
+    // YENİ UI BİLEŞENLERİ: Geri bildirim butonları
+    QPushButton *acceptSuggestionButton;
+    QPushButton *rejectSuggestionButton;
+
     std::vector<Capsule> currentDisplayedCapsules;
     std::map<QString, KnowledgeCapsuleDisplayData> displayedCapsuleDetails;
     std::string selectedCapsuleId_;
@@ -69,6 +77,10 @@ private:
     void setupUi();
     void displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data);
     void filterAndDisplayCapsules(const QString& filterText = QString(), const QString& topicFilter = QString(), const QDate& startDate = QDate(), const QDate& endDate = QDate());
+
+    // YENİ METOT: Geri bildirim butonlarının durumunu günceller
+    void updateSuggestionFeedbackButtons(const QString& selectedCapsuleId);
+
 };
 
 } // namespace CerebrumLux

@@ -82,6 +82,19 @@ void KnowledgeBasePanel::setupUi() {
     capsuleDetailDisplay->setReadOnly(true);
     splitter->addWidget(capsuleDetailDisplay);
 
+    // YENİ KOD: Geri bildirim butonları
+    QHBoxLayout *feedbackLayout = new QHBoxLayout();
+    acceptSuggestionButton = new QPushButton("Öneriyi Kabul Et", this);
+    rejectSuggestionButton = new QPushButton("Öneriyi Reddet", this);
+    feedbackLayout->addWidget(acceptSuggestionButton);
+    feedbackLayout->addWidget(rejectSuggestionButton);
+    mainLayout->addLayout(feedbackLayout);
+
+    connect(acceptSuggestionButton, &QPushButton::clicked, this, &CerebrumLux::KnowledgeBasePanel::onAcceptSuggestionClicked);
+    connect(rejectSuggestionButton, &QPushButton::clicked, this, &CerebrumLux::KnowledgeBasePanel::onRejectSuggestionClicked);
+    // Başlangıçta butonları pasif yap
+    updateSuggestionFeedbackButtons("");
+
     mainLayout->addWidget(splitter);
 
     mainLayout->addStretch(1);
@@ -153,6 +166,7 @@ void KnowledgeBasePanel::onSelectedCapsuleChanged(QListWidgetItem* current, QLis
         displayCapsuleDetails(it->second);
         LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül detayları gösterildi. ID: " << selectedCapsuleId.toStdString());
     } else {
+        updateSuggestionFeedbackButtons(""); // Kapsül bulunamazsa butonları pasif yap
         capsuleDetailDisplay->setText("Detaylar bulunamadı.");
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBasePanel: Seçilen kapsül ID'si dahili listeye uymuyor: " << selectedCapsuleId.toStdString());
     }
@@ -175,6 +189,7 @@ void KnowledgeBasePanel::onTopicFilterChanged(const QString& topic) {
 }
 
 void KnowledgeBasePanel::onStartDateChanged(const QDate& date) {
+    // Düzeltme: Güncel topicFilterComboBox değeri ile çağrı
     filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), date, endDateEdit->date());
 }
 
@@ -228,6 +243,7 @@ void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText, con
             data.cryptofigBlob = QString::fromStdString(capsule.cryptofig_blob_base64); // Corrected
             data.confidence = capsule.confidence; // Corrected
             displayedCapsuleDetails[data.id] = data;
+            // YENİ: Seçim yapıldığında butonları güncelle
         }
     }
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül listesi filtrelendi. Görüntülenen kapsül sayısı: " << capsuleListWidget->count());
@@ -245,6 +261,63 @@ void KnowledgeBasePanel::displayCapsuleDetails(const KnowledgeCapsuleDisplayData
     details += "<br><b>Tam İçerik:</b><br><pre>" + data.fullContent + "</pre>";
 
     capsuleDetailDisplay->setHtml(details);
+    // YENİ: Detaylar gösterildiğinde butonları güncelle
+    updateSuggestionFeedbackButtons(data.id);
+}
+
+// YENİ METOT: Geri bildirim butonlarının durumunu günceller
+void CerebrumLux::KnowledgeBasePanel::updateSuggestionFeedbackButtons(const QString& selectedCapsuleId) {
+    bool enableButtons = false;
+    if (!selectedCapsuleId.isEmpty()) {
+        auto it = displayedCapsuleDetails.find(selectedCapsuleId);
+        if (it != displayedCapsuleDetails.end()) {
+            // Sadece "Kod Geliştirme Önerisi" (CodeDevelopmentSuggestion) tipindeki kapsüller için butonları aktif et
+            // Capsule struct'ında InsightType üyesi olmadığı için bu kontrolü KnowledgeCapsuleDisplayData üzerinden yapamayız.
+            // Bunun yerine KnowledgeBase'den ilgili Capsule'ı çekip tipi kontrol etmemiz gerekir.
+            std::optional<CerebrumLux::Capsule> capsule = learningModule.getKnowledgeBase().find_capsule_by_id(selectedCapsuleId.toStdString());
+            if (capsule) {
+                // Not: Capsule struct'ının kendisinde InsightType diye bir alan yok.
+                // Eğer bu bilgiyi kapsülün içinde tutmuyorsak, ID'nin önekinden (CodeDevSuggestion_) çıkarım yapabiliriz.
+                // Veya Insight sınıfına bu bilgiyi ekleyip KnowledgeCapsuleDisplayData'ya aktarmamız gerekir.
+                // Şimdilik ID önekinden yola çıkarak bir simülasyon yapalım.
+                if (selectedCapsuleId.startsWith("CodeDevSuggest")) { // CodeDevSuggest_ veya CodeDevSuggest_HighComplexity_ vs.
+                    enableButtons = true;
+                }
+            }
+        }
+    }
+    acceptSuggestionButton->setEnabled(enableButtons);
+    rejectSuggestionButton->setEnabled(enableButtons);
+}
+
+// YENİ SLOT: Öneriyi Kabul Et butonu tıklandığında
+void CerebrumLux::KnowledgeBasePanel::onAcceptSuggestionClicked() {
+    if (capsuleListWidget->currentItem()) {
+        QString selectedCapsuleId = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBasePanel: Kod Geliştirme Önerisi KABUL EDİLDİ. ID: " << selectedCapsuleId.toStdString());
+        // LearningModule'e geri bildirim gönder
+        learningModule.processCodeSuggestionFeedback(selectedCapsuleId.toStdString(), true);
+        // Opsiyonel: Kabul edilen öneri kapsülünü karantinaya alabilir veya farklı bir şekilde işaretleyebiliriz.
+        QMessageBox::information(this, "Öneri Kabul Edildi", "Kod geliştirme önerisi kabul edildi: " + selectedCapsuleId);
+        updateKnowledgeBaseContent(); // Listeyi güncelle
+    } else {
+        QMessageBox::warning(this, "Uyarı", "Lütfen kabul etmek için bir kod geliştirme önerisi seçin.");
+    }
+}
+
+// YENİ SLOT: Öneriyi Reddet butonu tıklandığında
+void CerebrumLux::KnowledgeBasePanel::onRejectSuggestionClicked() {
+    if (capsuleListWidget->currentItem()) {
+        QString selectedCapsuleId = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBasePanel: Kod Geliştirme Önerisi REDDEDİLDİ. ID: " << selectedCapsuleId.toStdString());
+        // LearningModule'e geri bildirim gönder
+        learningModule.processCodeSuggestionFeedback(selectedCapsuleId.toStdString(), false);
+        // Opsiyonel: Reddedilen öneri kapsülünü karantinaya alabilir veya farklı bir şekilde işaretleyebiliriz.
+        QMessageBox::information(this, "Öneri Reddedildi", "Kod geliştirme önerisi reddedildi: " + selectedCapsuleId);
+        updateKnowledgeBaseContent(); // Listeyi güncelle
+    } else {
+        QMessageBox::warning(this, "Uyarı", "Lütfen reddetmek için bir kod geliştirme önerisi seçin.");
+    }
 }
 
 } // namespace CerebrumLux

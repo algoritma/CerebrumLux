@@ -102,11 +102,11 @@ private:
     AIInsight generate_unusual_behavior_insight(const DynamicSequence& current_sequence); // Daha sonra geliştirilebilir
 
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod karmaşıklığı değerini tutar
-    float last_simulated_code_complexity = 0.5f; // Başlangıç değeri
+    float last_simulated_code_complexity = 0.9f; // Başlangıç değeri, YÜKSEK karmaşıklık eşiğine ÇOK YAKIN
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod okunabilirlik skoru
-    float last_simulated_code_readability = 0.7f; // Başlangıç değeri
+    float last_simulated_code_readability = 0.3f; // Başlangıç değeri, DÜŞÜK okunabilirlik eşiğine ÇOK YAKIN
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod optimizasyon potansiyeli
-    float last_simulated_optimization_potential = 0.3f; // Başlangıç değeri
+    float last_simulated_optimization_potential = 0.8f; // Başlangıç değeri, YÜKSEK optimizasyon eşiğine ÇOK YAKIN
 };
 
 } // namespace CerebrumLux

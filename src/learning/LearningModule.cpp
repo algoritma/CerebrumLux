@@ -358,4 +358,15 @@ void LearningModule::audit_log_append(const IngestReport& report) const {
                 << ", Kaynak Peer: " << report.source_peer_id);
 }
 
+// YENİ METOT: Kod geliştirme önerisi geri bildirimini işler
+void LearningModule::processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted) {
+    if (accepted) {
+        LOG_DEFAULT(LogLevel::INFO, "LearningModule: Kod Geliştirme Önerisi KABUL EDİLDİ. ID: " << capsuleId);
+    } else {
+        LOG_DEFAULT(LogLevel::INFO, "LearningModule: Kod Geliştirme Önerisi REDDEDİLDİ. ID: " << capsuleId);
+    }
+    // Gelecekte: Bu geri bildirim, AIInsightsEngine'ın öneri üretim mantığını veya IntentLearner'ı eğitmek için kullanılabilir.
+    // Örneğin, bu kapsülün topic'ini veya içeriğini analiz ederek ilgili metrikleri güncelleyebiliriz.
+}
+
 } // namespace CerebrumLux

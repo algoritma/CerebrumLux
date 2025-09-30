@@ -36,7 +36,6 @@ public:
     explicit CapsuleTransferPanel(QWidget *parent = nullptr);
     virtual ~CapsuleTransferPanel(); // YENİ: Yıkıcı deklarasyonuna 'virtual' eklendi
     void displayIngestReport(const IngestReport& report);
-    void updateCapsuleList(const std::vector<Capsule>& capsules);
 
 signals:
     void ingestCapsuleRequest(const QString& capsuleJson, const QString& signature, const QString& senderId);
@@ -45,7 +44,6 @@ signals:
 private slots:
     void onIngestCapsuleClicked();
     void onFetchWebCapsuleClicked();
-    void onSelectedCapsuleChanged(QListWidgetItem* current, QListWidgetItem* previous);
 
 private:
     QLabel *capsuleJsonLabel;
@@ -63,13 +61,7 @@ private:
     QLabel *reportStatusLabel;
     QTextEdit *reportMessageDisplay;
     
-    QListWidget *capsuleListWidget;
-    QTextEdit *capsuleDetailDisplay;
-    
-    std::map<QString, CapsuleDisplayData> displayedCapsules;
-
     void setupUi();
-    void displayCapsuleDetails(const CapsuleDisplayData& data);
 };
 
 } // namespace CerebrumLux
