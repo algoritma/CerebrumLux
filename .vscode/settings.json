@@ -81,7 +81,9 @@
         "cinttypes": "cpp",
         "qlineseries": "cpp",
         "source_location": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "qtextdocument": "cpp",
+        "qcoreapplication": "cpp"
     },
     "cmake.configureSettings": {
         "CMAKE_PREFIX_PATH": "C:/Qt/6.9.2/mingw_64",

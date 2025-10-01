@@ -106,16 +106,16 @@ enum class AbstractState : unsigned char {
 };
 
 // İçgörü Türleri
-enum class InsightType : unsigned char {
-    PerformanceAnomaly,
-    LearningOpportunity,
-    SecurityAlert,
-    EfficiencySuggestion,
-    ResourceOptimization,
-    BehavioralDrift,
-    UserContext,
-    CodeDevelopmentSuggestion, // YENİ: Kod geliştirme önerisi içgörü tipi eklendi
-    None
+enum class InsightType : int { // Temel tipi unsigned char'dan int'e değiştirildi
+    PerformanceAnomaly,      // 0
+    LearningOpportunity,     // 1
+    SecurityAlert,           // 2
+    EfficiencySuggestion,    // 3
+    ResourceOptimization,    // 4
+    BehavioralDrift,         // 5
+    UserContext,             // 6
+    CodeDevelopmentSuggestion, // 7 // YENİ: Kod geliştirme önerisi içgörü tipi eklendi
+    None                     // 8
 };
 
 // Aciliyet Seviyeleri

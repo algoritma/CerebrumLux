@@ -51,9 +51,9 @@ AIInsightsEngine::AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& 
 }
 
 // === Insight generation ===
-std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence& current_sequence) {
+const std::vector<AIInsight>& AIInsightsEngine::generate_insights(const DynamicSequence& current_sequence) { // Dönüş tipi değiştirildi
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Yeni içgörüler uretiliyor.\n");
-    std::vector<AIInsight> insights;
+    last_generated_insights.clear(); // Her çağrıda önceki içgörüleri temizle
     auto now = std::chrono::system_clock::now();
 
     // YENİ TEŞHİS LOGU: Simüle edilmiş kod metriklerinin anlık değerlerini göster
@@ -65,7 +65,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     if (!is_on_cooldown("code_complexity_simulation", std::chrono::seconds(10))) { // Her 10 saniyede bir güncelle
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::normal_distribution<float> d(0.0f, 0.30f); // Standart sapma ÇOK DAHA FAZLA artırıldı
+        std::normal_distribution<float> d(0.0f, 0.40f); // Standart sapma AGRESİF bir şekilde artırıldı
         
         last_simulated_code_complexity += d(gen);
         // Karmaşıklık değerini 0.0 ile 1.0 arasında tut
@@ -79,7 +79,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     if (!is_on_cooldown("code_readability_simulation", std::chrono::seconds(15))) { // Her 15 saniyede bir güncelle
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::normal_distribution<float> d(0.0f, 0.35f); // Standart sapma ÇOK DAHA FAZLA artırıldı
+        std::normal_distribution<float> d(0.0f, 0.45f); // Standart sapma AGRESİF bir şekilde artırıldı
         
         last_simulated_code_readability += d(gen);
         // Okunabilirlik değerini 0.0 ile 1.0 arasında tut
@@ -93,7 +93,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     if (!is_on_cooldown("code_optimization_potential_simulation", std::chrono::seconds(20))) { // Her 20 saniyede bir güncelle
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::normal_distribution<float> d(0.0f, 0.30f); // Standart sapma ÇOK DAHA FAZLA artırıldı (hızlı değişim için)
+        std::normal_distribution<float> d(0.0f, 0.40f); // Standart sapma AGRESİF bir şekilde artırıldı
         
         last_simulated_optimization_potential += d(gen);
         // Optimizasyon Potansiyeli değerini 0.0 ile 1.0 arasında tut
@@ -121,7 +121,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
         confidence_insight.urgency = CerebrumLux::UrgencyLevel::None; // Veya uygun bir seviye
         confidence_insight.associated_cryptofig = current_sequence.latent_cryptofig_vector;
         confidence_insight.related_capsule_ids.push_back(current_sequence.id);
-        insights.push_back(confidence_insight);
+        last_generated_insights.push_back(confidence_insight);
         insight_cooldowns["ai_confidence_graph"] = now;
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: AI Güven Seviyesi içgörüsü (grafik için) üretildi: " << normalized_confidence);
     }
@@ -132,26 +132,26 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     AIInsight insight_from_helper; // Geçici bir AIInsight objesi
 
     insight_from_helper = generate_reconstruction_error_insight(current_sequence);
-    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+    if (!insight_from_helper.id.empty()) last_generated_insights.push_back(insight_from_helper);
 
     insight_from_helper = generate_learning_rate_insight(current_sequence);
-    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+    if (!insight_from_helper.id.empty()) last_generated_insights.push_back(insight_from_helper);
 
     insight_from_helper = generate_system_resource_insight(current_sequence);
-    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+    if (!insight_from_helper.id.empty()) last_generated_insights.push_back(insight_from_helper);
 
     insight_from_helper = generate_network_activity_insight(current_sequence);
-    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+    if (!insight_from_helper.id.empty()) last_generated_insights.push_back(insight_from_helper);
 
     insight_from_helper = generate_application_context_insight(current_sequence);
-    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+    if (!insight_from_helper.id.empty()) last_generated_insights.push_back(insight_from_helper);
 
     insight_from_helper = generate_unusual_behavior_insight(current_sequence);
-    if (!insight_from_helper.id.empty()) insights.push_back(insight_from_helper);
+    if (!insight_from_helper.id.empty()) last_generated_insights.push_back(insight_from_helper);
 
     // Eğer yukarıdaki koşulların hiçbiriyle içgörü üretilemediyse ve stabil durum içgörüsü cooldown'da değilse
-    if (insights.empty() && !is_on_cooldown("stable_state", std::chrono::seconds(300))) {
-        insights.push_back({"StableState_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
+    if (last_generated_insights.empty() && !is_on_cooldown("stable_state", std::chrono::seconds(300))) {
+        last_generated_insights.push_back({"StableState_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                             "İç durumum stabil görünüyor. Yeni öğrenme fırsatları için hazırım.",
                             "Genel Durum", "Yeni özellik geliştirme veya derinlemesine öğrenme moduna geç.",
                             CerebrumLux::InsightType::None, CerebrumLux::UrgencyLevel::Low, {}, {}});
@@ -160,7 +160,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // Performans Anormalliği
     if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[0] > 0.8) {
-        insights.push_back({
+        last_generated_insights.push_back({
             "PerformanceAnomaly_" + std::to_string(now.time_since_epoch().count()), // id
             "Sistemde potansiyel performans anormalliği tespit edildi.",             // observation
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::SystemPerformance), // context (string'e çevrildi)
@@ -174,7 +174,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // Öğrenme Fırsatı
     if (!current_sequence.latent_cryptofig_vector.empty() && current_sequence.latent_cryptofig_vector[0] < 0.2) {
-        insights.push_back({
+        last_generated_insights.push_back({
             "LearningOpportunity_" + std::to_string(now.time_since_epoch().count()), // id
             "Yeni bir öğrenme fırsatı belirlendi. Bilgi tabanının genişletilmesi önerilir.", // observation
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::LearningStrategy), // context (string'e çevrildi)
@@ -188,7 +188,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // Kaynak Optimizasyonu
     if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[1] > 0.9) {
-        insights.push_back({
+        last_generated_insights.push_back({
             "ResourceOptimization_" + std::to_string(now.time_since_epoch().count()), // id
             "Yüksek kaynak kullanımı tespit edildi. Optimizasyon önerileri değerlendirilmeli.", // observation
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::ResourceManagement), // context (string'e çevrildi)
@@ -202,7 +202,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // Güvenlik Uyarısı
     if (!current_sequence.statistical_features_vector.empty() && current_sequence.statistical_features_vector[2] < 0.1) {
-        insights.push_back({
+        last_generated_insights.push_back({
             "SecurityAlert_" + std::to_string(now.time_since_epoch().count()),     // id
             "Potansiyel güvenlik açığı veya anormal davranış tespit edildi.",        // observation
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CyberSecurity),  // context (string'e çevrildi)
@@ -216,7 +216,7 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // Kullanıcı Bağlamı
     if (!current_sequence.latent_cryptofig_vector.empty() && current_sequence.latent_cryptofig_vector[1] > 0.7) {
-        insights.push_back({
+        last_generated_insights.push_back({
             "UserContext_" + std::to_string(now.time_since_epoch().count()),       // id
             "Kullanıcı bağlamında önemli bir değişiklik gözlemlendi. Adaptif yanıtlar için analiz ediliyor.", // observation
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::UserBehavior),   // context (string'e çevrildi)
@@ -230,37 +230,44 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
 
     // YENİ EKLENEN KOD: Daha Spesifik Kod Geliştirme Önerileri (Çeşitli simüle metrikler bazında)
     // 1. Yüksek Karmaşıklık ve Düşük Okunabilirlik
-    // Bu kısma hata ayıklama logları eklendi.
     if (last_simulated_code_complexity > 0.8f && last_simulated_code_readability < 0.4f && !is_on_cooldown("high_complexity_low_readability_suggestion", std::chrono::seconds(60))) {
         insight_cooldowns["high_complexity_low_readability_suggestion"] = now;
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Yüksek Karmaşıklık/Düşük Okunabilirlik) tetiklendi!");
-        insights.push_back({
+        
+        AIInsight high_complexity_insight = {
             "CodeDev_HighComplexityLowReadability_" + std::to_string(now.time_since_epoch().count()),
-            "Kritik seviyede yüksek kod karmaşıklığı (" + std::to_string(last_simulated_code_complexity) + ") ve düşük okunabilirlik (" + std::to_string(last_simulated_code_readability) + ") tespit edildi. Modülerlik iyileştirmeleri ve refaktör ACİL!",
+            "Kritik seviyede yüksek kod karmaşıklığı (" + std::to_string(last_simulated_code_complexity) + "), düşük okunabilirlik (" + std::to_string(last_simulated_code_readability) + ") tespit edildi. Modülerlik iyileştirmeleri ve refaktör ACİL!",
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
             "Kritik karmaşıklığa sahip fonksiyonları/sınıfları belirleyin, sorumluğu tek olan parçalara bölün ve kod yorumlamasını artırın. İsimlendirme standartlarını gözden geçirin.",
             CerebrumLux::InsightType::CodeDevelopmentSuggestion,
             insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),
             current_sequence.latent_cryptofig_vector,
             {current_sequence.id}
-        });
+        };
+        last_generated_insights.push_back(high_complexity_insight);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_HighComplexityLowReadability_' içgörüsü insights vektörüne eklendi. Toplam: " << last_generated_insights.size());
+
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 1 (Yüksek Karmaşıklık/Düşük Okunabilirlik) sağlanmadı. Comp: " << last_simulated_code_complexity << ", Read: " << last_simulated_code_readability);
     }
     // 2. Yüksek Optimizasyon Potansiyeli
-    if (last_simulated_optimization_potential > 0.7f && !is_on_cooldown("high_optimization_potential_suggestion", std::chrono::seconds(90))) { // Ayrı if yapısı, çünkü birden fazla içgörü aynı anda tetiklenebilir
+    if (last_simulated_optimization_potential > 0.7f && !is_on_cooldown("high_optimization_potential_suggestion", std::chrono::seconds(90))) {
         insight_cooldowns["high_optimization_potential_suggestion"] = now;
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Yüksek Optimizasyon Potansiyeli) tetiklendi!");
-        insights.push_back({
+        
+        AIInsight high_opt_insight = {
             "CodeDev_HighOptimizationPotential_" + std::to_string(now.time_since_epoch().count()),
             "Yüksek performans optimizasyon potansiyeli tespit edildi (" + std::to_string(last_simulated_optimization_potential) + "). Bazı döngüler veya algoritmalar iyileştirilebilir.",
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
-            "Sıkça çağrılan ve zaman alan kod bloklarını profilleyin. Alternatif veri yapıları veya algoritmalar kullanarak performansı artırın.",
+            "Sıkça çağrılan ve zaman alan kod bloklarını profilleyin. Alternatif veri yapıları veya algoritmalar kullanarak performansı artırın. (Mevcut Potansiyel: " + std::to_string(last_simulated_optimization_potential) + ")",
             CerebrumLux::InsightType::CodeDevelopmentSuggestion,
             insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),
             current_sequence.latent_cryptofig_vector,
             {current_sequence.id}
-        });
+        };
+        last_generated_insights.push_back(high_opt_insight);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_HighOptimizationPotential_' içgörüsü insights vektörüne eklendi. Toplam: " << last_generated_insights.size());
+
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 2 (Yüksek Optimizasyon Potansiyeli) sağlanmadı. Opt: " << last_simulated_optimization_potential);
     }
@@ -268,7 +275,8 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
     if (last_simulated_code_complexity > 0.6f && last_simulated_code_readability < 0.6f && !is_on_cooldown("medium_complexity_readability_suggestion", std::chrono::seconds(120))) {
         insight_cooldowns["medium_complexity_readability_suggestion"] = now;
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Orta Karmaşıklık/Okunabilirlik) tetiklendi!");
-        insights.push_back({
+        
+        AIInsight medium_complexity_insight = {
             "CodeDev_MediumComplexityReadability_" + std::to_string(now.time_since_epoch().count()),
             "Kod tabanında potansiyel modülerlik iyileştirmeleri veya refaktör fırsatları olabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ").",
             knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
@@ -277,35 +285,45 @@ std::vector<AIInsight> AIInsightsEngine::generate_insights(const DynamicSequence
             insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),
             current_sequence.latent_cryptofig_vector,
             {current_sequence.id}
-        });
+        };
+        last_generated_insights.push_back(medium_complexity_insight);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_MediumComplexityReadability_' içgörüsü insights vektörüne eklendi. Toplam: " << last_generated_insights.size());
+
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 3 (Orta Karmaşıklık/Okunabilirlik) sağlanmadı. Comp: " << last_simulated_code_complexity << ", Read: " << last_simulated_code_readability);
     }
-    // 4. İyi Durumda Ama Küçük İyileştirmeler (Düşük Karmaşıklık, Yüksek Okunabilirlik) - TEST İÇİN KOLAY TETİKLENECEK KOD
-    // Bu koşulu test amaçlı olarak değiştiriyoruz. Sadece last_simulated_code_readability'nin 0.5'in üzerinde olması yeterli olacak.
-    if (last_simulated_code_readability > 0.5f && !is_on_cooldown("minor_code_improvement_suggestion", std::chrono::seconds(10))) { // Cooldown süresi de kısaltıldı
-        insight_cooldowns["minor_code_improvement_suggestion"] = now;
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Minor Improvement) TEST KOŞULU tetiklendi!");
-        insights.push_back({
-            "CodeDev_MinorImprovement_" + std::to_string(now.time_since_epoch().count()), // id (düzeltildi)
-            "Mevcut kod tabanı iyi durumda. Ancak küçük çaplı stil veya dokümantasyon iyileştirmeleri yapılabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ").", // observation
+    // 4. İyi Durumda Ama Küçük İyileştirmeler (Düşük Karmaşıklık, Yüksek Okunabilirlik)
+    if (true) { // HER ZAMAN TETİKLE (TEŞHİS AMAÇLI)
+        if (last_simulated_code_readability > 0.25f && !is_on_cooldown("minor_code_improvement_suggestion", std::chrono::seconds(10))) {
+            insight_cooldowns["minor_code_improvement_suggestion"] = now;
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: CodeDevSuggestion (Minor Improvement) TEST KOŞULU tetiklendi!");
+            AIInsight minor_improvement_insight = {
+                "CodeDev_MinorImprovement_" + std::to_string(now.time_since_epoch().count()),
+                "Mevcut kod tabanı iyi durumda. Ancak küçük çaplı stil veya dokümantasyon iyileştirmeleri yapılabilir (Karmaşıklık: " + std::to_string(last_simulated_code_complexity) + ", Okunabilirlik: " + std::to_string(last_simulated_code_readability) + ", Optimizasyon Potansiyeli: " + std::to_string(last_simulated_optimization_potential) + ").",
+                knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),
+                "Kodlama stil rehberini gözden geçirin ve tutarlılığı artırın. Eksik dokümantasyonu tamamlayın veya mevcut yorumları geliştirin.",
+                CerebrumLux::InsightType::CodeDevelopmentSuggestion,
+                insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Low),
+                current_sequence.latent_cryptofig_vector,
+                {current_sequence.id}
+            };
+            last_generated_insights.push_back(minor_improvement_insight);
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_MinorImprovement_' içgörüsü insights vektörüne eklendi. Toplam: " << last_generated_insights.size());
+        } else {
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 4 (Minor Improvement) cooldown'da.");
+        }
+    }
 
-            knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::CodeDevelopment),// context (string'e çevrildi)
-            "Kodlama stil rehberini gözden geçirin ve tutarlılığı artırın. Eksik dokümantasyonu tamamlayın veya mevcut yorumları geliştirin.", // recommended_action
-            CerebrumLux::InsightType::CodeDevelopmentSuggestion,                    // type
-
-            insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),// urgency (UrgencyLevel'a çevrildi)
-            current_sequence.latent_cryptofig_vector,                               // associated_cryptofig
-            {current_sequence.id}                                                   // related_capsule_ids
-        });
-    } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Koşul 4 (Minor Improvement) sağlanmadı. Read: " << last_simulated_code_readability);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << last_generated_insights.size() << "\n");
+    // YENİ TEŞHİS LOGU (GELİŞTİRİLDİ): Metottan dönmeden önce tüm üretilen içgörüleri özetle
+    for (const auto& insight : last_generated_insights) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: DÖNÜŞ İÇGÖRÜSÜ (Özet): ID=" << insight.id
+                                  << ", Type=" << static_cast<int>(insight.type)
+                                  << ", Context=" << insight.context);
     }
 
 
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine::generate_insights: Icgoru uretimi bitti. Sayi: " << insights.size() << "\n");
-
-    return insights;
+    return last_generated_insights;
 }
 
 // Cooldown kontrolü

@@ -44,6 +44,12 @@ struct AIInsight {
           recommended_action(recommended_action_val), type(type_val), urgency(urgency_val),
           associated_cryptofig(cryptofig_val), related_capsule_ids(capsule_ids_val) {}
 
+    // YENİ EKLENDİ: Açıkça Copy/Move Semantics tanımları
+    AIInsight(const AIInsight& other) = default; // Varsayılan kopyalama constructor'ı
+    AIInsight& operator=(const AIInsight& other) = default; // Varsayılan kopyalama atama operator'ü
+    AIInsight(AIInsight&& other) noexcept = default; // Varsayılan taşıma constructor'ı
+    AIInsight& operator=(AIInsight&& other) noexcept = default; // Varsayılan taşıma atama operator'ü
+    
     // NLOHMANN_DEFINE_TYPE_INTRUSIVE makrosu yerine manuel to_json ve from_json
     friend void to_json(nlohmann::json& j, const AIInsight& i) {
         j["id"] = i.id;
@@ -74,7 +80,8 @@ public:
     AIInsightsEngine(IntentAnalyzer& analyzer, IntentLearner& learner, PredictionEngine& predictor,
                      CryptofigAutoencoder& autoencoder, CryptofigProcessor& cryptofig_processor);
 
-    std::vector<AIInsight> generate_insights(const DynamicSequence& current_sequence);
+    // DEĞİŞTİRİLDİ: Dönüş tipi const referans olarak değiştirildi
+    const std::vector<AIInsight>& generate_insights(const DynamicSequence& current_sequence);
 
     float calculate_autoencoder_reconstruction_error(const std::vector<float>& statistical_features) const;
 
@@ -90,8 +97,10 @@ private:
     CryptofigAutoencoder& cryptofig_autoencoder;
     CryptofigProcessor& cryptofig_processor;
 
-    std::map<std::string, std::chrono::system_clock::time_point> insight_cooldowns;
-    bool is_on_cooldown(const std::string& key, std::chrono::seconds cooldown_duration) const;
+    // --- Dahili Durum ve Yardımcı Metotlar ---
+    std::map<std::string, std::chrono::system_clock::time_point> insight_cooldowns; // İçgörü türleri için bekleme süreleri (tek tanım)
+    mutable std::vector<AIInsight> last_generated_insights; // Son üretilen içgörüleri tutar
+    bool is_on_cooldown(const std::string& key, std::chrono::seconds cooldown_duration) const; // Yardımcı metot deklarasyonu
 
     // YENİ YARDIMCI İÇGÖRÜ ÜRETİM METOTLARI DEKLARASYONLARI
     AIInsight generate_reconstruction_error_insight(const DynamicSequence& current_sequence);
@@ -102,11 +111,11 @@ private:
     AIInsight generate_unusual_behavior_insight(const DynamicSequence& current_sequence); // Daha sonra geliştirilebilir
 
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod karmaşıklığı değerini tutar
-    float last_simulated_code_complexity = 0.9f; // Başlangıç değeri, YÜKSEK karmaşıklık eşiğine ÇOK YAKIN
+    float last_simulated_code_complexity = 0.95f; // Başlangıç değeri, DAHA DA YÜKSEK
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod okunabilirlik skoru
-    float last_simulated_code_readability = 0.3f; // Başlangıç değeri, DÜŞÜK okunabilirlik eşiğine ÇOK YAKIN
+    float last_simulated_code_readability = 0.25f; // Başlangıç değeri, DAHA DA DÜŞÜK
     // YENİ EKLENEN ÜYE DEĞİŞKENİ: Simüle edilmiş kod optimizasyon potansiyeli
-    float last_simulated_optimization_potential = 0.8f; // Başlangıç değeri, YÜKSEK optimizasyon eşiğine ÇOK YAKIN
+    float last_simulated_optimization_potential = 0.85f; // Başlangıç değeri, DAHA DA YÜKSEK
 };
 
 } // namespace CerebrumLux

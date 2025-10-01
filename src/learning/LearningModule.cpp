@@ -111,36 +111,63 @@ std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) c
 }
 
 void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights) {
-    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] AI Insights isleniyor: " << insights.size() << " adet içgörü.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "[LearningModule] AI Insights isleniyor: " << insights.size() << " adet içgörü.");
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Başlangıç: Gelen içgörülerin tipleri ve ID'leri (Toplam: " << insights.size() << "):");
+    for (const auto& insight : insights) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule]   Alınan İçgörü: ID=" << insight.id << ", Type=" << static_cast<int>(insight.type) << ", Context=" << insight.context << ", Urgency=" << static_cast<int>(insight.urgency));
+    }
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] --- İçgörü İşleme Başlıyor ---");
 
     for (const auto& insight : insights) {
-        LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] İçgörü Detay: ID=" << insight.id
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] İşleniyor: ID=" << insight.id << " (Type: " << static_cast<int>(insight.type) << ")"
                                     << ", Gözlem: " << insight.observation
                                     << ", Bağlam: " << insight.context
                                     << ", Önerilen Eylem: " << insight.recommended_action
-                                    << ", Tip: " << static_cast<int>(insight.type)
-                                    << ", Aciliyet: " << static_cast<int>(insight.urgency)); // YENİ: Detaylı içgörü logu
+                                    << ", Tip: " << static_cast<int>(insight.type));
 
         Capsule insight_capsule;
         insight_capsule.id = insight.id;
         insight_capsule.content = insight.observation;
         insight_capsule.source = "AIInsightsEngine";
         insight_capsule.topic = "AI Insight";
-        insight_capsule.confidence = 0.5f;
+        // YENİ: AIInsight'ın urgency seviyesinden confidence türet
+        switch (insight.urgency) {
+            case CerebrumLux::UrgencyLevel::Low: insight_capsule.confidence = 0.7f; break;
+            case CerebrumLux::UrgencyLevel::Medium: insight_capsule.confidence = 0.8f; break;
+            case CerebrumLux::UrgencyLevel::High: insight_capsule.confidence = 0.9f; break;
+            case CerebrumLux::UrgencyLevel::Critical: insight_capsule.confidence = 0.95f; break;
+            case CerebrumLux::UrgencyLevel::None: insight_capsule.confidence = 0.6f; break;
+            default: insight_capsule.confidence = 0.5f; break;
+        }
 
+        // YENİ KOD: CodeDevelopmentSuggestion için özel topic ataması (GELİŞTİRİLMİŞ TEŞHİS LOGLARI)
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule]   Kontrol ediliyor: insight.type (" << static_cast<int>(insight.type) << ") == CerebrumLux::InsightType::CodeDevelopmentSuggestion (" << static_cast<int>(CerebrumLux::InsightType::CodeDevelopmentSuggestion) << ")");
+        if (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion) {
+            insight_capsule.topic = "CodeDevelopment"; // Özel olarak CodeDevelopment topic'i ata
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] CodeDevelopmentSuggestion için topic 'CodeDevelopment' olarak ayarlandı. ID: " << insight.id);
+        } else {
+            // Eğer Type=7 değilse, ve topic henüz CodeDevelopment değilse, default olarak "AI Insight" kullanılıyordu.
+            // Bu else bloğunu daha açık hale getirelim.
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] InsightType CodeDevelopmentSuggestion değil (" << static_cast<int>(insight.type) << "). Varsayılan topic ('AI Insight') kullanılıyor.");
+        }
         if (insight.context == "Sistem Genel Performans Metriği") { 
-            insight_capsule.topic = "GraphData";
             size_t pos = insight.observation.find(":");
             if (pos != std::string::npos && pos + 1 < insight.observation.length()) {
                 try {
                     insight_capsule.confidence = std::stof(insight.observation.substr(pos + 1));
-                    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Grafik verisi için içgörü güveni çıkarıldı: " << insight_capsule.confidence);
+                    // Eğer CodeDevelopmentSuggestion ise topic değişmemeli, GraphData olmamalı
+                    if (insight_capsule.topic != "CodeDevelopment") { // YENİ: Conflict'i önle
+                        insight_capsule.topic = "GraphData";
+                        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Grafik verisi için içgörü güveni çıkarıldı ve topic 'GraphData' olarak ayarlandı: " << insight_capsule.confidence);
+                    } else {
+                        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Grafik verisi içgörüsü, zaten 'CodeDevelopment' topic'ine sahip olduğu için topic değişmedi.");
+                    }
                 } catch (const std::exception& e) {
-                    LOG_DEFAULT(LogLevel::WARNING, "[LearningModule] İçgörüden güven değeri çıkarılırken hata: " << e.what());
+                    LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] İçgörüden güven değeri çıkarılırken hata: " << e.what());
                 }
             }
         }
-
 
         insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)500, insight.observation.length())) + "...";
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
@@ -148,8 +175,9 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         insight_capsule.cryptofig_blob_base64 = cryptofig_encode(insight_capsule.embedding);
 
         knowledgeBase.add_capsule(insight_capsule);
-        LOG_DEFAULT(LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü eklendi: " << insight_capsule.plain_text_summary << ", ID: " << insight_capsule.id << ", Topic: " << insight_capsule.topic);
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü EKLENDİ. ID: " << insight_capsule.id << ", Topic: " << insight_capsule.topic << ", Özet: " << insight_capsule.plain_text_summary.substr(0, std::min((size_t)50, insight_capsule.plain_text_summary.length())) << "..." << ", Confidence: " << insight_capsule.confidence);
     }
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] --- İçgörü İşleme Bitti ---");
 }
 
 KnowledgeBase& LearningModule::getKnowledgeBase() {

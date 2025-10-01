@@ -58,9 +58,17 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
     try {
         // Adım 3: İçgörüler oluştur.
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: AIInsightsEngine generate_insights çağrılıyor.");
-        std::vector<AIInsight> insights = insights_engine.generate_insights(current_sequence);
+        const std::vector<AIInsight>& insights = insights_engine.generate_insights(current_sequence); // DEĞİŞTİRİLDİ: const referans al
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: " << insights.size() << " adet içgörü üretildi.");
-        learning_module.process_ai_insights(insights);
+        
+        // YENİ TEŞHİS LOGU: LearningModule'a aktarılmadan önce insights vektörünün içeriğini göster
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: LearningModule'a AKTARILACAK İçgörüler (Toplam: " << insights.size() << "):");
+        for (const auto& insight : insights) {
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: LearningModule'a aktarılan İçgörü (Özet): ID=" << insight.id
+                                      << ", Type=" << static_cast<int>(insight.type) << ", Context=" << insight.context);
+        }
+        
+        learning_module.process_ai_insights(insights); // DEĞİŞTİRİLDİ: Doğrudan referansı ilet
     } catch (const std::exception& e) {
         LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: AIInsightsEngine adiminda hata: " << e.what());
         return;

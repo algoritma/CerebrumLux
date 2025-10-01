@@ -77,6 +77,22 @@ CerebrumLux::UserIntent NaturalLanguageProcessor::infer_intent_from_text(const s
         return guessed_intent;
     }
 
+    // YENİ KOD: KnowledgeBase'den semantik arama ile niyet çıkarımı (eğer kural tabanlı başarısız olursa)
+    // Kullanıcının girdisine en yakın 1-2 kapsülü ara
+    std::vector<CerebrumLux::Capsule> related_capsules = kbRef_.semantic_search(lower_text, 2);
+    if (!related_capsules.empty()) {
+        // En alakalı kapsülün konusunu niyete çevirmeye çalış
+        // Basitçe: eğer topic bir niyete karşılık geliyorsa, onu kullan.
+        // Daha sofistike bir yaklaşımda: niyet sınıflandırıcı, kapsül içeriğiyle eğitilir.
+        for (const auto& capsule : related_capsules) {
+            if (capsule.topic == "Programming") return CerebrumLux::UserIntent::Programming;
+            if (capsule.topic == "Research" || capsule.topic == "WebSearch") return CerebrumLux::UserIntent::Research;
+            if (capsule.topic == "AI Insight") return CerebrumLux::UserIntent::Question; // AI Insight topic'i bir soruya yönlendirebilir.
+            // Diğer topic'ler için de benzer eşlemeler eklenebilir.
+        }
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Niyet KnowledgeBase'den türetilmeye çalışıldı, ancak doğrudan bir eşleşme bulunamadı.");
+    }
+
     // Daha karmaşık modeller veya öğrenilmiş modeller burada kullanılabilir
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Niyet tahmin edilemedi, Undefined döndürülüyor.");
     return CerebrumLux::UserIntent::Undefined;
@@ -131,138 +147,98 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     std::string reasoning_text = "";
     bool clarification_needed = false;
 
-    // Adım 1: Bağlama duyarlı, Bilgi Tabanından (KnowledgeBase) yanıt arama
+    // Adım 1: Bağlama duyarlı, Bilgi Tabanından (KnowledgeBase) yanıt arama (GELİŞTİRİLDİ)
     std::vector<CerebrumLux::Capsule> search_results;
-    if (!relevant_keywords.empty() && !kb.get_all_capsules().empty()) {
-        std::string search_query = relevant_keywords[0];
-        if (relevant_keywords.size() > 1) {
-            search_query += " " + relevant_keywords[1];
-        }
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de arama yapılıyor: " << search_query);
-        search_results = kb.semantic_search(search_query, 1);
-
-        if (!search_results.empty()) {
-            const CerebrumLux::Capsule& relevant_capsule = search_results[0];
-            generated_text = "Bilgi tabanımda '" + relevant_capsule.topic + "' konusunda bilgi buldum: " + relevant_capsule.plain_text_summary;
-            reasoning_text += "Yanıt, KnowledgeBase'deki '" + relevant_capsule.topic + "' konusundaki kapsülden üretildi (ID: " + relevant_capsule.id + "). ";
-            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den yanıt üretildi: " << generated_text);
-        }
+    std::string search_query_str;
+    if (!relevant_keywords.empty()) { // Kullanıcı girdisinden türetilen anahtar kelimeler varsa
+        search_query_str = relevant_keywords[0];
+        if (relevant_keywords.size() > 1) search_query_str += " " + relevant_keywords[1];
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de arama yapılıyor: " << search_query_str);
+        search_results = kb.semantic_search(search_query_str, 3); // En alakalı ilk 3 kapsülü çek
+    }
+    // Eğer anahtar kelime yoksa ancak niyet araştırma veya soru ise, daha genel bir arama yapabiliriz.
+    else if ((current_intent == CerebrumLux::UserIntent::Research || current_intent == CerebrumLux::UserIntent::Question) && !kb.get_all_capsules().empty()) {
+        // dynamic_sequence'den veya current_abstract_state'den ipuçları alabiliriz.
+        // Şimdilik daha genel bir arama yapalım.
+        search_results = kb.semantic_search("", 1); // Boş sorgu = en alakalı (genel olarak) kapsülü getirir.
+        search_query_str = "Genel bilgi araması";
     }
 
-    // Adım 2: Dinamik prompt oluşturma ve kullanma (Henüz harici LLM entegrasyonu yoksa mevcut mantığı zenginleştirir)
-    // Bu aşamada, üretilen dinamik prompt'u sadece loglamak veya kural tabanlı sistemin kararını etkilemek için kullanabiliriz.
-    // Gelecekte bir LLM entegrasyonunda bu prompt doğrudan LLM'e gönderilir.
-    std::string dynamic_prompt = generate_dynamic_prompt(current_intent, current_abstract_state, current_goal, sequence, "", search_results);
-    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "NaturalLanguageProcessor: Dinamik Olarak Üretilen Prompt: " << dynamic_prompt);
-
-
-    if (generated_text.empty()) { // Eğer KnowledgeBase'den yanıt bulunamazsa, kural tabanlı yanıt üret
+    if (!search_results.empty()) {
+        const CerebrumLux::Capsule& relevant_capsule = search_results[0];
+        generated_text = "Bilgi tabanımda '" + relevant_capsule.topic + "' konusunda bilgi buldum: " + relevant_capsule.plain_text_summary;
+        
+        // Eğer daha fazla ilgili kapsül varsa, bunları da gerekçeye ekle
+        if (search_results.size() > 1) {
+            generated_text += " Daha fazla ilgili bilgi için bakınız: ";
+            for (size_t i = 1; i < search_results.size(); ++i) {
+                generated_text += search_results[i].topic + (i == search_results.size() - 1 ? "." : ", ");
+            }
+        }
+        
+        reasoning_text += "Yanıt, KnowledgeBase'deki en alakalı kapsülden ('" + relevant_capsule.topic + "', ID: " + relevant_capsule.id + ") ve diğer ilgili kapsüllerden (" + std::to_string(search_results.size() -1) + " adet) türetildi. ";
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den yanıt üretildi: " << generated_text);
+    } else {
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de ilgili kapsül bulunamadı. Kural tabanlı yanıta dönülüyor.");
+        
         // Adım 2.1: Niyet ve duruma göre kural tabanlı yanıt üretimi
         generated_text = "Anladım. ";
+    
+        // Adım 2: Dinamik prompt oluşturma ve kullanma (Bu prompt'u doğrudan LLM'e göndermek yerine,
+        // şu anki kural tabanlı sistemin kararını zenginleştirmek için kullanıyoruz.)
+        std::string dynamic_prompt = generate_dynamic_prompt(current_intent, current_abstract_state, current_goal, sequence, search_query_str, search_results);
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "NaturalLanguageProcessor: Dinamik Olarak Üretilen Prompt: " << dynamic_prompt);
 
-        switch (current_intent) {
-            case CerebrumLux::UserIntent::Question:
-                generated_text += "Bu konuda ne öğrenmek istersiniz?";
-                reasoning_text += "Yanıt, kullanıcının 'Soru' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Command:
-                generated_text += "Komutunuzu işliyorum.";
-                reasoning_text += "Yanıt, kullanıcının 'Komut' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Greeting:
-                generated_text = "Merhaba! Size nasıl yardımcı olabilirim?";
-                reasoning_text += "Yanıt, 'Selamlama' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Farewell:
-                generated_text = "Güle güle! Görüşmek üzere.";
-                reasoning_text += "Yanıt, 'Veda' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::FastTyping:
-                generated_text = "Çok hızlı yazıyorsunuz! Harika bir üretkenlik.";
-                reasoning_text += "Yanıt, 'Hızlı Yazma' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Editing:
-                generated_text = "Düzenleme sürecinde misiniz? ";
-                reasoning_text += "Yanıt, 'Düzenleme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Programming:
-                generated_text = "Kodlama aktivitesi algılandı. ";
-                reasoning_text += "Yanıt, 'Programlama' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Gaming:
-                generated_text = "Oyun modundasınız. ";
-                reasoning_text += "Yanıt, 'Oyun' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::MediaConsumption:
-                generated_text = "Medya tüketimi yapıyorsunuz. ";
-                reasoning_text += "Yanıt, 'Medya Tüketimi' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::CreativeWork:
-                generated_text = "Yaratıcı bir çalışma yapıyorsunuz. ";
-                reasoning_text += "Yanıt, 'Yaratıcı Çalışma' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Research:
-                generated_text = "Araştırma yapıyor ve bilgi arıyorsunuz. ";
-                reasoning_text += "Yanıt, 'Araştırma' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Communication:
-                generated_text = "İletişim kurarken size eşlik ediyorum. ";
-                reasoning_text += "Yanıt, 'İletişim' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::FeedbackPositive:
-                generated_text = "Geri bildiriminiz için teşekkür ederim!";
-                reasoning_text += "Yanıt, 'Olumlu Geri Bildirim' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::FeedbackNegative:
-                generated_text = "Geri bildiriminiz önemli. Bu konuda nasıl yardımcı olabilirim?";
-                reasoning_text += "Yanıt, 'Olumsuz Geri Bildirim' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::RequestInformation:
-                generated_text = "Hangi bilgiyi arıyorsunuz?";
-                reasoning_text += "Yanıt, 'Bilgi İsteme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::ExpressEmotion:
-                generated_text += "Duygularınızı anlıyorum. ";
-                reasoning_text += "Yanıt, 'Duygu İfade Etme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Confirm:
-                generated_text = "Onaylandı. ";
-                reasoning_text += "Yanıt, 'Onaylama' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Deny:
-                generated_text = "Reddedildi. ";
-                reasoning_text += "Yanıt, 'Reddetme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Elaborate:
-                generated_text = "Daha fazla detay verebilir misiniz?";
-                reasoning_text += "Yanıt, 'Detaylandırma' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Clarify:
-                generated_text = "Lütfen açıklayınız. ";
-                reasoning_text += "Yanıt, 'Açıklama İsteme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::CorrectError:
-                generated_text = "Hatayı düzeltmeye çalışıyorum. ";
-                reasoning_text += "Yanıt, 'Hata Düzeltme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::InquireCapability:
-                generated_text = "Yeteneklerim hakkında bilgi mi almak istiyorsunuz? ";
-                reasoning_text += "Yanıt, 'Yetenek Sorgulama' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::ShowStatus:
-                generated_text = "Sistem durumunu kontrol ediyorum. ";
-                reasoning_text += "Yanıt, 'Durum Gösterme' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::ExplainConcept:
-                generated_text = "Kavramı açıklamaya çalışıyorum. ";
-                reasoning_text += "Yanıt, 'Kavram Açıklama' niyetine göre kural tabanlı olarak üretildi. ";
-                break;
-            case CerebrumLux::UserIntent::Undefined:
-            case CerebrumLux::UserIntent::Unknown:
-                generated_text += "Niyetinizi tam olarak anlayamadım.";
-                reasoning_text += "Yanıt, 'Tanımsız Niyet' durumuna göre kural tabanlı olarak üretildi. ";
-                clarification_needed = true; // Niyet belirsiz, açıklama gerekebilir
-                break;
+        // Eğer KnowledgeBase'de ilgili bilgi bulunamazsa veya LLM entegre değilse kural tabanlı yanıt üretmeye devam et.
+        // Kural tabanlı yanıtlarınızı, dynamic_prompt'tan gelen ipuçları ile zenginleştirebilirsiniz.
+        // Örneğin, dynamic_prompt'ta "2-3 farklı perspektiften değerlendirme" isteniyorsa,
+        // mevcut kural tabanlı yanıta bunları eklemeye çalışın.
+
+        // Mevcut kural tabanlı yanıt mantığı (zenginleştirme potansiyeli ile)
+        // Bu kısım, dynamic_prompt'u temel alarak daha akıllı hale getirilebilir.
+        // Şimdilik, niyet ve duruma göre mevcut yanıtları kullanıyoruz.
+
+        // Yanıtları daha spesifik hale getirmek için dynamic_prompt'taki anahtar kelimeleri kullanabiliriz.
+        // Örneğin, "AI optimizasyonları" gibi anahtar kelimeler varsa, bunlara özel yanıtlar oluşturabiliriz.
+        if (current_intent == CerebrumLux::UserIntent::Question && search_results.empty()) {
+             generated_text += "Bu konuda daha fazla bilgiye ihtiyacım var. Ne sormak istersiniz?";
+             reasoning_text += "Yanıt, KnowledgeBase'de ilgili bilgi bulunamadığı için 'Soru' niyetine göre genel kural tabanlı olarak üretildi. ";
+        } else if (current_intent == CerebrumLux::UserIntent::Research && search_results.empty()) {
+            generated_text += "Araştırma niyetinizi anladım. Hangi konuda araştırma yapmak istersiniz?";
+            reasoning_text += "Yanıt, KnowledgeBase'de ilgili bilgi bulunamadığı için 'Araştırma' niyetine göre genel kural tabanlı olarak üretildi. ";
+        } else if (generated_text == "Anladım. ") { // Hala çok genel ise
+            switch (current_intent) {
+                case CerebrumLux::UserIntent::Question: generated_text += "Bu konuda ne öğrenmek istersiniz?"; break;
+                case CerebrumLux::UserIntent::Command: generated_text += "Komutunuzu işliyorum."; break;
+                case CerebrumLux::UserIntent::Greeting: generated_text = "Merhaba! Size nasıl yardımcı olabilirim?"; break;
+                case CerebrumLux::UserIntent::Farewell: generated_text = "Güle güle! Görüşmek üzere."; break;
+                case CerebrumLux::UserIntent::FastTyping: generated_text = "Çok hızlı yazıyorsunuz! Harika bir üretkenlik."; break;
+                case CerebrumLux::UserIntent::Editing: generated_text = "Düzenleme sürecinde misiniz? "; break;
+                case CerebrumLux::UserIntent::Programming: generated_text = "Kodlama aktivitesi algılandı. "; break;
+                case CerebrumLux::UserIntent::Gaming: generated_text = "Oyun modundasınız. "; break;
+                case CerebrumLux::UserIntent::MediaConsumption: generated_text = "Medya tüketimi yapıyorsunuz. "; break;
+                case CerebrumLux::UserIntent::CreativeWork: generated_text = "Yaratıcı bir çalışma yapıyorsunuz. "; break;
+                case CerebrumLux::UserIntent::Research: generated_text = "Araştırma yapıyor ve bilgi arıyorsunuz. "; break;
+                case CerebrumLux::UserIntent::Communication: generated_text = "İletişim kurarken size eşlik ediyorum. "; break;
+                case CerebrumLux::UserIntent::FeedbackPositive: generated_text = "Geri bildiriminiz için teşekkür ederim!"; break;
+                case CerebrumLux::UserIntent::FeedbackNegative: generated_text = "Geri bildiriminiz önemli. Bu konuda nasıl yardımcı olabilirim?"; break;
+                case CerebrumLux::UserIntent::RequestInformation: generated_text = "Hangi bilgiyi arıyorsunuz?"; break;
+                case CerebrumLux::UserIntent::ExpressEmotion: generated_text += "Duygularınızı anlıyorum. "; break;
+                case CerebrumLux::UserIntent::Confirm: generated_text = "Onaylandı. "; break;
+                case CerebrumLux::UserIntent::Deny: generated_text = "Reddedildi. "; break;
+                case CerebrumLux::UserIntent::Elaborate: generated_text = "Daha fazla detay verebilir misiniz?"; break;
+                case CerebrumLux::UserIntent::Clarify: generated_text = "Lütfen açıklayınız. "; break;
+                case CerebrumLux::UserIntent::CorrectError: generated_text = "Hatayı düzeltmeye çalışıyorum. "; break;
+                case CerebrumLux::UserIntent::InquireCapability: generated_text = "Yeteneklerim hakkında bilgi mi almak istiyorsunuz? "; break;
+                case CerebrumLux::UserIntent::ShowStatus: generated_text = "Sistem durumunu kontrol ediyorum. "; break;
+                case CerebrumLux::UserIntent::ExplainConcept: generated_text = "Kavramı açıklamaya çalışıyorum. "; break;
+                case CerebrumLux::UserIntent::Undefined:
+                case CerebrumLux::UserIntent::Unknown:
+                    generated_text += "Niyetinizi tam olarak anlayamadım.";
+                    clarification_needed = true;
+                    break;
+            }
+            reasoning_text += "Yanıt, KnowledgeBase'de ilgili bilgi bulunamadığı için niyetinize göre kural tabanlı olarak üretildi. ";
         }
 
         // Durumlara göre ek bağlamsal yanıtlar (üstteki cevabı tamamlar)
@@ -295,7 +271,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
             reasoning_text += "Güvenlik sağlama hedefi göz önünde bulunduruldu. ";
         } else if (current_goal == CerebrumLux::AIGoal::MaximizeLearning) {
             generated_text += " Öğrenme kapasitemi artırmaya çalışıyorum.";
-            reasoning_text += "Öğrenme maksimizasyonu hedefi göz önünde bulunduruldu. ";
+            reasoning_text += "Öğrenme maksimizasyonu hedefi göz önünde bulunduruldu. "; // Düzeltildi
         }
     }
 
@@ -320,6 +296,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     return response_obj;
 }
 
+// And the rest of the file
 std::string NaturalLanguageProcessor::generate_dynamic_prompt(
     CerebrumLux::UserIntent intent,
     CerebrumLux::AbstractState state,
