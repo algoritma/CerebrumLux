@@ -30,7 +30,7 @@ struct KnowledgeCapsuleDisplayData {
     QString fullContent;
     QString cryptofigBlob;
     float confidence;
-    QString code_file_path; // ✅ Birleştirildi ve tek bir alan olarak korundu
+    QString code_file_path; 
 };
 
 class KnowledgeBasePanel : public QWidget
@@ -39,7 +39,7 @@ class KnowledgeBasePanel : public QWidget
 public:
     explicit KnowledgeBasePanel(LearningModule& learningModuleRef, QWidget *parent = nullptr);
     virtual ~KnowledgeBasePanel();
-
+    
     void updateKnowledgeBaseContent(); // Public slot olarak kalıyor
 
 signals:
@@ -50,7 +50,7 @@ private slots:
     void onSearchTextChanged(const QString& text);
     void onClearSearchClicked();
     // ✅ DEĞİŞTİRİLDİ: const QString& parametresi alacak şekilde
-    void onTopicFilterChanged(const QString& topic);
+    void onTopicFilterChanged(const QString& topic); // Konu filtresi
     // ✅ YENİ SLOT: CodeDevelopment filtre kontrolü için (const QString& parametresi alacak şekilde)
     void onSpecialFilterChanged(const QString& filter);
     void onStartDateChanged(const QDate& date);
@@ -78,7 +78,6 @@ private:
 
     std::vector<Capsule> currentDisplayedCapsules;
     std::map<QString, KnowledgeCapsuleDisplayData> displayedCapsuleDetails;
-    //std::string selectedCapsuleId_; // Seçili kapsül ID'si std::string olarak tutulur
 
     void setupUi();
     void displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data);
