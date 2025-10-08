@@ -27,6 +27,7 @@ struct Capsule {
     std::string signature_base64;       // Ed25519 imzası Base64
     std::string encryption_iv_base64;   // AES-GCM IV'si Base64
     std::string gcm_tag_base64;         // YENİ: AES-GCM tag'ı Base64
+    std::string code_file_path;         // Düzeltme: İlişkili kod dosyasının yolu (eğer bir kod önerisiyse)
 
     // NLOHMANN_DEFINE_TYPE_INTRUSIVE makrosu std::chrono::time_point'ı doğrudan desteklemez.
     // Manuel to_json ve from_json fonksiyonları tanımlamalıyız.
@@ -53,6 +54,7 @@ struct Capsule {
         j["signature_base64"] = c.signature_base64;
         j["encryption_iv_base64"] = c.encryption_iv_base64;
         j["gcm_tag_base64"] = c.gcm_tag_base64;
+        j["code_file_path"] = c.code_file_path; //EKLENDİ: code_file_path JSON'a yazılıyor
     }
 
     // from_json için kural
@@ -78,6 +80,7 @@ struct Capsule {
         j.at("signature_base64").get_to(c.signature_base64);
         j.at("encryption_iv_base64").get_to(c.encryption_iv_base64);
         j.at("gcm_tag_base64").get_to(c.gcm_tag_base64);
+        if (j.contains("code_file_path")) j.at("code_file_path").get_to(c.code_file_path); //EKLENDİ: code_file_path JSON'dan okunuyor
     }
 };
 

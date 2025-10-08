@@ -257,7 +257,7 @@ CerebrumLux::Capsule create_signed_encrypted_capsule_helper(CerebrumLux::Learnin
 // === TEST ANA FONKSİYONU ===
 int main() {
     // Logger'ı başlat
-    CerebrumLux::Logger::get_instance().init(CerebrumLux::LogLevel::DEBUG, "test_response_engine_log.txt", "TEST_ENGINE");
+    CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::DEBUG, "test_response_engine_log.txt", "TEST_ENGINE");
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test Response Engine başlatılıyor.");
 
     // Dummy bağımlılıkları oluştur

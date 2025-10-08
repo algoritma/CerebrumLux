@@ -11,14 +11,15 @@
 #include <QDateEdit>
 #include <map>
 #include <vector>
+#include <set> // QSet yerine std::set kullanıldı
 
 #include "../../core/logger.h"
-#include "../../learning/KnowledgeBase.h"
-#include "../../learning/Capsule.h"
+#include "../../learning/KnowledgeBase.h" // Doğru yol
+#include "../../learning/Capsule.h"     // Doğru yol
 #include "../../learning/LearningModule.h"
 
 
-namespace CerebrumLux {
+namespace CerebrumLux { // Namespace CerebrumLux olarak bırakıldı
 
 // Kapsül detaylarını görüntülemek için yardımcı bir yapı
 struct KnowledgeCapsuleDisplayData {
@@ -29,6 +30,7 @@ struct KnowledgeCapsuleDisplayData {
     QString fullContent;
     QString cryptofigBlob;
     float confidence;
+    QString code_file_path; // ✅ Birleştirildi ve tek bir alan olarak korundu
 };
 
 class KnowledgeBasePanel : public QWidget
@@ -38,7 +40,7 @@ public:
     explicit KnowledgeBasePanel(LearningModule& learningModuleRef, QWidget *parent = nullptr);
     virtual ~KnowledgeBasePanel();
 
-    void updateKnowledgeBaseContent();
+    void updateKnowledgeBaseContent(); // Public slot olarak kalıyor
 
 signals:
     // Sinyaller
@@ -47,11 +49,14 @@ private slots:
     void onSelectedCapsuleChanged(QListWidgetItem* current, QListWidgetItem* previous);
     void onSearchTextChanged(const QString& text);
     void onClearSearchClicked();
+    // ✅ DEĞİŞTİRİLDİ: const QString& parametresi alacak şekilde
     void onTopicFilterChanged(const QString& topic);
+    // ✅ YENİ SLOT: CodeDevelopment filtre kontrolü için (const QString& parametresi alacak şekilde)
+    void onSpecialFilterChanged(const QString& filter);
     void onStartDateChanged(const QDate& date);
     void onEndDateChanged(const QDate& date);
 
-    // YENİ SLOTLAR: Geri bildirim butonları için
+    // Geri bildirim butonları
     void onAcceptSuggestionClicked();
     void onRejectSuggestionClicked();
 
@@ -63,22 +68,27 @@ private:
     QLineEdit *searchLineEdit;
     QPushButton *clearSearchButton;
     QComboBox *topicFilterComboBox;
+    QComboBox *specialFilterComboBox;   // ✅ Yeni kontrol
     QDateEdit *startDateEdit;
     QDateEdit *endDateEdit;
 
-    // YENİ UI BİLEŞENLERİ: Geri bildirim butonları
+    // Geri bildirim butonları
     QPushButton *acceptSuggestionButton;
     QPushButton *rejectSuggestionButton;
 
     std::vector<Capsule> currentDisplayedCapsules;
     std::map<QString, KnowledgeCapsuleDisplayData> displayedCapsuleDetails;
-    std::string selectedCapsuleId_;
+    //std::string selectedCapsuleId_; // Seçili kapsül ID'si std::string olarak tutulur
 
     void setupUi();
     void displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data);
-    void filterAndDisplayCapsules(const QString& filterText = QString(), const QString& topicFilter = QString(), const QDate& startDate = QDate(), const QDate& endDate = QDate());
+    // ✅ DEĞİŞTİRİLDİ: specialFilter parametresi eklendi ve varsayılan değeri var
+    void filterAndDisplayCapsules(const QString& filterText = QString(),
+                                  const QString& topicFilter = QString(),
+                                  const QDate& startDate = QDate(),
+                                  const QDate& endDate = QDate(),
+                                  const QString& specialFilter = "Tümü"); // Varsayılan değeri eklendi
 
-    // YENİ METOT: Geri bildirim butonlarının durumunu günceller
     void updateSuggestionFeedbackButtons(const QString& selectedCapsuleId);
 
 };

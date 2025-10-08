@@ -2,6 +2,7 @@
 #include "../core/logger.h"
 #include "../core/utils.h" // action_to_string, goal_to_string, intent_to_string için
 #include "../core/enums.h" // AIAction için
+#include "../external/nlohmann/json.hpp" // JSON için
 
 namespace CerebrumLux {
 
@@ -22,8 +23,20 @@ std::vector<ActionPlanStep> Planner::create_action_plan(UserIntent current_inten
 
     std::vector<ActionPlanStep> plan;
 
-    // İçgörülerden potansiyel eylemleri al
-    std::vector<AIInsight> insights = insights_engine.generate_insights(sequence);
+    // İçgörülerden potansiyel eylemleri al (JSON string olarak alıp ayrıştır)
+    std::string insights_json_str = insights_engine.generate_insights(sequence);
+    std::vector<AIInsight> insights;
+    if (!insights_json_str.empty()) {
+        try {
+            nlohmann::json insights_json = nlohmann::json::parse(insights_json_str);
+            insights = insights_json.get<std::vector<AIInsight>>();
+        } catch (const nlohmann::json::exception& e) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "Planner: Insights JSON ayrıştırma hatası: " << e.what());
+        } catch (const std::exception& e) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "Planner: Insights JSON'dan dönüştürme hatası: " << e.what());
+        }
+    }
+    
     for (const auto& insight : insights) {
         // İçgörüden gelen önerilen eylemleri plana ekle
         plan.push_back({insight.type == InsightType::LearningOpportunity ? AIAction::SuggestSelfImprovement : AIAction::None,

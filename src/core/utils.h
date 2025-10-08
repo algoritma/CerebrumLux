@@ -21,7 +21,8 @@ public:
     // Rastgele sayı üretim metotları
     int get_int(int min, int max);
     float get_float(float min, float max);
-    
+    float get_gaussian_float(float mean, float stddev); // ✅ YENİ: Gaussian dağılımından rastgele float
+
     // std::mt19937 generator'a erişim için public metot (GERİ EKLENDİ)
     std::mt19937& get_generator(); 
 
@@ -37,6 +38,7 @@ private:
 // === Zamanla İlgili Yardımcı Fonksiyonlar ===
 std::string get_current_timestamp_str();
 long long get_current_timestamp_us();
+std::string generate_unique_id(); // ✅ YENİ: Benzersiz ID üretme fonksiyonu
 
 // === Hash Fonksiyonları ===
 unsigned short hash_string(const std::string& s);

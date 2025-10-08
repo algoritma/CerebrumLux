@@ -143,14 +143,34 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
 
         // YENİ KOD: CodeDevelopmentSuggestion için özel topic ataması (GELİŞTİRİLMİŞ TEŞHİS LOGLARI)
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule]   Kontrol ediliyor: insight.type (" << static_cast<int>(insight.type) << ") == CerebrumLux::InsightType::CodeDevelopmentSuggestion (" << static_cast<int>(CerebrumLux::InsightType::CodeDevelopmentSuggestion) << ")");
-        if (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion) {
+        // NOT: Projede zaman zaman farklı derleme birimlerinin farklı header sürümleriyle (stale .o) derlenmesinden
+        // dolayı enum değerlerinde uyuşmazlık görülebiliyor. Bu durumda CodeDevelopmentSuggestion'ı kaçırmamak için
+        // güvenli bir fallback mantığı ekliyoruz:
+        //  - Önce enum ile kontrol et.
+        //  - Eşleşme yoksa, insight.id'in "CodeDev_" ile başlaması veya context'in "Kod"/"Code" içermesi durumunda da kabul et.
+        bool is_code_dev = (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion);
+        if (!is_code_dev) {
+            // Fallback 1: ID "CodeDev" ile başlıyorsa (alt çizgi olsun olmasın)
+            if (!insight.id.empty() && insight.id.rfind("CodeDev", 0) == 0) {
+                is_code_dev = true;
+                LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] Fallback: CodeDevelopment tespiti ID prefix'e gore yapildi. ID: " << insight.id);
+            }
+            // Fallback 2: context veya recommended_action string'inde "Code" / "Kod" / "Refactor" gibi anahtar kelimeler varsa
+            else if (insight.context.find("Kod") != std::string::npos ||
+                     insight.context.find("Code") != std::string::npos ||
+                     insight.recommended_action.find("Code") != std::string::npos ||
+                     insight.recommended_action.find("Refactor") != std::string::npos) {
+                is_code_dev = true;
+                LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] Fallback: CodeDevelopment tespiti string iceriklere gore yapildi. Context: " << insight.context << ", Action: " << insight.recommended_action << ", ID: " << insight.id);
+            }
+        }
+        if (is_code_dev) {
             insight_capsule.topic = "CodeDevelopment"; // Özel olarak CodeDevelopment topic'i ata
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] CodeDevelopmentSuggestion için topic 'CodeDevelopment' olarak ayarlandı. ID: " << insight.id);
         } else {
-            // Eğer Type=7 değilse, ve topic henüz CodeDevelopment değilse, default olarak "AI Insight" kullanılıyordu.
-            // Bu else bloğunu daha açık hale getirelim.
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] InsightType CodeDevelopmentSuggestion değil (" << static_cast<int>(insight.type) << "). Varsayılan topic ('AI Insight') kullanılıyor.");
         }
+
         if (insight.context == "Sistem Genel Performans Metriği") { 
             size_t pos = insight.observation.find(":");
             if (pos != std::string::npos && pos + 1 < insight.observation.length()) {
@@ -173,6 +193,7 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
         insight_capsule.embedding = compute_embedding(insight_capsule.content);
         insight_capsule.cryptofig_blob_base64 = cryptofig_encode(insight_capsule.embedding);
+        insight_capsule.code_file_path = insight.code_file_path; //EKLENDİ: AIInsight'tan code_file_path Capsule'a aktarılıyor
 
         knowledgeBase.add_capsule(insight_capsule);
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü EKLENDİ. ID: " << insight_capsule.id << ", Topic: " << insight_capsule.topic << ", Özet: " << insight_capsule.plain_text_summary.substr(0, std::min((size_t)50, insight_capsule.plain_text_summary.length())) << "..." << ", Confidence: " << insight_capsule.confidence);

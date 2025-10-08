@@ -236,7 +236,7 @@ public:
 // === MAIN FONKSİYONU ===
 int main() {
     // Logger'ı başlat
-    CerebrumLux::Logger::get_instance().init(CerebrumLux::LogLevel::INFO, "nlp_trainer_log.txt", "NLP_TRAINER");
+    CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::INFO, "nlp_trainer_log.txt", "NLP_TRAINER");
 
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NLP Online Trainer başlatılıyor.");
 

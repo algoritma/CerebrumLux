@@ -2,20 +2,22 @@
 #include <iostream>
 #include <chrono>
 #include <iomanip> // std::put_time için
-#include <ctime>   // std::localtime, std::gmtime için
+#include <ctime>   // std::localtime için
 #include <algorithm> // std::find_if için
+#include <QThread> // QThread::currentThreadId için
+#include <QDateTime> // QDateTime için
 
 namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
 // Singleton örneğinin başlatılması
-Logger& Logger::get_instance() {
-    static Logger instance;
+Logger& Logger::getInstance() { // get_instance yerine getInstance
+    static Logger instance; // Tek bir örnek oluştur
     return instance;
 }
 
 // Kurucu (private)
 Logger::Logger()
-    : level_(LogLevel::INFO), m_guiLogTextEdit(nullptr), log_counter_(0), log_source_("SYSTEM") {}
+    : QObject(nullptr), level_(LogLevel::INFO), log_counter_(0), log_source_("SYSTEM") {} // QObject constructor'ı eklendi, m_guiLogTextEdit kaldırıldı
 
 // Yıkıcı (private)
 Logger::~Logger() {
@@ -48,84 +50,55 @@ void Logger::init(LogLevel level, const std::string& log_file_path, const std::s
     }
 }
 
-// Mesajı loglar
 void Logger::log(LogLevel level, const std::string& message, const char* file, int line) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (level < level_) {
+    if (!shouldLog(level)) {
         return;
     }
 
     std::string formatted_message = format_log_message(level, message, file, line);
 
-    if (m_guiLogTextEdit) {
-        // Doğrudan QTextEdit'e append ediyoruz. Bu, LogPanel'in kendi appendLog'unu dolaylı olarak çağırır
-        // ve LogPanel'in formatlama mantığı (renkler vb.) bu mesajı alıp işleyecektir.
-        m_guiLogTextEdit->append(QString::fromStdString(formatted_message)); // YORUM SATIRI KALDIRILDI
-    } else {
-        log_buffer_.push_back(formatted_message);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (log_file_.is_open()) {
+            log_file_ << formatted_message << std::endl;
+            log_file_.flush();
+        } else {
+            std::cout << formatted_message << std::endl;
+        }
     }
 
-    if (log_file_.is_open()) {
-        log_file_ << formatted_message << std::endl;
-        log_file_.flush();
-    } else {
-        std::cout << formatted_message << std::endl;
-    }
+    // GUI'ye sinyal gönder
+    emit messageLogged(level, QString::fromStdString(message), QString(file), line);
 }
 
 void Logger::log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (level < level_) {
+    if (!shouldLog(level)) {
         return;
     }
 
     std::string formatted_message = format_log_message(level, message, file, line);
 
-    if (m_guiLogTextEdit) {
-        // Doğrudan QTextEdit'e append ediyoruz.
-        m_guiLogTextEdit->append(QString::fromStdString(formatted_message)); // YORUM SATIRI KALDIRILDI
-    } else {
-        log_buffer_.push_back(formatted_message);
-    }
-    
-    if (log_file_.is_open()) {
-        log_file_ << formatted_message << std::endl;
-        log_file_.flush();
-    } else {
-        std::cerr << formatted_message << std::endl;
-    }
-}
-
-
-void Logger::set_log_panel_text_edit(QTextEdit* text_edit) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    m_guiLogTextEdit = text_edit;
-    flush_buffered_logs();
-}
-
-void Logger::flush_buffered_logs() {
-    if (m_guiLogTextEdit) {
-        for (const auto& msg : log_buffer_) {
-            m_guiLogTextEdit->append(QString::fromStdString(msg));
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (log_file_.is_open()) {
+            log_file_ << formatted_message << std::endl;
+            log_file_.flush();
+        } else {
+            std::cerr << formatted_message << std::endl;
         }
-        log_buffer_.clear();
     }
+
+    // GUI'ye sinyal gönder
+    emit messageLogged(level, QString::fromStdString(message), QString(file), line);
 }
 
 LogLevel Logger::get_level() const {
     return level_;
 }
 
-
 std::string Logger::format_log_message(LogLevel level, const std::string& message, const char* file, int line) {
-    auto now = std::chrono::system_clock::now();
-    auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-    std::time_t timer = std::chrono::system_clock::to_time_t(now);
-    std::tm bt = *std::localtime(&timer);
-
     std::stringstream ss;
-    ss << std::put_time(&bt, "%Y-%m-%d %H:%M:%S");
-    ss << '.' << std::setfill('0') << std::setw(3) << milli.count();
+    ss << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz").toStdString();
     
     ss << " [" << std::setw(3) << ++log_counter_ << "] ";
     ss << "[" << log_source_ << ":" << level_to_string(level) << "] ";

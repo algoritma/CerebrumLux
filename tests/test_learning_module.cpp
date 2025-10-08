@@ -22,7 +22,7 @@
 
 int main() {
     // Logger'ı test ortamı için başlat
-    CerebrumLux::Logger::get_instance().init(CerebrumLux::LogLevel::DEBUG, "test_learning_module.log", "TEST_LM");
+    CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::DEBUG, "test_learning_module.log", "TEST_LM");
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "--- Starting LearningModule Test Scenarios ---");
 
     // Gerekli bağımlılıkları oluştur

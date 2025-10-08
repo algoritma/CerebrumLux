@@ -115,11 +115,7 @@ SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel
 CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
 KnowledgeBasePanel* MainWindow::getKnowledgeBasePanel() const { return knowledgeBasePanel; }
 
-void MainWindow::appendLog(CerebrumLux::LogLevel level, const QString& message) {
-    if (logPanel) {
-        logPanel->appendLog(level, message);
-    }
-}
+ 
 
 void MainWindow::updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data) {
     if (graphPanel) {

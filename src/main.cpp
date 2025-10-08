@@ -44,25 +44,7 @@
 void customQtMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     std::string source_file = context.file ? context.file : "unknown";
-    int source_line = context.line;
-
-    switch (type) {
-    case QtDebugMsg:
-        CerebrumLux::Logger::get_instance().log(CerebrumLux::LogLevel::DEBUG, msg.toStdString(), source_file.c_str(), source_line);
-        break;
-    case QtInfoMsg:
-        CerebrumLux::Logger::get_instance().log(CerebrumLux::LogLevel::INFO, msg.toStdString(), source_file.c_str(), source_line);
-        break;
-    case QtWarningMsg:
-        CerebrumLux::Logger::get_instance().log(CerebrumLux::LogLevel::WARNING, msg.toStdString(), source_file.c_str(), source_line);
-        break;
-    case QtCriticalMsg:
-        CerebrumLux::Logger::get_instance().log_error_to_cerr(CerebrumLux::LogLevel::ERR_CRITICAL, msg.toStdString(), source_file.c_str(), source_line);
-        break;
-    case QtFatalMsg:
-        CerebrumLux::Logger::get_instance().log_error_to_cerr(CerebrumLux::LogLevel::ERR_CRITICAL, msg.toStdString(), source_file.c_str(), source_line);
-        abort();
-    }
+ 
 }
 
 
@@ -81,9 +63,10 @@ int main(int argc, char *argv[])
     qRegisterMetaType<CerebrumLux::IngestResult>("CerebrumLux::IngestResult");
     qRegisterMetaType<CerebrumLux::IngestReport>("CerebrumLux::IngestReport");
 
-     // Logger başlat - Log seviyesini DEBUG olarak ayarlıyoruz.
-    CerebrumLux::Logger::get_instance().init(CerebrumLux::LogLevel::DEBUG, "cerebrum_lux_gui_log.txt", "MAIN_APP");
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Application starting up. Standard streams (cout/cerr) will output to console if no FileSink or GuiSink is active.");
+    // Logger başlat ve yapılandır
+    CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::DEBUG, "cerebrum_lux_gui_log.txt", "MAIN_APP");
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Application starting up. Standard streams (cout/cerr) will output to console.");
+
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] QApplication initialized. Logger ready (buffered)." << std::endl;
     early_diagnostic_log.flush();
@@ -177,20 +160,10 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] MainWindow shown." << std::endl;
     early_diagnostic_log.flush();
     
-    QTextEdit* guiLogTextEdit = nullptr;
-    if (window.getLogPanel()) {
-        guiLogTextEdit = window.getLogPanel()->getLogTextEdit();
-    }
-
-    if (guiLogTextEdit) {
-        CerebrumLux::Logger::get_instance().set_log_panel_text_edit(guiLogTextEdit);
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Logger: Direct GUI QTextEdit link established. Buffered logs flushed to GUI.");
-        early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Logger linked directly to GUI QTextEdit." << std::endl;
-
-    } else {
-        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "ERROR: GUI LogPanel's QTextEdit could not be found for direct linking. Logs will ONLY go to file and console.");
-        early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] ERROR: GUI LogPanel's QTextEdit not found for direct linking." << std::endl;
-    }
+    // LogPanel'in kendisi Logger'a bağlanacağı için, burada set_log_panel_text_edit gibi ekstra bir işlem yapmaya gerek yok.
+    // LogPanel constructor'ı içindeki `connect` çağrısı yeterlidir.
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "GUI LogPanel will connect to Logger signals for display."); // Yeni log
+    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] GUI LogPanel setup for Logger signals." << std::endl;
     early_diagnostic_log.flush();
 
     // --- LearningModule::ingest_envelope Test Senaryoları bloğu hala yorum satırında ---

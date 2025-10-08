@@ -34,6 +34,12 @@ float SafeRNG::get_float(float min, float max) {
     return dist(generator);
 }
 
+// ✅ YENİ: Gaussian dağılımından rastgele float üretme
+float SafeRNG::get_gaussian_float(float mean, float stddev) {
+    std::normal_distribution<float> dist(mean, stddev);
+    return dist(generator);
+}
+
 // === Zamanla İlgili Yardımcı Fonksiyonlar ===
 std::string get_current_timestamp_str() {
     auto now = std::chrono::system_clock::now();
@@ -58,6 +64,12 @@ long long get_current_timestamp_us() {
     return std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()
     ).count();
+}
+
+// ✅ YENİ: Benzersiz ID üretme fonksiyonu
+std::string generate_unique_id() {
+    // Unix epoch'tan itibaren mikrosaniye cinsinden zaman damgası + küçük bir rastgele sayı
+    return std::to_string(get_current_timestamp_us()) + "_" + std::to_string(SafeRNG::get_instance().get_int(1000, 9999));
 }
 
 // === Hash Fonksiyonları ===

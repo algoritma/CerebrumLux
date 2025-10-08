@@ -39,8 +39,7 @@ public:
     CapsuleTransferPanel* getCapsuleTransferPanel() const;
     KnowledgeBasePanel* getKnowledgeBasePanel() const;
 
-public slots:
-    void appendLog(CerebrumLux::LogLevel level, const QString& message);
+ 
     void updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data);
     void updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data);
     void onSimulationCommandEntered(const QString& command);

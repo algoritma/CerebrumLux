@@ -4,7 +4,8 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QRegularExpression>
-#include <QLabel> // QLabel'in tam tanımı için eklendi
+#include <QLabel>
+#include <QSet> // uniqueTopics için
 #include "../../core/logger.h"
 #include "../../core/utils.h"
 
@@ -29,7 +30,7 @@ void KnowledgeBasePanel::setupUi() {
 
     mainLayout->addWidget(new QLabel("KnowledgeBase İçeriği:", this));
 
-    // Arama kutusu ve temizle butonu
+    // 🔍 Arama kutusu
     QHBoxLayout *searchLayout = new QHBoxLayout();
     searchLineEdit = new QLineEdit(this);
     searchLineEdit->setPlaceholderText("Kapsüllerde ara (ID, Konu, Özet)...");
@@ -42,37 +43,40 @@ void KnowledgeBasePanel::setupUi() {
     searchLayout->addWidget(clearSearchButton);
     mainLayout->addLayout(searchLayout);
 
-    // YENİ KOD: Filtreleme kontrolleri
+    // 📂 Filtreleme kontrolleri
     QHBoxLayout *filterLayout = new QHBoxLayout();
 
     filterLayout->addWidget(new QLabel("Konu:", this));
     topicFilterComboBox = new QComboBox(this);
-    topicFilterComboBox->addItem("Tümü"); // Tüm konuları göster seçeneği
+    topicFilterComboBox->addItem("Tümü");
     connect(topicFilterComboBox, &QComboBox::currentTextChanged, this, &CerebrumLux::KnowledgeBasePanel::onTopicFilterChanged);
     filterLayout->addWidget(topicFilterComboBox);
 
+    // ✅ Yeni CodeDev filtre
+    filterLayout->addWidget(new QLabel("Özel Filtre:", this));
+    specialFilterComboBox = new QComboBox(this);
+    specialFilterComboBox->addItem("Tümü");
+    specialFilterComboBox->addItem("Sadece Code Development");
+    connect(specialFilterComboBox, &QComboBox::currentTextChanged, this, &CerebrumLux::KnowledgeBasePanel::onSpecialFilterChanged);
+    filterLayout->addWidget(specialFilterComboBox);
+
     filterLayout->addWidget(new QLabel("Başlangıç Tarihi:", this));
-    // DÜZELTME: Daha geniş bir varsayılan tarih aralığı
-    startDateEdit = new QDateEdit(QDate(2000, 1, 1), this); // Çok eski bir başlangıç tarihi
+    startDateEdit = new QDateEdit(QDate(2000, 1, 1), this);
     startDateEdit->setCalendarPopup(true);
     connect(startDateEdit, &QDateEdit::dateChanged, this, &CerebrumLux::KnowledgeBasePanel::onStartDateChanged);
     filterLayout->addWidget(startDateEdit);
 
     filterLayout->addWidget(new QLabel("Bitiş Tarihi:", this));
-    // DÜZELTME: Gelecekteki bir tarihi varsayılan bitiş tarihi yapalım
     endDateEdit = new QDateEdit(QDate::currentDate().addYears(1), this); // Bugün + 1 yıl
     endDateEdit->setCalendarPopup(true);
     connect(endDateEdit, &QDateEdit::dateChanged, this, &CerebrumLux::KnowledgeBasePanel::onEndDateChanged);
     filterLayout->addWidget(endDateEdit);
 
     filterLayout->addStretch();
-
     mainLayout->addLayout(filterLayout);
 
+    // 🔗 Splitter: Liste + Detay
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
-    splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 2);
-
     capsuleListWidget = new QListWidget(this);
     capsuleListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     connect(capsuleListWidget, &QListWidget::currentItemChanged, this, &CerebrumLux::KnowledgeBasePanel::onSelectedCapsuleChanged);
@@ -82,7 +86,7 @@ void KnowledgeBasePanel::setupUi() {
     capsuleDetailDisplay->setReadOnly(true);
     splitter->addWidget(capsuleDetailDisplay);
 
-    // YENİ KOD: Geri bildirim butonları
+    // 👍👎 Geri bildirim butonları
     QHBoxLayout *feedbackLayout = new QHBoxLayout();
     acceptSuggestionButton = new QPushButton("Öneriyi Kabul Et", this);
     rejectSuggestionButton = new QPushButton("Öneriyi Reddet", this);
@@ -92,13 +96,10 @@ void KnowledgeBasePanel::setupUi() {
 
     connect(acceptSuggestionButton, &QPushButton::clicked, this, &CerebrumLux::KnowledgeBasePanel::onAcceptSuggestionClicked);
     connect(rejectSuggestionButton, &QPushButton::clicked, this, &CerebrumLux::KnowledgeBasePanel::onRejectSuggestionClicked);
-    // Başlangıçta butonları pasif yap
-    updateSuggestionFeedbackButtons("");
+    updateSuggestionFeedbackButtons(""); // Başlangıçta butonları pasif yap
 
     mainLayout->addWidget(splitter);
-
     mainLayout->addStretch(1);
-
     setLayout(mainLayout);
 }
 
@@ -111,9 +112,13 @@ void KnowledgeBasePanel::updateKnowledgeBaseContent() {
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Mevcut secili kapsul ID: " << selectedCapsuleId.toStdString());
     }
 
-    currentDisplayedCapsules = learningModule.getKnowledgeBase().get_all_capsules(); // Tüm kapsülleri al
+    currentDisplayedCapsules = learningModule.getKnowledgeBase().get_all_capsules(); // Tüm kapsülleri al (Kapsül sayisi logu kaldirildi, cünkü amacina ulasti)
 
-    // YENİ KOD: Konu filtreleme ComboBox'ını doldur ve varsayılan değerleri ayarla
+    // Mevcut seçili konuyu kaydet
+    QString currentTopicSelection = topicFilterComboBox->currentText();
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Mevcut secili konu: " << currentTopicSelection.toStdString());
+
+    // Konu filtrelerini yeniden doldur
     QSet<QString> uniqueTopics;
     for (const auto& capsule : currentDisplayedCapsules) {
         uniqueTopics.insert(QString::fromStdString(capsule.topic));
@@ -124,10 +129,24 @@ void KnowledgeBasePanel::updateKnowledgeBaseContent() {
     for (const QString& topic : uniqueTopics) {
         topicFilterComboBox->addItem(topic);
     }
+
+    // Önceden seçili konuyu geri yükle, yoksa "Tümü"nü seç
+    int index = topicFilterComboBox->findText(currentTopicSelection);
+    if (index != -1) {
+        topicFilterComboBox->setCurrentIndex(index);
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Onceki konu secimi geri yuklendi: " << currentTopicSelection.toStdString());
+    } else {
+        topicFilterComboBox->setCurrentText("Tümü");
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Onceki konu secimi listede bulunamadi, 'Tumu' secildi.");
+    }
+
     topicFilterComboBox->blockSignals(false); // Sinyalleri tekrar etkinleştir
 
     // Mevcut filtrelerle listeyi yeniden doldur
-    filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), startDateEdit->date(), endDateEdit->date());
+    filterAndDisplayCapsules(searchLineEdit->text(),
+    topicFilterComboBox->currentText(),
+    startDateEdit->date(), endDateEdit->date(),
+    specialFilterComboBox->currentText()); // Yeni filtre parametresi eklendi
 
     // Seçimi geri yükle
     if (!selectedCapsuleId.isEmpty()) {
@@ -157,96 +176,156 @@ void KnowledgeBasePanel::onSelectedCapsuleChanged(QListWidgetItem* current, QLis
     Q_UNUSED(previous);
     if (!current) {
         capsuleDetailDisplay->clear();
+        updateSuggestionFeedbackButtons(""); // ✅ Seçim yoksa butonları pasif yap
         return;
     }
 
     QString selectedCapsuleId = current->data(Qt::UserRole).toString();
     auto it = displayedCapsuleDetails.find(selectedCapsuleId);
-    if (it != displayedCapsuleDetails.end()) { // displayedCapsules yerine displayedCapsuleDetails olmalı
+    if (it != displayedCapsuleDetails.end()) {
         displayCapsuleDetails(it->second);
-        LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül detayları gösterildi. ID: " << selectedCapsuleId.toStdString());
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül detayları gösterildi. ID: " << selectedCapsuleId.toStdString());
     } else {
-        updateSuggestionFeedbackButtons(""); // Kapsül bulunamazsa butonları pasif yap
+        updateSuggestionFeedbackButtons("");
         capsuleDetailDisplay->setText("Detaylar bulunamadı.");
-        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBasePanel: Seçilen kapsül ID'si dahili listeye uymuyor: " << selectedCapsuleId.toStdString());
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBasePanel: Seçilen kapsül ID'si dahili listeye uymuyor: " << selectedCapsuleId.toStdString());
     }
 }
 
 void KnowledgeBasePanel::onSearchTextChanged(const QString& text) {
-    // Mevcut filtreleri koruyarak arama filtresini uygula
-    filterAndDisplayCapsules(text, topicFilterComboBox->currentText(), startDateEdit->date(), endDateEdit->date());
+    filterAndDisplayCapsules(text,
+                             topicFilterComboBox->currentText(),
+                             startDateEdit->date(),
+                             endDateEdit->date(),
+                             specialFilterComboBox->currentText()); // Yeni filtre parametresi eklendi
 }
 
 void KnowledgeBasePanel::onClearSearchClicked() {
     searchLineEdit->clear();
-    // Mevcut filtreleri koruyarak arama filtresini temizle
-    filterAndDisplayCapsules(QString(), topicFilterComboBox->currentText(), startDateEdit->date(), endDateEdit->date());
+    filterAndDisplayCapsules(QString(),
+                             topicFilterComboBox->currentText(),
+                             startDateEdit->date(),
+                             endDateEdit->date(),
+                             specialFilterComboBox->currentText()); // Yeni filtre parametresi eklendi
 }
 
 // YENİ SLOTLARIN İMPLEMENTASYONLARI
 void KnowledgeBasePanel::onTopicFilterChanged(const QString& topic) {
-    filterAndDisplayCapsules(searchLineEdit->text(), topic, startDateEdit->date(), endDateEdit->date());
+    filterAndDisplayCapsules(searchLineEdit->text(),
+                             topic,
+                             startDateEdit->date(),
+                             endDateEdit->date(),
+                             specialFilterComboBox->currentText()); // Yeni filtre parametresi eklendi
+}
+
+// ✅ YENİ SLOT: CodeDevelopment filtre kontrolü için
+void KnowledgeBasePanel::onSpecialFilterChanged(const QString& filter) {
+    filterAndDisplayCapsules(searchLineEdit->text(),
+                             topicFilterComboBox->currentText(),
+                             startDateEdit->date(),
+                             endDateEdit->date(),
+                             filter); // Yeni filtre parametresi kullanıldı
 }
 
 void KnowledgeBasePanel::onStartDateChanged(const QDate& date) {
-    // Düzeltme: Güncel topicFilterComboBox değeri ile çağrı
-    filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), date, endDateEdit->date());
+    filterAndDisplayCapsules(searchLineEdit->text(),
+                             topicFilterComboBox->currentText(),
+                             date,
+                             endDateEdit->date(),
+                             specialFilterComboBox->currentText()); // Yeni filtre parametresi eklendi
 }
 
 void KnowledgeBasePanel::onEndDateChanged(const QDate& date) {
-    filterAndDisplayCapsules(searchLineEdit->text(), topicFilterComboBox->currentText(), startDateEdit->date(), date);
+    filterAndDisplayCapsules(searchLineEdit->text(),
+                             topicFilterComboBox->currentText(),
+                             startDateEdit->date(),
+                             date,
+                             specialFilterComboBox->currentText()); // Yeni filtre parametresi eklendi
 }
 
-void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText, const QString& topicFilter, const QDate& startDate, const QDate& endDate) {
+void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText,
+                                                  const QString& topicFilter,
+                                                  const QDate& startDate,
+                                                  const QDate& endDate,
+                                                  const QString& specialFilter) { // ✅ Yeni parametre
     capsuleListWidget->clear();
     displayedCapsuleDetails.clear();
 
-    for (const auto& capsule : currentDisplayedCapsules) {
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: filterAndDisplayCapsules baslatildi. Kapsül sayisi: " << currentDisplayedCapsules.size() << ", Özel Filtre: " << specialFilter.toStdString());
+
+    for (const auto& capsule : currentDisplayedCapsules) {        
         QString capsuleId = QString::fromStdString(capsule.id);
-        QString capsuleTopic = QString::fromStdString(capsule.topic);
+        QString topic = QString::fromStdString(capsule.topic);
         QString capsuleSource = QString::fromStdString(capsule.source);
         QString capsuleSummary = QString::fromStdString(capsule.plain_text_summary);
-        QDateTime capsuleDateTime = QDateTime::fromSecsSinceEpoch(capsule.timestamp_utc.time_since_epoch().count());
-        QDate capsuleDate = capsuleDateTime.date();
-
-        bool textMatches = filterText.isEmpty() ||
-                           capsuleId.contains(filterText, Qt::CaseInsensitive) ||
-                           capsuleTopic.contains(filterText, Qt::CaseInsensitive) ||
-                           capsuleSource.contains(filterText, Qt::CaseInsensitive) ||
-                           capsuleSummary.contains(filterText, Qt::CaseInsensitive);
-
-        bool topicMatches = topicFilter.isEmpty() || topicFilter == "Tümü" || capsuleTopic.compare(topicFilter, Qt::CaseInsensitive) == 0;
-        
-        bool dateMatches = (!startDate.isValid() || capsuleDate >= startDate) &&
-                           (!endDate.isValid() || capsuleDate <= endDate);
-
-        // DÜZELTME BAŞLANGICI: Filtre koşulunu kaldırarak tüm kapsüllerin eklenmesini sağla
-        // if (textMatches && topicMatches && dateMatches) // Bu satır yorum satırı yapıldı veya kaldırıldı
-        // DÜZELTME SONU
-        { // Tüm kapsüllerin listeye eklenmesini sağla (geçici olarak filtrelemeyi devre dışı bırak)
-
-            QString listItemText = QString("ID: %1 | Konu: %2 | Kaynak: %3 | Tarih: %4")
-                                    .arg(capsuleId)
-                                    .arg(capsuleTopic)
-                                    .arg(QString::fromStdString(capsule.source))
-                                    .arg(capsuleDateTime.toString("dd.MM.yyyy hh:mm"));
-            
-            QListWidgetItem *item = new QListWidgetItem(listItemText, capsuleListWidget);
-            item->setData(Qt::UserRole, capsuleId);
-
-            KnowledgeCapsuleDisplayData data;
-            data.id = capsuleId;
-            data.topic = capsuleTopic;
-            data.source = QString::fromStdString(capsule.source);
-            data.summary = capsuleSummary;
-            data.fullContent = QString::fromStdString(capsule.content); // Corrected
-            data.cryptofigBlob = QString::fromStdString(capsule.cryptofig_blob_base64); // Corrected
-            data.confidence = capsule.confidence; // Corrected
-            displayedCapsuleDetails[data.id] = data;
-            // YENİ: Seçim yapıldığında butonları güncelle
+        // ✅ DÜZELTME: Nanosaniyeden saniyeye dönüştürme yapıldı
+        if (capsule.timestamp_utc.time_since_epoch().count() == 0) { // Zaman damgası 0 ise varsayılan tarih ayarla (hata önleme)
+             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBasePanel: Kapsül ID'si " << capsuleId.toStdString() << " icin gecersiz zaman damgasi (0) tespit edildi. Varsayilan tarih kullanilacak.");
         }
-    }
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül listesi filtrelendi. Görüntülenen kapsül sayısı: " << capsuleListWidget->count());
+        long long nanoseconds = capsule.timestamp_utc.time_since_epoch().count();
+        QDateTime dt = QDateTime::fromSecsSinceEpoch(nanoseconds / 1'000'000'000LL); // Nanosaniyeyi saniyeye çevir
+        QDate capsuleDate = dt.date();
+
+
+        // ✅ Özel filtre: yalnızca CodeDevelopment kapsülleri
+        if (specialFilter == "Sadece Code Development" && topic != "CodeDevelopment") {
+            // LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül özel filtreden geçmedi (Code Development değil). ID: " << capsuleId.toStdString()); // Artik bu log seviyesi trace, genelde görünmez.
+            continue; // CodeDevelopment değilse atla
+        }
+
+        // ✅ TEŞHİS: Filtreleme koşullarını ayrı ayrı değerlendir
+        bool matchesSearch = (filterText.isEmpty() ||
+                              capsuleId.contains(filterText, Qt::CaseInsensitive) ||
+                              topic.contains(filterText, Qt::CaseInsensitive) ||
+                              capsuleSource.contains(filterText, Qt::CaseInsensitive) ||
+                              capsuleSummary.contains(filterText, Qt::CaseInsensitive));
+        bool matchesTopic = (topicFilter == "Tümü" || topic.compare(topicFilter, Qt::CaseInsensitive) == 0);
+        bool matchesStartDate = (!startDate.isValid() || capsuleDate >= startDate);
+        bool matchesEndDate = (!endDate.isValid() || capsuleDate <= endDate);
+
+        bool matches = matchesSearch && matchesTopic && matchesStartDate && matchesEndDate;
+
+        if (!matches) {
+            // LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül diğer filtrelerden geçmedi. ID: " << capsuleId.toStdString() // Artik bu log seviyesi trace, genelde görünmez.
+            //          << " (Arama: " << (matchesSearch ? "Gecti" : "Kaldi")
+            //          << ", Konu: " << (matchesTopic ? "Gecti" : "Kaldi")
+            //          << ", Baslangic Tarihi: " << (matchesStartDate ? "Gecti" : "Kaldi")
+            //          << ", Bitis Tarihi: " << (matchesEndDate ? "Gecti" : "Kaldi")
+            //          << ", Kapsül Tarihi: " << capsuleDate.toString("dd.MM.yyyy").toStdString()
+            //          << ", Filtre Baslangic: " << startDate.toString("dd.MM.yyyy").toStdString()
+            //          << ", Filtre Bitis: " << endDate.toString("dd.MM.yyyy").toStdString() << ")");           
+             continue;
+        }
+
+        //LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül tüm filtrelerden gecti ve listeye ekleniyor. ID: " << capsuleId.toStdString()); // Daha genel bir log
+
+        QString itemText = QString("ID: %1 | Konu: %2 | Kaynak: %3 | Tarih: %4 | Dosya: %5")
+                            .arg(capsuleId)
+                            .arg(topic)
+                            .arg(capsuleSource)
+                            .arg(dt.toString("dd.MM.yyyy hh:mm"))
+                            .arg(QString::fromStdString(capsule.code_file_path)); // ✅ EKLENDİ: code_file_path itemText'e eklendi
+        
+        // Doğrudan QListWidget'a ekle ve parent'ı belirt
+        QListWidgetItem *item = new QListWidgetItem(itemText, capsuleListWidget); // Parent'ı constructor'da belirttik
+        item->setData(Qt::UserRole, capsuleId);
+        // capsuleListWidget->addItem(item); // Bu satır artık yukarıdaki constructor ile gereksiz.
+
+        KnowledgeCapsuleDisplayData data; // Yeni data objesi olusturuldu
+        data.id = capsuleId;
+        data.topic = topic;
+        data.source = capsuleSource;
+        data.summary = capsuleSummary;
+        data.fullContent = QString::fromStdString(capsule.content);
+        data.cryptofigBlob = QString::fromStdString(capsule.cryptofig_blob_base64);
+        data.confidence = capsule.confidence;
+        data.code_file_path = QString::fromStdString(capsule.code_file_path); // ✅ Düzeltme: code_file_path'e atanıyor
+        displayedCapsuleDetails[capsuleId] = data; // Data objesi mapa eklendi
+
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül QListWidget'a eklendi. capsuleListWidget boyutu: " << capsuleListWidget->count() << ". ID: " << capsuleId.toStdString());
+
+    } // for döngüsü burada bitiyor
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: filterAndDisplayCapsules tamamlandi. Toplam listelenen kapsül: " << capsuleListWidget->count());
 }
 
 void KnowledgeBasePanel::displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data) {
@@ -258,66 +337,48 @@ void KnowledgeBasePanel::displayCapsuleDetails(const KnowledgeCapsuleDisplayData
     details += "<b>Güven Seviyesi:</b> " + QString::number(data.confidence, 'f', 2) + "<br>";
     details += "<b>Özet:</b> " + data.summary + "<br>";
     details += "<b>Cryptofig (Base64):</b> " + data.cryptofigBlob.left(100) + "...<br>";
-    details += "<br><b>Tam İçerik:</b><br><pre>" + data.fullContent + "</pre>";
+    // Daha önce vardı, şimdi düzgün atama ile beraber çalışmalı
+    // Eski satır: details += "<b>Dosya Yolu:</b> " + data.codeFilePath + "<br>";
+    if (!data.code_file_path.isEmpty()) { 
+        details += "<b>Dosya Yolu:</b> " + data.code_file_path + "<br>";
+    }
+    details += "<br><b>Tam İçerik:</b><br><pre>" + data.fullContent + "</pre>"; // Moved out of if block
 
     capsuleDetailDisplay->setHtml(details);
-    // YENİ: Detaylar gösterildiğinde butonları güncelle
     updateSuggestionFeedbackButtons(data.id);
 }
 
-// YENİ METOT: Geri bildirim butonlarının durumunu günceller
-void CerebrumLux::KnowledgeBasePanel::updateSuggestionFeedbackButtons(const QString& selectedCapsuleId) {
-    bool enableButtons = false;
-    if (!selectedCapsuleId.isEmpty()) {
-        auto it = displayedCapsuleDetails.find(selectedCapsuleId);
+void KnowledgeBasePanel::updateSuggestionFeedbackButtons(const QString& selectedId) {
+    bool enable = false;
+    if (!selectedId.isEmpty()) {
+        auto it = displayedCapsuleDetails.find(selectedId);
         if (it != displayedCapsuleDetails.end()) {
-            // Sadece "Kod Geliştirme Önerisi" (CodeDevelopmentSuggestion) tipindeki kapsüller için butonları aktif et
-            // Capsule struct'ında InsightType üyesi olmadığı için bu kontrolü KnowledgeCapsuleDisplayData üzerinden yapamayız.
-            // Bunun yerine KnowledgeBase'den ilgili Capsule'ı çekip tipi kontrol etmemiz gerekir.
-            std::optional<CerebrumLux::Capsule> capsule = learningModule.getKnowledgeBase().find_capsule_by_id(selectedCapsuleId.toStdString());
-            if (capsule) {
-                // Not: Capsule struct'ının kendisinde InsightType diye bir alan yok.
-                // Eğer bu bilgiyi kapsülün içinde tutmuyorsak, ID'nin önekinden (CodeDevSuggestion_) çıkarım yapabiliriz.
-                // Veya Insight sınıfına bu bilgiyi ekleyip KnowledgeCapsuleDisplayData'ya aktarmamız gerekir.
-                // Şimdilik ID önekinden yola çıkarak bir simülasyon yapalım.
-                if (selectedCapsuleId.startsWith("CodeDevSuggest")) { // CodeDevSuggest_ veya CodeDevSuggest_HighComplexity_ vs.
-                    enableButtons = true;
-                }
-            }
+            if (it->second.topic == "CodeDevelopment") // Sadece CodeDevelopment kapsülleri için aktif et
+                enable = true;
         }
     }
-    acceptSuggestionButton->setEnabled(enableButtons);
-    rejectSuggestionButton->setEnabled(enableButtons);
+    acceptSuggestionButton->setEnabled(enable);
+    rejectSuggestionButton->setEnabled(enable);
 }
 
-// YENİ SLOT: Öneriyi Kabul Et butonu tıklandığında
-void CerebrumLux::KnowledgeBasePanel::onAcceptSuggestionClicked() {
-    if (capsuleListWidget->currentItem()) {
-        QString selectedCapsuleId = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBasePanel: Kod Geliştirme Önerisi KABUL EDİLDİ. ID: " << selectedCapsuleId.toStdString());
-        // LearningModule'e geri bildirim gönder
-        learningModule.processCodeSuggestionFeedback(selectedCapsuleId.toStdString(), true);
-        // Opsiyonel: Kabul edilen öneri kapsülünü karantinaya alabilir veya farklı bir şekilde işaretleyebiliriz.
-        QMessageBox::information(this, "Öneri Kabul Edildi", "Kod geliştirme önerisi kabul edildi: " + selectedCapsuleId);
-        updateKnowledgeBaseContent(); // Listeyi güncelle
-    } else {
-        QMessageBox::warning(this, "Uyarı", "Lütfen kabul etmek için bir kod geliştirme önerisi seçin.");
-    }
+void KnowledgeBasePanel::onAcceptSuggestionClicked() {
+    if (!capsuleListWidget->currentItem()) return;
+    QString id = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBasePanel: Kod Geliştirme Önerisi KABUL EDİLDİ. ID: " << id.toStdString());
+    // LearningModule'e geri bildirim gönder
+    learningModule.processCodeSuggestionFeedback(id.toStdString(), true);
+    QMessageBox::information(this, "Öneri Kabul", "Kod geliştirme önerisi kabul edildi: " + id);
+    updateKnowledgeBaseContent();
 }
 
-// YENİ SLOT: Öneriyi Reddet butonu tıklandığında
-void CerebrumLux::KnowledgeBasePanel::onRejectSuggestionClicked() {
-    if (capsuleListWidget->currentItem()) {
-        QString selectedCapsuleId = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBasePanel: Kod Geliştirme Önerisi REDDEDİLDİ. ID: " << selectedCapsuleId.toStdString());
-        // LearningModule'e geri bildirim gönder
-        learningModule.processCodeSuggestionFeedback(selectedCapsuleId.toStdString(), false);
-        // Opsiyonel: Reddedilen öneri kapsülünü karantinaya alabilir veya farklı bir şekilde işaretleyebiliriz.
-        QMessageBox::information(this, "Öneri Reddedildi", "Kod geliştirme önerisi reddedildi: " + selectedCapsuleId);
-        updateKnowledgeBaseContent(); // Listeyi güncelle
-    } else {
-        QMessageBox::warning(this, "Uyarı", "Lütfen reddetmek için bir kod geliştirme önerisi seçin.");
-    }
+void KnowledgeBasePanel::onRejectSuggestionClicked() {
+    if (!capsuleListWidget->currentItem()) return;
+    QString id = capsuleListWidget->currentItem()->data(Qt::UserRole).toString();
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBasePanel: Kod Geliştirme Önerisi REDDEDİLDİ. ID: " << id.toStdString());
+    // LearningModule'e geri bildirim gönder
+    learningModule.processCodeSuggestionFeedback(id.toStdString(), false);
+    QMessageBox::information(this, "Öneri Reddedildi", "Kod geliştirme önerisi reddedildi: " + id);
+    updateKnowledgeBaseContent();
 }
 
 } // namespace CerebrumLux
