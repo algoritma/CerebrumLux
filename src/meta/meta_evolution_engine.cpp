@@ -60,19 +60,19 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
         // Adım 3: İçgörüler oluştur ve JSON olarak aktar.
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: AIInsightsEngine generate_insights çağrılıyor (JSON dönüşü bekleniyor).");
         std::string insights_json_str = insights_engine.generate_insights(current_sequence); // JSON string'ini al
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: generate_insights cagrisi TAMAMLANDI. Donen string boyutu: " << insights_json_str.length() << " (Line " << __LINE__ << ")"); // ✅ Geri getirilen kritik log
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Donen string (ilk 200 char): '" << insights_json_str.substr(0, std::min(insights_json_str.length(), (size_t)200)) << "'"); // ✅ Geri getirilen kritik log, güvenli substr ile
-
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: generate_insights cagrisi TAMAMLANDI. Donen string boyutu: " << insights_json_str.length() << " (Line " << __LINE__ << ")"); // Log seviyesi TRACE'e düşürüldü
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: Donen string (ilk 500 char): '" << insights_json_str.substr(0, std::min(insights_json_str.length(), (size_t)500)) << "'"); // Log seviyesi TRACE'e düşürüldü
+    
         std::vector<AIInsight> insights; // Yerel vektör
         if (!insights_json_str.empty()) {
-                try {
-                    // Eğer string 21 karakter ve substr 71 hatası alıyorsak, string ya boş ya da bozuk demektir.
-                    // Güvenlik kontrolü ekleyelim.
-                    if (insights_json_str.length() < 2 && insights_json_str != "[]") { // En az iki karakter (örn. "[]") olması gerekir, veya boş string
+            try {
+                // Eğer string 21 karakter ve substr 71 hatası alıyorsak, string ya boş ya da bozuk demektir.
+                // Güvenlik kontrolü ekleyelim.
+                if (insights_json_str.length() < 2 && insights_json_str != "[]") { // JSON ayrıştırmadan önce boş veya çok kısa string kontrolü
                     throw std::runtime_error("AIInsightsEngine'den donen JSON string'i beklenenden kisa veya bozuk.");
                 }
                 nlohmann::json insights_json = nlohmann::json::parse(insights_json_str);
-                insights = insights_json.get<std::vector<AIInsight>>(); // JSON'dan vektöre ayrıştır
+                insights = insights_json.get<std::vector<AIInsight>>(); // JSON'dan vektöre ayrıştır (Line 76)
                 LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: JSON ayrıştırıldı ve " << insights.size() << " adet içgörü yerel vektöre eklendi. (Line " << __LINE__ << ")");
             } catch (const nlohmann::json::exception& e) { // ✅ Düzeltme: nlohmann::json::json::exception yerine nlohmann::json::exception
                 LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: JSON ayrıştırma hatası: " << e.what() << " (Line " << __LINE__ << ")");
@@ -83,14 +83,14 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MetaEvolutionEngine: AIInsightsEngine'den boş JSON string'i döndü. (Line " << __LINE__ << ")");
         }
         
-        int codeDevCountReceived = 0; // Local counter
+        int codeDevCountReceived = 0; // Yerel CodeDev sayaç
         for (const auto& insight : insights) { // Artık ayrıştırılan 'insights' vektörü üzerinde döngü yapılıyor
             LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: Alınan icgoru (detay): ID=" << insight.id
                                << ", Type=" << static_cast<int>(insight.type)
                                << ", Context=" << insight.context
                                << ", FilePath=" << insight.code_file_path);
-            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: DIAGNOSTIC - Insight ID: " << insight.id << ", Actual Type: " << static_cast<int>(insight.type) << ", Expected CodeDev Type: " << static_cast<int>(CerebrumLux::InsightType::CodeDevelopmentSuggestion)); // ✅ DIAGNOSTIC logu tekrar aktif edildi
-            if (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion) {
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: DIAGNOSTIC - Insight ID: " << insight.id << ", Actual Type: " << static_cast<int>(insight.type) << ", Expected CodeDev Type: " << static_cast<int>(CerebrumLux::InsightType::CodeDevelopmentSuggestion)); // Log seviyesi TRACE'e düşürüldü
+            if (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion) { // CodeDev tespiti
                 codeDevCountReceived++;
                 LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: !!! CodeDev İÇGÖRÜSÜ ALINDI (MetaEvolutionEngine'de Onaylandi). ID=" << insight.id << " (Line " << __LINE__ << ")");
             }
@@ -101,9 +101,9 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
             LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MetaEvolutionEngine: AIInsightsEngine'den hic CodeDev içgörüsü alınmadı.");
         }
 
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: [CRITICAL_LM_PRE_CALL] LearningModule'e gonderilmeden once icgorulerin durumu (Toplam: " << insights.size() << "): (Line " << __LINE__ << ")");
-        for (const auto& insight : insights) {
-            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "  - ID: " << insight.id << ", Type: " << static_cast<int>(insight.type) << ", Context: " << insight.context);
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: LearningModule'e gonderilmeden once icgorulerin durumu (Toplam: " << insights.size() << "): (Line " << __LINE__ << ")"); // Log seviyesi TRACE'e düşürüldü
+        for (const auto& insight : insights) { // İçgörüler üzerinde döngü
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "  - ID: " << insight.id << ", Type: " << static_cast<int>(insight.type) << ", Context: " << insight.context); // Log seviyesi TRACE'e düşürüldü
         }
         
         learning_module.process_ai_insights(insights); // Ayrıştırılan 'insights' vektörünü gönder

@@ -57,17 +57,15 @@ struct AIInsight {
           related_capsule_ids(capsule_ids_val),
           code_file_path(code_file_path_val) {}
 
-    // YENİ EKLENDİ: Açıkça Copy/Move Semantics tanımları (varsayılanlar kullanılabilir)
-    // Bunlar, nlohmann::json ile serileştirme/deserileştirme ve std::vector kopyalama/taşıma için önemlidir.
-    AIInsight(const AIInsight& other) = default; // Varsayılan kopyalama constructor'ı
-    AIInsight& operator=(const AIInsight& other) = default; // Varsayılan kopyalama atama operator'ü
-    AIInsight(AIInsight&& other) noexcept = default; // Varsayılan taşıma constructor'ı
-    AIInsight& operator=(AIInsight&& other) noexcept = default; // Varsayılan taşıma atama operator'ü
+    // Açıkça Copy/Move Semantics tanımları (varsayılanlar kullanılabilir)
+    AIInsight(const AIInsight& other) = default; 
+    AIInsight& operator=(const AIInsight& other) = default;
+    AIInsight(AIInsight&& other) noexcept = default;
+    AIInsight& operator=(AIInsight&& other) noexcept = default;
     
-    // NLOHMANN_DEFINE_TYPE_INTRUSIVE makrosu yerine manuel to_json ve from_json
+    // nlohmann::json ile serileştirme için friend fonksiyonlar
     friend void to_json(nlohmann::json& j, const AIInsight& i) {
-        // ✅ Yeni Teşhis Logları: Serileştirme adımlarını izlemek için
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsight::to_json: Serileştirme basladi (ID: " << i.id << ", Type: " << static_cast<int>(i.type) << ")");
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsight::to_json: Serileştirme basladi (ID: " << i.id << ", Type: " << static_cast<int>(i.type) << ")");
         j["id"] = i.id;
         j["observation"] = i.observation;
         j["context"] = i.context;
@@ -88,7 +86,6 @@ struct AIInsight {
         i.urgency = static_cast<UrgencyLevel>(j.at("urgency").get<int>()); // int'ten enum'a dönüştür
         j.at("associated_cryptofig").get_to(i.associated_cryptofig);
         j.at("related_capsule_ids").get_to(i.related_capsule_ids);
-        //if (j.contains("code_file_path")) j.at("code_file_path").get_to(i.code_file_path); // Eğer varsa oku
         j.at("code_file_path").get_to(i.code_file_path); // Düzeltme: code_file_path'in her zaman var olduğunu varsayıyoruz (yoksa exception fırlatır)
     }
 };
@@ -124,13 +121,19 @@ private:
     std::map<std::string, std::chrono::system_clock::time_point> insight_cooldowns; // İçgörü türleri için bekleme süreleri (tek tanım)
     bool is_on_cooldown(const std::string& key, std::chrono::seconds cooldown_duration) const; // Yardımcı metot deklarasyonu
 
-    // YENİ YARDIMCI İÇGÖRÜ ÜRETİM METOTLARI DEKLARASYONLARI (code_file_path destekli)
+    // Refaktör sonrası yeni üye metotları deklarasyonları
+    void updateSimulatedCodeMetrics(std::chrono::system_clock::time_point now);
+    std::vector<AIInsight> generateCodeAnalysisInsights(const DynamicSequence& current_sequence, std::chrono::system_clock::time_point now);
+    std::vector<AIInsight> generateSimulatedMetricCodeDevelopmentInsights(const DynamicSequence& current_sequence, std::chrono::system_clock::time_point now);
+    std::vector<AIInsight> generateGeneralNonCodeDevelopmentInsights(const DynamicSequence& current_sequence, std::chrono::system_clock::time_point now);
+
+    // Mevcut yardımcı içgörü üretim metotları
     AIInsight generate_reconstruction_error_insight(const DynamicSequence& current_sequence);
     AIInsight generate_learning_rate_insight(const DynamicSequence& current_sequence);
     AIInsight generate_system_resource_insight(const DynamicSequence& current_sequence);
     AIInsight generate_network_activity_insight(const DynamicSequence& current_sequence);
     AIInsight generate_application_context_insight(const DynamicSequence& current_sequence);
-    AIInsight generate_unusual_behavior_insight(const DynamicSequence& current_sequence); // Daha sonra geliştirilebilir
+    AIInsight generate_unusual_behavior_insight(const DynamicSequence& current_sequence);
 
     // Simüle edilmiş kod metrikleri
     float last_simulated_code_complexity = 0.95f;
@@ -139,44 +142,5 @@ private:
 };
 
 } // namespace CerebrumLux
-
-
-// ==========================================================
-// 🔧 JSON serileştirme erişimi için ADL düzeltmesi
-// ==========================================================
-// Bu blok, CerebrumLux namespace'indeki AIInsight struct'ının
-// nlohmann::json ile doğru şekilde serileştirilmesini sağlar.
-/*
-namespace nlohmann {
-    template <>
-    struct adl_serializer<CerebrumLux::AIInsight> {
-        static void to_json(json& j, const CerebrumLux::AIInsight& i) {
-            j = json{
-                {"id", i.id},
-                {"observation", i.observation},
-                {"context", i.context},
-                {"recommended_action", i.recommended_action},
-                {"type", static_cast<int>(i.type)},
-                {"urgency", static_cast<int>(i.urgency)},
-                {"associated_cryptofig", i.associated_cryptofig},
-                {"related_capsule_ids", i.related_capsule_ids},
-                {"code_file_path", i.code_file_path}
-            };
-        }
-
-        static void from_json(const json& j, CerebrumLux::AIInsight& i) {
-            j.at("id").get_to(i.id);
-            j.at("observation").get_to(i.observation);
-            j.at("context").get_to(i.context);
-            j.at("recommended_action").get_to(i.recommended_action);
-            i.type = static_cast<CerebrumLux::InsightType>(j.at("type").get<int>());
-            i.urgency = static_cast<CerebrumLux::UrgencyLevel>(j.at("urgency").get<int>());
-            j.at("associated_cryptofig").get_to(i.associated_cryptofig);
-            j.at("related_capsule_ids").get_to(i.related_capsule_ids);
-            j.at("code_file_path").get_to(i.code_file_path);
-        }
-    };
-}
-*/
 
 #endif // AI_INSIGHTS_ENGINE_H

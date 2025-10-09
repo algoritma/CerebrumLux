@@ -12,17 +12,17 @@ namespace CodeAnalyzerUtils {
 
 // Regex objeleri fonksiyon kapsamı dışında veya static olarak tanımlanmalı
 // Tek satırlık yorumlar (//) ve boşluklar
-static const std::regex single_line_comment_regex(R"(\/\/.*)");
+static const std::regex single_line_comment_regex(R"(\)\/\/.*)");
 // Çok satırlık yorumlar (/* ... */)
-static const std::regex multi_line_comment_start_regex(R"(\/\*.*)");
+static const std::regex multi_line_comment_start_regex(R"(\)\/\*.*)");
 static const std::regex multi_line_comment_end_regex(R"(.*\*\/)");
 
 
 int countMeaningfulLinesOfCode(const std::string& filePath) {
-    LOG_DEFAULT(LogLevel::DEBUG, "CodeAnalyzerUtils: Anlamli kod satirlari sayiliyor: " << filePath);
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "CodeAnalyzerUtils: Anlamli kod satirlari sayiliyor: " << filePath); // Log seviyesi TRACE'e düşürüldü
     std::ifstream file(filePath);
     if (!file.is_open()) {
-        LOG_DEFAULT(LogLevel::WARNING, "CodeAnalyzerUtils: Dosya acilamadi: " << filePath);
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "CodeAnalyzerUtils: Dosya acilamadi: " << filePath); // WARNING seviyesi korundu
         return 0; // Dosya açılamazsa 0 döndür
     }
 
@@ -34,10 +34,9 @@ int countMeaningfulLinesOfCode(const std::string& filePath) {
     while (std::getline(file, line)) {
         lineNumber++;
         try {
-            // Satırı kopyalayarak üzerinde işlem yap
-            std::string trimmedLine = line;
-
             // Baştaki ve sondaki boşlukları (ve yeni satır karakterlerini) temizle
+            std::string trimmedLine = line;
+            
             trimmedLine.erase(0, trimmedLine.find_first_not_of(" \t\n\r"));
             trimmedLine.erase(trimmedLine.find_last_not_of(" \t\n\r") + 1);
 
@@ -77,7 +76,7 @@ int countMeaningfulLinesOfCode(const std::string& filePath) {
         }
     }
 
-    LOG_DEFAULT(LogLevel::DEBUG, "CodeAnalyzerUtils: " << filePath << " için anlamli LOC: " << meaningfulLines);
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "CodeAnalyzerUtils: " << filePath << " için anlamli LOC: " << meaningfulLines); // Log seviyesi TRACE'e düşürüldü
     return meaningfulLines;
 }
 

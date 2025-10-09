@@ -115,14 +115,6 @@ SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel
 CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
 KnowledgeBasePanel* MainWindow::getKnowledgeBasePanel() const { return knowledgeBasePanel; }
 
- 
-
-void MainWindow::updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data) {
-    if (graphPanel) {
-        graphPanel->updateData(seriesName, data);
-    }
-}
-
 void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data) {
     if (simulationPanel) {
         simulationPanel->updateSimulationHistory(data);
@@ -155,13 +147,8 @@ void MainWindow::updateGui() {
     }
     
     updateKnowledgeBasePanel();
-    
-    auto results = learningModule.getKnowledgeBase().semantic_search("Qt6", 2);
-    if (!results.empty()) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: Semantic search results: " << results[0].content.substr(0, std::min((size_t)50, results[0].content.length())));
-    }
 
-    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: GUI güncellendi.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: GUI güncellendi."); // TRACE seviyesindeki genel log korunuyor
 }
 
 void MainWindow::onSimulationCommandEntered(const QString& command) {

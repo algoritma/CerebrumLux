@@ -251,7 +251,7 @@ void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText,
     capsuleListWidget->clear();
     displayedCapsuleDetails.clear();
 
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül filtreleme baslatildi. Toplam kapsül: " << currentDisplayedCapsules.size() << ", Özel Filtre: '" << specialFilter.toStdString() << "'");
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül filtreleme baslatildi. Toplam kapsül: " << currentDisplayedCapsules.size() << ", Özel Filtre: '" << specialFilter.toStdString() << "'"); // Log seviyesi TRACE'e düşürüldü
 
     for (const auto& capsule : currentDisplayedCapsules) {        
         QString capsuleId = QString::fromStdString(capsule.id);
@@ -260,7 +260,7 @@ void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText,
         QString capsuleSummary = QString::fromStdString(capsule.plain_text_summary);
         // ✅ DÜZELTME: Nanosaniyeden saniyeye dönüştürme yapıldı
         if (capsule.timestamp_utc.time_since_epoch().count() == 0) { // Zaman damgası 0 ise varsayılan tarih ayarla (hata önleme)
-             // LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBasePanel: Kapsül ID'si " << capsuleId.toStdString() << " icin gecersiz zaman damgasi (0) tespit edildi. Varsayilan tarih kullanilacak."); // Aşırı loglamayı engellemek için yorum satırı yapıldı
+             /* LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBasePanel: Kapsül ID'si " << capsuleId.toStdString() << " icin gecersiz zaman damgasi (0) tespit edildi. Varsayilan tarih kullanilacak."); */ // Aşırı loglamayı engellemek için yorum satırı yapıldı
         }
         // Unix Epoch'tan itibaren nanosaniyeleri saniyeye çeviriyoruz.
         // std::chrono::system_clock::time_point nanosecond bazlı olabilir, QDateTime::fromSecsSinceEpoch saniye bekler.
@@ -272,7 +272,7 @@ void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText,
 
         // ✅ Özel filtre: yalnızca CodeDevelopment kapsülleri
         if (specialFilter == "Sadece Code Development" && topic != "CodeDevelopment") {
-            // LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül özel filtreden geçmedi (Code Development değil). ID: " << capsuleId.toStdString()); // Artik bu log seviyesi trace, genelde görünmez.
+            /* LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül özel filtreden geçmedi (Code Development değil). ID: " << capsuleId.toStdString()); */ // Aşırı loglamayı engellemek için yorum satırı yapıldı
             continue; // CodeDevelopment değilse atla
         }
         // ✅ TEŞHİS: Filtreleme koşullarını ayrı ayrı değerlendir
@@ -289,14 +289,7 @@ void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText,
 
         bool matches = matchesSearch && matchesTopic && matchesStartDate && matchesEndDate;
         if (!matches) {
-            // LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül diğer filtrelerden geçmedi. ID: " << capsuleId.toStdString() // Artik bu log seviyesi trace, genelde görünmez.
-            //          << " (Arama: " << (matchesSearch ? "Gecti" : "Kaldi")
-            //          << ", Konu: " << (matchesTopic ? "Gecti" : "Kaldi")
-            //          << ", Baslangic Tarihi: " << (matchesStartDate ? "Gecti" : "Kaldi")
-            //          << ", Bitis Tarihi: " << (matchesEndDate ? "Gecti" : "Kaldi")
-            //          << ", Kapsül Tarihi: " << capsuleDate.toString("dd.MM.yyyy").toStdString()
-            //          << ", Filtre Baslangic: " << startDate.toString("dd.MM.yyyy").toStdString()
-            //          << ", Filtre Bitis: " << endDate.toString("dd.MM.yyyy").toStdString() << ")");           
+            /* LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül diğer filtrelerden geçmedi. ID: " << capsuleId.toStdString() << " (Arama: " << (matchesSearch ? "Gecti" : "Kaldi") << ", Konu: " << (matchesTopic ? "Gecti" : "Kaldi") << ", Baslangic Tarihi: " << (matchesStartDate ? "Gecti" : "Kaldi") << ", Bitis Tarihi: " << (matchesEndDate ? "Gecti" : "Kaldi") << ", Kapsül Tarihi: " << capsuleDate.toString("dd.MM.yyyy").toStdString() << ", Filtre Baslangic: " << startDate.toString("dd.MM.yyyy").toStdString() << ", Filtre Bitis: " << endDate.toString("dd.MM.yyyy").toStdString() << ")");            */
              continue;
         }
         //LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül tüm filtrelerden gecti ve listeye ekleniyor. ID: " << capsuleId.toStdString()); // Daha genel bir log
