@@ -123,6 +123,41 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase loaded." << std::endl;
     early_diagnostic_log.flush();
     CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app); // YENİ: &app parent olarak eklendi
+
+    /*
+    // YENİ KOD: Örnek "StepSimulation" kapsülleri ekle (KnowledgeBase'i beslemek için)
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase'e örnek 'StepSimulation' kapsülleri ekleniyor.");
+    for (int i = 0; i < 5; ++i) { // 5 adet örnek kapsül
+        CerebrumLux::Capsule sim_capsule;
+        sim_capsule.id = "StepSimulation_" + std::to_string(CerebrumLux::get_current_timestamp_us()) + "_" + std::to_string(i);
+        sim_capsule.topic = "StepSimulation";
+        sim_capsule.source = "SimulatedEngine";
+        sim_capsule.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.5f, 1.0f); // Rastgele güven değeri
+        sim_capsule.plain_text_summary = "Simulasyon adimi " + std::to_string(i) + " tamamlandi. Simule edilen etki...";
+        sim_capsule.content = sim_capsule.plain_text_summary;
+
+        // Geçmişe yönelik zaman damgaları ekleyelim (grafikte görülebilmesi için)
+        auto now_tp = std::chrono::system_clock::now();
+        sim_capsule.timestamp_utc = now_tp - std::chrono::minutes(i * 5); // Her kapsül 5 dakika arayla
+
+        // Rastgele bir kriptofig vektörü oluştur
+        sim_capsule.embedding.resize(CerebrumLux::CryptofigAutoencoder::INPUT_DIM); // 'embedding' alanı kullanıldı
+        for (size_t j = 0; j < CerebrumLux::CryptofigAutoencoder::INPUT_DIM; ++j) { // 'embedding' alanı dolduruldu
+            sim_capsule.embedding[j] = CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f);
+        }
+        
+        // Gömme vektörünü de dolduralım
+        // Cryptofig_blob_base64 alanını da dolduralım (JSON serileştirme için gerekli olabilir)
+        // Gerçek bir base64 dönüşümü yerine, şimdilik basit bir placeholder string kullanabiliriz
+        sim_capsule.cryptofig_blob_base64 = "simulated_cryptofig_base64_" + std::to_string(i);
+
+        kb.add_capsule(sim_capsule);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: 'StepSimulation' kapsülü eklendi: " << sim_capsule.id);
+    }
+    kb.save("knowledge.json"); // Yeni kapsülleri dosyaya kaydet
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Örnek 'StepSimulation' kapsülleri KnowledgeBase'e eklendi ve kaydedildi.");
+    */
+   
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Learning Module initialized." << std::endl;
     early_diagnostic_log.flush();
 

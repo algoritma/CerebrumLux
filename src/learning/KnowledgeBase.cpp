@@ -64,7 +64,7 @@ void KnowledgeBase::add_capsule(const Capsule& capsule) {
 }
 
 std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, int top_k) const {
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Semantic search for query: " << query << ", Top K: " << top_k);
+    LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Semantic search for query: " << query << ", Top K: " << top_k);
     std::vector<Capsule> results;
     for (const auto& capsule : capsules) {
         if (capsule.topic.find(query) != std::string::npos || capsule.plain_text_summary.find(query) != std::string::npos) {
