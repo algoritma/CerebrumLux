@@ -12,13 +12,16 @@
 #include "../crypto/CryptoManager.h"
 #include "UnicodeSanitizer.h" // Tam tanıma ihtiyaç duyulduğu için eklendi
 #include "StegoDetector.h"    // Tam tanıma ihtiyaç duyulduğu için eklendi
+#include "WebFetcher.h" // WebFetcher için
+#include "web_page_parser.h" // WebPageParser için
+#include "web_search_result.h" // WebSearchResult için
 
 #include <QObject> 
-#include "WebFetcher.h" // CerebrumLux::WebFetcher için
+#include <QString> // QString için
 
 namespace CerebrumLux {
 
-// YENİ: Kapsül işleme sonucunu belirten enum
+// Kapsül işleme sonucunu belirten enum
 enum class IngestResult {
     Success,
     InvalidSignature,
@@ -29,10 +32,10 @@ enum class IngestResult {
     SandboxFailed,
     CorroborationFailed,
     UnknownError,
-    Ignored // Örneğin, zaten mevcut bir kapsül için
+    Busy // Örneğin, zaten mevcut bir kapsül için
 };
 
-// YENİ: Kapsül işleme raporu
+// Kapsül işleme raporu
 struct IngestReport {
     Capsule original_capsule; // Orijinal kapsül
     Capsule processed_capsule; // İşlenmiş/değiştirilmiş kapsül
@@ -43,10 +46,8 @@ struct IngestReport {
     std::map<std::string, std::string> diagnostics; // Ek teşhis bilgileri
 
     // Varsayılan kurucu eklendi, böylece boş bir IngestReport oluşturulabilir.
-    IngestReport() : result(IngestResult::UnknownError), confidence(0.0f) {} // confidence eklendi
-
-    // JSON serileştirme/deserileştirme için
-    float confidence; // AI sisteminin veya kapsülün güven skoru
+    IngestReport() : result(IngestResult::UnknownError) {}
+    // confidence alanı IngestReport için gereksiz, processed_capsule.confidence'dan alınabilir
 };
 
 
@@ -69,9 +70,10 @@ public:
     void process_ai_insights(const std::vector<AIInsight>& insights);
 
     KnowledgeBase& getKnowledgeBase();
-    // YENİ: Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
+    const KnowledgeBase& getKnowledgeBase() const; // Const versiyonu eklendi
+    
+    // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
-    const KnowledgeBase& getKnowledgeBase() const;
 
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
 
@@ -80,19 +82,25 @@ public:
     std::vector<float> cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const;
 
 signals:
-    // Web çekme işleminin sonucunu bildiren yeni sinyal
-    void webFetchCompleted(const CerebrumLux::IngestReport& report); // YENİ SİNYAL WebFetcher'dan sinyal
+    // Web çekme işleminin sonucunu bildiren sinyal
+    void webFetchCompleted(const CerebrumLux::IngestReport& report);
 
 private slots:
-    void on_web_content_fetched(const QString& url, const QString& content);
-    void on_web_fetch_error(const QString& url, const QString& error_message);
+    // WebFetcher'dan gelen yapılandırılmış arama sonuçlarını işlemek için slot
+    void onStructuredWebContentFetched(const QString& url, const std::vector<CerebrumLux::WebSearchResult>& searchResults); // İmza güncellendi
+    // WebFetcher'dan gelen hata sinyali için slot
+    void onWebFetchError(const QString& url, const QString& error_message); 
 
 private:
     KnowledgeBase& knowledgeBase;
     CerebrumLux::Crypto::CryptoManager& cryptoManager;
     std::unique_ptr<UnicodeSanitizer> unicodeSanitizer;
     std::unique_ptr<StegoDetector> stegoDetector;
-    std::unique_ptr<WebFetcher> webFetcher;
+    std::unique_ptr<WebFetcher> webFetcher; // WebFetcher nesnesi unique_ptr ile yönetilir
+
+    QObject* parentApp; // QApplication'a bağlanmak için (m_parentApp yerine parentApp)
+    bool webFetchInProgress = false; // Web çekme işleminin devam edip etmediğini gösterir
+    QString currentWebFetchQuery; // Şu anki web çekme sorgusunu tutar
 
     bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
     Capsule decrypt_payload(const Capsule& encrypted_capsule) const;
@@ -102,6 +110,7 @@ private:
     bool sandbox_analysis(const Capsule& capsule) const;
     bool corroboration_check(const Capsule& capsule) const;
     void audit_log_append(const IngestReport& report) const;
+    CerebrumLux::IngestReport createIngestReport(CerebrumLux::IngestResult result, const std::string& message) const; // Gizli yardımcı metot
 };
 
 } // namespace CerebrumLux

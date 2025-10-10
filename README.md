@@ -70,11 +70,12 @@ Cerebrum Lux'ı derlemek ve çalıştırmak için aşağıdaki adımları izleyi
     mkdir build
     cd build
 cmake .. -G "MinGW Makefiles" `
-    -DCMAKE_C_COMPILER="C:/Qt/Tools/mingw1310_64/bin/gcc.exe" `
-    -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe" `
-    -DCMAKE_PREFIX_PATH="C:/Qt/6.9.2/mingw_64" `
-    -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-    -DVCPKG_TARGET_TRIPLET=x64-mingw-static
+   -DCMAKE_C_COMPILER="C:/Qt/Tools/mingw1310_64/bin/gcc.exe" `
+   -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe" `
+   -DCMAKE_PREFIX_PATH="C:/Qt/6.9.2/mingw_64" `
+   -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+   -DOPENSSL_ROOT_DIR="C:/vcpkg/installed/x64-mingw-static" `
+   -DOPENSSL_USE_STATIC_LIBS=TRUE
     ```
 3.  **Projeyi Derleyin:**
     ```bash

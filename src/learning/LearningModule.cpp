@@ -4,25 +4,33 @@
 #include "../core/utils.h" // SafeRNG için
 #include "../crypto/CryptoManager.h" // cryptoManager için
 #include "../crypto/CryptoUtils.h" // Base64 kodlama için
+#include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
 #include <iostream>
 #include <algorithm> // std::min için
 #include <stdexcept> // std::runtime_error için
 
 #include <QCoreApplication> 
 #include <QUrlQuery> // URL kodlama için gerekli
+#include <QDateTime> // QDateTime::currentDateTime().toString() için
 
 namespace CerebrumLux {
 
 LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent)
-    : QObject(parent),
-      knowledgeBase(kb), cryptoManager(cryptoMan),
+    : QObject(parent), // parentApp yerine QObject'in parent'ı
+      knowledgeBase(kb),
+      cryptoManager(cryptoMan),
       unicodeSanitizer(std::make_unique<UnicodeSanitizer>()),
       stegoDetector(std::make_unique<StegoDetector>()),
-      webFetcher(new WebFetcher(this))
+      webFetcher(std::make_unique<WebFetcher>(this)), // WebFetcher'ı unique_ptr ile oluştur ve this (LearningModule) parent olarak ver
+      parentApp(parent) // parentApp üyesini başlat
 {
+    // WebFetcher sinyallerini LearningModule'ün slot'larına bağla
+    connect(webFetcher.get(), &WebFetcher::structured_content_fetched, // .get() ile raw pointer alındı
+            this, &LearningModule::onStructuredWebContentFetched, Qt::QueuedConnection); // Qt::QueuedConnection eklendi
+    connect(webFetcher.get(), &WebFetcher::fetch_error,
+            this, &LearningModule::onWebFetchError, Qt::QueuedConnection); // Qt::QueuedConnection eklendi
+
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized with CryptoManager.");
-    connect(webFetcher.get(), &CerebrumLux::WebFetcher::content_fetched, this, &CerebrumLux::LearningModule::on_web_content_fetched);
-    connect(webFetcher.get(), &CerebrumLux::WebFetcher::fetch_error, this, &CerebrumLux::LearningModule::on_web_fetch_error);
 }
 
 LearningModule::~LearningModule() {
@@ -54,8 +62,18 @@ void LearningModule::learnFromText(const std::string& text,
 void LearningModule::learnFromWeb(const std::string& query) {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web'den öğrenme başlatıldı. Sorgu: " << query);
 
+    // Bir önceki web çekme işlemi devam ediyorsa yeni bir tane başlatma
+    if (webFetchInProgress) {
+        LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Zaten bir web çekme işlemi devam ediyor. Yeni sorgu: " << query);
+        emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::Busy, "Zaten bir web çekme işlemi devam ediyor."));
+        return;
+    }
+    webFetchInProgress = true;
+    currentWebFetchQuery = QString::fromStdString(query); // Mevcut sorguyu kaydet
+
     std::string final_url_to_fetch = query;
     if (query.find("http://") == std::string::npos && query.find("https://") == std::string::npos && query.find(".") == std::string::npos) {
+        // Eğer URL'de protokol belirtilmemişse ve dot ('.') içermiyorsa arama sorgusu olarak kabul et
         QString encoded_query = QUrl::toPercentEncoding(QString::fromStdString(query));
         final_url_to_fetch = "https://www.google.com/search?q=" + encoded_query.toStdString();
         LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Sorgu Google arama URL'sine dönüştürüldü: " << final_url_to_fetch);
@@ -64,9 +82,9 @@ void LearningModule::learnFromWeb(const std::string& query) {
         if (temp_url.isValid()) {
              final_url_to_fetch = temp_url.toString(QUrl::FullyEncoded).toStdString();
         } else {
+            LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Girdi URL olarak geçersiz, Google arama URL'sine dönüştürüldü: " << query);
             QString encoded_query = QUrl::toPercentEncoding(QString::fromStdString(query));
             final_url_to_fetch = "https://www.google.com/search?q=" + encoded_query.toStdString();
-            LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Girdi URL olarak gecersiz, Google arama URL'sine dönüştürüldü: " << final_url_to_fetch);
         }
     }
     
@@ -74,35 +92,52 @@ void LearningModule::learnFromWeb(const std::string& query) {
         webFetcher->fetch_url(final_url_to_fetch);
     } else {
         LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: WebFetcher nesnesi null, web'den öğrenme başlatılamadı.");
-        IngestReport report;
-        report.message = "WebFetcher nesnesi null, web'den öğrenme başlatılamadı.";
-        report.result = IngestResult::UnknownError;
-        emit webFetchCompleted(report);
+        emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::UnknownError, "WebFetcher nesnesi null, web'den öğrenme başlatılamadı."));
     }
 }
 
-void LearningModule::on_web_content_fetched(const QString& url, const QString& content) {
-    LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web içerigi alındı. URL: " << url.toStdString() << ", İçerik Uzunluğu: " << content.length());
-    learnFromText(content.toStdString(), url.toStdString(), "WebSearch", 0.7f);
+// WebFetcher'dan gelen yapılandırılmış arama sonuçlarını işlemek için slot
+void LearningModule::onStructuredWebContentFetched(const QString& url, const std::vector<CerebrumLux::WebSearchResult>& searchResults) {
+    LOG_DEFAULT(LogLevel::INFO, "LearningModule: Yapılandırılmış web içeriği çekildi. URL: " << url.toStdString() << ", Sonuç sayısı: " << searchResults.size());
+    
+    for (const auto& result : searchResults) {
+        CerebrumLux::Capsule web_capsule;
+        web_capsule.id = "WebSearch_" + CerebrumLux::generate_unique_id();
+        web_capsule.topic = "WebSearch"; 
+        web_capsule.source = url.toStdString(); // Orijinal arama URL'si (getirilen sayfanın URL'si)
+        web_capsule.confidence = 0.75f; 
+        web_capsule.plain_text_summary = QString::fromStdString(result.title + " - " + result.snippet).left(200).toStdString();
+        // Tam içerik: Başlık, URL, Snippet ve varsa ayıklanmış ana içerik birleştirilir.
+        web_capsule.content = QString::fromStdString("Başlık: " + result.title + "\nURL: " + result.url + "\nAçıklama: " + result.snippet + "\n\nTam İçerik:\n" + result.main_content).toStdString();
+        web_capsule.timestamp_utc = std::chrono::system_clock::now();
 
-    IngestReport report;
-    report.message = "Web içerigi başarıyla çekildi ve KnowledgeBase'e eklendi.";
-    report.result = IngestResult::Success;
-    report.source_peer_id = url.toStdString();
-    report.original_capsule.content = content.toStdString();
-    report.processed_capsule.content = content.toStdString();
-    report.timestamp = std::chrono::system_clock::now();
-    emit webFetchCompleted(report);
+        // CodeFile Path olarak WebSearchResult'ın URL'sini kullan
+        web_capsule.code_file_path = result.url;
+
+        web_capsule.embedding.resize(CryptofigAutoencoder::INPUT_DIM);
+        for (size_t i = 0; i < CryptofigAutoencoder::INPUT_DIM; ++i) {
+            web_capsule.embedding[i] = CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f);
+        }
+        web_capsule.cryptofig_blob_base64 = cryptofig_encode(web_capsule.embedding); // compute_embedding çağrısı yerine doğrudan kodlama
+
+        // Kapsül ID'sini daha benzersiz hale getir: URL'nin hash'i veya başlığın hash'i eklenebilir.
+        // content_hash kullanmak en iyisi:
+        if (!result.content_hash.empty()) { // Eğer içerik hash'i varsa ID'ye ekle
+            web_capsule.id += "_" + result.content_hash;
+        }
+ 
+        knowledgeBase.add_capsule(web_capsule);
+        LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web arama kapsülü eklendi: ID: " << web_capsule.id << ", URL: " << QString::fromStdString(result.url));
+    }
+    webFetchInProgress = false;
+    emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::Success, "Web'den öğrenme tamamlandı."));
 }
 
-void LearningModule::on_web_fetch_error(const QString& url, const QString& error_message) {
+// WebFetcher'dan gelen hata sinyali için slot
+void LearningModule::onWebFetchError(const QString& url, const QString& error_message) {
     LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Web içerigi cekme hatası. URL: " << url.toStdString() << ", Hata: " << error_message.toStdString());
-    IngestReport report;
-    report.message = "Web içerigi cekme hatası: " + error_message.toStdString();
-    report.result = IngestResult::UnknownError;
-    report.source_peer_id = url.toStdString();
-    report.timestamp = std::chrono::system_clock::now();
-    emit webFetchCompleted(report);
+    webFetchInProgress = false; // Hata durumunda işlemi serbest bırak
+    emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::UnknownError, "Web içerigi cekme hatası: " + error_message.toStdString()));
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
@@ -115,7 +150,7 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
 
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Başlangıç: Gelen içgörülerin tipleri ve ID'leri (Toplam: " << insights.size() << "):");
     for (const auto& insight : insights) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule]   Alınan İçgörü: ID=" << insight.id << ", Type=" << static_cast<int>(insight.type) << ", Context=" << insight.context << ", Urgency=" << static_cast<int>(insight.urgency));
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "[LearningModule]   Alınan İçgörü: ID=" << insight.id << ", Type=" << static_cast<int>(insight.type) << ", Context=" << insight.context << ", Urgency=" << static_cast<int>(insight.urgency));
     }
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] --- İçgörü İşleme Başlıyor ---");
 
@@ -295,6 +330,15 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
     }
 
     audit_log_append(report);
+    return report;
+}
+
+CerebrumLux::IngestReport LearningModule::createIngestReport(CerebrumLux::IngestResult result, const std::string& message) const {
+    IngestReport report;
+    report.result = result;
+    report.message = message;
+    report.timestamp = std::chrono::system_clock::now();
+    // Diğer alanlar varsayılan değerlerinde kalır veya boş bırakılır.
     return report;
 }
 

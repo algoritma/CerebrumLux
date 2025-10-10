@@ -98,12 +98,11 @@ LogLevel Logger::get_level() const {
 
 std::string Logger::format_log_message(LogLevel level, const std::string& message, const char* file, int line) {
     std::stringstream ss;
-    ss << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz").toStdString();
-    
-    ss << " [" << std::setw(3) << ++log_counter_ << "] ";
-    ss << "[" << log_source_ << ":" << level_to_string(level) << "] ";
-    ss << "[" << file << ":" << line << "] ";
-    ss << message;
+    ss << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss.zzz").toStdString(); // QString'i std::string'e dönüştür
+    ss << std::string(" [") << std::setw(3) << ++log_counter_ << std::string("] ");
+    ss << std::string("[") << log_source_ << std::string(":") << level_to_string(level) << std::string("] ");
+    ss << std::string("[") << file << std::string(":") << line << std::string("] ");
+     ss << message;
     
     return ss.str();
 }

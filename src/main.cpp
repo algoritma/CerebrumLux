@@ -62,6 +62,7 @@ int main(int argc, char *argv[])
 
     qRegisterMetaType<CerebrumLux::IngestResult>("CerebrumLux::IngestResult");
     qRegisterMetaType<CerebrumLux::IngestReport>("CerebrumLux::IngestReport");
+    // qRegisterMetaType<std::vector<CerebrumLux::WebSearchResult>>("std::vector<CerebrumLux::WebSearchResult>"); // Artık web_search_result.h içinde
 
     // Logger başlat ve yapılandır
     CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::DEBUG, "cerebrum_lux_gui_log.txt", "MAIN_APP");

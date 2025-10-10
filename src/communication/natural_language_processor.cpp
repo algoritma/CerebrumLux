@@ -303,26 +303,26 @@ std::string NaturalLanguageProcessor::generate_dynamic_prompt(
     CerebrumLux::AIGoal goal,
     const CerebrumLux::DynamicSequence& sequence,
     const std::string& user_input, // Metoda user_input da ekleyebiliriz
-    const std::vector<CerebrumLux::Capsule>& relevant_capsules
-) const {
+     const std::vector<CerebrumLux::Capsule>& relevant_capsules
+ ) const {
     std::stringstream ss;
-    ss << "Kullanıcının niyeti: " << CerebrumLux::intent_to_string(intent) << ". ";
-    ss << "Mevcut sistem durumu: " << CerebrumLux::abstract_state_to_string(state) << ". ";
-    ss << "AI'ın mevcut hedefi: " << CerebrumLux::goal_to_string(goal) << ". ";
-    ss << "Kullanıcı girdisi (veya anahtar kelimelerden türetilen sorgu): '" << user_input << "'. ";
-
-    if (!relevant_capsules.empty()) {
-        ss << "Aşağıdaki ilgili bilgi tabanı kapsüllerini dikkate al: ";
-        for (const auto& capsule : relevant_capsules) {
-            ss << "(ID: " << capsule.id << ", Konu: " << capsule.topic << ", Özet: '" << capsule.plain_text_summary.substr(0, std::min((size_t)100, capsule.plain_text_summary.length())) << "...') ";
-        }
-    } else {
-        ss << "İlgili bilgi tabanı kapsülü bulunamadı. ";
-    }
-
-    ss << "Bu bağlamı kullanarak, kullanıcıya kapsamlı, içgörülü, 2-3 farklı perspektiften değerlendirme içeren, olası sonuçlar ve öneriler sunan bir yanıt üret. Eğer niyet belirsizse, açıklama talep et.";
-
-    return ss.str();
+    ss << std::string("Kullanıcının niyeti: ") << CerebrumLux::intent_to_string(intent) << std::string(". ");
+    ss << std::string("Mevcut sistem durumu: ") << CerebrumLux::abstract_state_to_string(state) << std::string(". ");
+    ss << std::string("AI'ın mevcut hedefi: ") << CerebrumLux::goal_to_string(goal) << std::string(". ");
+    ss << std::string("Kullanıcı girdisi (veya anahtar kelimelerden türetilen sorgu): '") << user_input << std::string("'. ");
+ 
+     if (!relevant_capsules.empty()) {
+        ss << std::string("Aşağıdaki ilgili bilgi tabanı kapsüllerini dikkate al: ");
+         for (const auto& capsule : relevant_capsules) {
+            ss << std::string("(ID: ") << capsule.id << std::string(", Konu: ") << capsule.topic << std::string(", Özet: '") << capsule.plain_text_summary.substr(0, std::min((size_t)100, capsule.plain_text_summary.length())) << std::string("...') ");
+         }
+     } else {
+        ss << std::string("İlgili bilgi tabanı kapsülü bulunamadı. ");
+     }
+ 
+    ss << std::string("Bu bağlamı kullanarak, kullanıcıya kapsamlı, içgörülü, 2-3 farklı perspektiften değerlendirme içeren, olası sonuçlar ve öneriler sunan bir yanıt üret. Eğer niyet belirsizse, açıklama talep et.");
+ 
+     return ss.str();
 }
 
 CerebrumLux::UserIntent NaturalLanguageProcessor::rule_based_intent_guess(const std::string& lower_text) const {
