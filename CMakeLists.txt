@@ -22,8 +22,11 @@ set(PROJECT_TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 # -----------------------------
 find_package(OpenSSL REQUIRED) # OpenSSL kütüphanelerini bul
 
+# --- Yeni Kütüphaneler: Eigen3 (vcpkg üzerinden) ---
+find_package(Eigen3 CONFIG REQUIRED)          # Eigen3 için vcpkg tarafından sağlanan hedef
+
 # gumbo kütüphanesini bul (HTML5 parser)
-#find_package(gumbo CONFIG REQUIRED)
+# find_package(gumbo CONFIG REQUIRED) # Gumbo manuel olarak bağlanıyor
 
 # -----------------------------
 # Core library
@@ -41,6 +44,7 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/user/*.cpp"
     "${PROJECT_SRC_DIR}/learning/*.cpp"
     "${PROJECT_SRC_DIR}/crypto/*.cpp"
+    "${PROJECT_SRC_DIR}/swarm_vectordb/*.cpp" # Yeni Swarm-VectorDB modülü eklendi
 )
 
 file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
@@ -56,6 +60,7 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
     "${PROJECT_SRC_DIR}/user/*.h"
     "${PROJECT_SRC_DIR}/learning/*.h"
     "${PROJECT_SRC_DIR}/crypto/*.h"
+    "${PROJECT_SRC_DIR}/swarm_vectordb/*.h" # Yeni Swarm-VectorDB modülü eklendi
 )
 
 add_library(CerebrumLuxCore STATIC ${CEREBRUMLUX_CORE_SOURCES} ${CEREBRUMLUX_CORE_HEADERS})
@@ -75,11 +80,19 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}/user"
     "${PROJECT_SRC_DIR}/learning"
     "${PROJECT_SRC_DIR}/crypto"
-    "${PROJECT_SRC_DIR}/external"
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
+    "${PROJECT_SRC_DIR}/swarm_vectordb" # Yeni Swarm-VectorDB modülü include dizini eklendi
+    "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
+    ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri (find_package ile gelir)
 )
 
 target_link_libraries(CerebrumLuxCore PUBLIC
     Qt6::Core
+    # NOTE: CerebrumLuxCore, statik bir kütüphane olduğundan,
+    # bağımlılıklarını (Qt, OpenSSL, Gumbo, LMDB, Eigen3, zlib, winpthread)
+    # nihai yürütülebilir dosyaların 'target_link_libraries' bölümünde
+    # 'CerebrumLuxCore'dan sonra listelemek genellikle MinGW için en güvenilir yöntemdir.
+    # Ancak burada da ekliyoruz ki, dolaylı bağımlılıklar için CMake bulsun.
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
@@ -87,11 +100,19 @@ target_link_libraries(CerebrumLuxCore PUBLIC
     OpenSSL::SSL # OpenSSL SSL kütüphanesi
     OpenSSL::Crypto
     gumbo # gumbo kütüphanesini doğrudan bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini tam yolla bağla
+    Eigen3::Eigen # Eigen3 kütüphanesi (vcpkg tarafından sağlanan hedef)
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib kütüphanesini CerebrumLuxCore'a statik olarak bağla
+    winpthread # winpthread kütüphanesini CerebrumLuxCore'a bağla
+    ws2_32 # Windows Sockets
+    advapi32 # Advanced API Services
+    winmm # Windows Multimedia
 )
 
 # gumbo kütüphanesi için bağlayıcı arama dizinini açıkça ekle
 target_link_directories(CerebrumLuxCore PUBLIC
     "C:/vcpkg/installed/x64-mingw-static/lib"
+    "C:/msys64/mingw64/lib" # MSYS2'den zlib ve winpthread için lib dizini (varsa)
 )
 
 # -----------------------------
@@ -118,6 +139,14 @@ target_link_libraries(CerebrumLuxGUI PRIVATE
     crypt32
     gdi32
     version
+    "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu GUI'ye bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini GUI'ye bağla
+    Eigen3::Eigen # Eigen3 kütüphanesini GUI'ye bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i GUI'ye statik olarak bağla
+    winpthread # winpthread'i GUI'ye bağla
+    advapi32
+    winmm
+    -Wl,--stack,16777216 # Stack boyutu artışı (16MB) - GUI uygulamaları için faydalı
 )
 
 # CerebrumLuxGUI'nin kendi include dizinleri (gerekliyse)
@@ -136,10 +165,43 @@ target_include_directories(CerebrumLuxGUI PRIVATE
     "${PROJECT_SRC_DIR}/user"
     "${PROJECT_SRC_DIR}/learning"
     "${PROJECT_SRC_DIR}/crypto"
-    "${PROJECT_SRC_DIR}/external"
-    #${gumbo_INCLUDE_DIRS} # gumbo başlık dizinlerini ekle
-    "C:/vcpkg/installed/x64-mingw-static/include" # gumbo başlık dizinini manuel ekle
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
+    "${PROJECT_SRC_DIR}/swarm_vectordb" # Yeni Swarm-VectorDB modülü include dizini eklendi
+    "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
+    ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri
+)
 
+# -----------------------------
+# Importer CLI executable
+# -----------------------------
+add_executable(knowledge_importer "${PROJECT_SRC_DIR}/tools/KnowledgeImporter.cpp")
+target_link_libraries(knowledge_importer PRIVATE
+    CerebrumLuxCore # knowledge_importer'ın CerebrumLuxCore'a bağlı olduğunu belirt
+    Qt6::Core # KnowledgeImporter'ın kendisi Qt Core kullanıyorsa (Logger için)
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu importer'a bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini importer'a bağla
+    Eigen3::Eigen # Eigen3 kütüphanesini importer'a bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i importer'a statik olarak bağla
+    winpthread # winpthread'i importer'a bağla
+    ws2_32
+    crypt32
+    gdi32
+    version
+    advapi32
+    winmm
+)
+
+target_include_directories(knowledge_importer PRIVATE
+    "${PROJECT_SRC_DIR}"
+    "${PROJECT_SRC_DIR}/core"
+    "${PROJECT_SRC_DIR}/crypto"
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için gerekli
+    "${PROJECT_SRC_DIR}/learning" # Capsule için
+    "${PROJECT_SRC_DIR}/swarm_vectordb" # SwarmVectorDB DataModels için
+    "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
+    ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri
 )
 
 # -----------------------------
@@ -157,11 +219,14 @@ target_link_libraries(test_response_engine PRIVATE
     crypt32
     gdi32
     version
-    mingw32
-    stdc++
-    gcc
     winpthread
-    -Wl,--enable-stdcall-fixup
+    "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu teste bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini teste bağla
+    Eigen3::Eigen # Eigen3 kütüphanesini teste bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i teste statik olarak bağla
+    advapi32
+    winmm
+    # PROBLEMLİ BAYRAKLAR KALDIRILDI: mingw32, stdc++, gcc, -Wl,--enable-stdcall-fixup
 )
 
 target_include_directories(test_response_engine PRIVATE
@@ -183,15 +248,18 @@ target_link_libraries(test_learning_module PRIVATE
     OpenSSL::Crypto
     # nlohmann::json gibi kütüphaneleri de buraya eklemeniz gerekebilir.
     # eğer test_learning_module'de json kullanılıyorsa
+    "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu teste bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini teste bağla
+    Eigen3::Eigen # Eigen3 kütüphanesini teste bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i teste statik olarak bağla
     ws2_32
     crypt32
     gdi32
     version
-    mingw32
-    stdc++
-    gcc
     winpthread
-    -Wl,--enable-stdcall-fixup
+    advapi32
+    winmm
+    # PROBLEMLİ BAYRAKLAR KALDIRILDI: mingw32, stdc++, gcc, -Wl,--enable-stdcall-fixup
 )
 
 target_include_directories(test_learning_module PRIVATE
@@ -211,15 +279,18 @@ target_link_libraries(nlp_online_trainer PRIVATE
     Qt6::Core # Bazı testler Qt Core'a ihtiyaç duyabilir
     OpenSSL::SSL
     OpenSSL::Crypto
+    "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu eğiticisine bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini eğiticisine bağla
+    Eigen3::Eigen # Eigen3 kütüphanesini eğiticisine bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i eğiticisine statik olarak bağla
     ws2_32
     crypt32
     gdi32
     version
-    mingw32
-    stdc++
-    gcc
     winpthread
-    -Wl,--enable-stdcall-fixup
+    advapi32
+    winmm
+    # PROBLEMLİ BAYRAKLAR KALDIRILDI: mingw32, stdc++, gcc, -Wl,--enable-stdcall-fixup
 )
 
 target_include_directories(nlp_online_trainer PRIVATE
