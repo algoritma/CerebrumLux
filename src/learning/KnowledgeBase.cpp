@@ -4,73 +4,132 @@
 #include "../core/utils.h" // SafeRNG için
 #include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
 #include <fstream>
-#include <algorithm> // std::remove_if için
+#include <algorithm> // std::remove_if için, std::transform için
 #include <limits> // std::numeric_limits için
 #include <chrono> // Time functions
 #include <filesystem> // YENİ: std::filesystem için eklendi
+#include <numeric> // std::iota için (embedding için)
+#include <iomanip> // std::setw için
+
+// Özel olarak CryptofigVector embedding dönüşümü için (şimdilik)
+#include <Eigen/Dense> 
 
 namespace CerebrumLux {
 
 // JSON serileştirme/deserileştirme için Capsule yapısının tanımlanması
 // Bu kısım KnowledgeBase.cpp'den KALDIRILDI, çünkü Capsule.h içinde zaten tanımlıdır.
-/*
-void to_json(nlohmann::json& j, const Capsule& c) {
-    j["id"] = c.id;
-    j["content"] = c.content;
-    j["source"] = c.source;
-    j["topic"] = c.topic;
-    j["confidence"] = c.confidence;
-    j["plain_text_summary"] = c.plain_text_summary;
-    j["timestamp_utc"] = std::chrono::duration_cast<std::chrono::milliseconds>(c.timestamp_utc.time_since_epoch()).count();
-    j["embedding"] = c.embedding;
-    j["cryptofig_blob_base64"] = c.cryptofig_blob_base64;
-    j["encrypted_content"] = c.encrypted_content;
-    j["gcm_tag_base64"] = c.gcm_tag_base64;
-    j["encryption_iv_base64"] = c.encryption_iv_base64;
-    j["signature_base64"] = c.signature_base64;
+
+// --- Yardımcı Dönüşüm Metodları ---
+SwarmVectorDB::CryptofigVector KnowledgeBase::convert_capsule_to_cryptofig_vector(const Capsule& capsule) const {
+    std::vector<uint8_t> cryptofig_bytes;
+    // Gerçek Base64 decode işlemi Crypto modülünde olmalı, şimdilik placeholder
+    if (!capsule.cryptofig_blob_base64.empty()) {
+        cryptofig_bytes.reserve(capsule.cryptofig_blob_base64.length());
+        for (char c : capsule.cryptofig_blob_base64) {
+            cryptofig_bytes.push_back(static_cast<uint8_t>(c));
+        }
+    }
+
+    // std::vector<float> to Eigen::VectorXf
+    Eigen::VectorXf embedding_eigen(capsule.embedding.size());
+    for (size_t i = 0; i < capsule.embedding.size(); ++i) {
+        embedding_eigen(i) = capsule.embedding[i];
+    }
+
+    std::string fisher_query_str = "Is this data relevant to " + capsule.topic + "?";
+
+    return SwarmVectorDB::CryptofigVector(
+        cryptofig_bytes,
+        embedding_eigen,
+        fisher_query_str,
+        capsule.id,
+        capsule.id // content_hash olarak da ID kullanıldı, gerçekte hashlenmeli
+    );
 }
 
-void from_json(const nlohmann::json& j, Capsule& c) {
-    j.at("id").get_to(c.id);
-    j.at("content").get_to(c.content);
-    j.at("source").get_to(c.source);
-    j.at("topic").get_to(c.topic);
-    j.at("confidence").get_to(c.confidence);
-    j.at("plain_text_summary").get_to(c.plain_text_summary);
-    long long timestamp_ms = j.at("timestamp_utc").get<long long>();
-    c.timestamp_utc = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(timestamp_ms));
-    j.at("embedding").get_to(c.embedding);
-    j.at("cryptofig_blob_base64").get_to(c.cryptofig_blob_base64);
-    j.at("encrypted_content").get_to(c.encrypted_content);
-    j.at("gcm_tag_base64").get_to(c.gcm_tag_base64);
-    j.at("encryption_iv_base64").get_to(c.encryption_iv_base64);
-    j.at("signature_base64").get_to(c.signature_base64);
-}
-*/
+Capsule KnowledgeBase::convert_cryptofig_vector_to_capsule(const SwarmVectorDB::CryptofigVector& cv) const {
+    Capsule capsule;
+    capsule.id = cv.id;
+    capsule.topic = ""; // Topic doğrudan CryptofigVector'de saklanmadığı için boş bırakıldı
+    capsule.source = "SwarmVectorDB"; // Kaynak olarak DB belirtilebilir
+    capsule.confidence = 1.0f; // Varsayılan güven
+    capsule.plain_text_summary = cv.fisher_query; // Fisher query'yi özet olarak kullan
+    capsule.content = ""; // Content doğrudan CryptofigVector'de saklanmadığı için boş
+    
+    // Eigen::VectorXf to std::vector<float>
+    capsule.embedding.resize(cv.embedding.size());
+    for (int i = 0; i < cv.embedding.size(); ++i) {
+        capsule.embedding[i] = cv.embedding(i);
+    }
 
-KnowledgeBase::KnowledgeBase() {
-    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Initialized.");
+    // cryptofig_bytes to base64 string (placeholder)
+    capsule.cryptofig_blob_base64.reserve(cv.cryptofig.size());
+    for (uint8_t byte : cv.cryptofig) {
+        capsule.cryptofig_blob_base64 += static_cast<char>(byte);
+    }
+
+    // Diğer alanlar CryptofigVector'de saklanmadığı için boş kalır veya varsayılan değer alır
+    capsule.encrypted_content = "";
+    capsule.gcm_tag_base64 = "";
+    capsule.encryption_iv_base64 = "";
+    capsule.signature_base64 = "";
+    capsule.timestamp_utc = std::chrono::system_clock::now(); // Güncel zaman
+    capsule.trust_score = 1.0f;
+    capsule.code_file_path = "";
+
+    return capsule;
+}
+
+// --- KnowledgeBase Implementasyonu ---
+
+KnowledgeBase::KnowledgeBase() : db_path_("default_lmdb_path"), swarm_db_(db_path_) { // db_path_ ve swarm_db_ başlatıldı
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Varsayilan kurucu baslatildi. LMDB yolu: " << db_path_);
+    if (!swarm_db_.open()) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Varsayilan SwarmVectorDB açılamadı. Bilgi tabanı işlevsel değil.");
+    }
+}
+
+KnowledgeBase::KnowledgeBase(const std::string& db_path) : db_path_(db_path), swarm_db_(db_path_) { // Yeni kurucu
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase Kurucusu: db_path ile baslatildi. DB Yolu: " << db_path_);
+    if (!swarm_db_.open()) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase Kurucusu: SwarmVectorDB açılamadı. Bilgi tabanı işlevsel değil.");
+    }
 }
 
 void KnowledgeBase::add_capsule(const Capsule& capsule) {
-    auto it = std::find_if(capsules.begin(), capsules.end(), [&](const Capsule& c){ return c.id == capsule.id; });
-    if (it != capsules.end()) {
-        *it = capsule;
+    // Önce kapsülün zaten var olup olmadığını kontrol et (güncelleme için)
+    if (swarm_db_.get_vector(capsule.id)) { 
         LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Mevcut kapsül güncellendi. ID: " << capsule.id);
+    }
+    SwarmVectorDB::CryptofigVector cv = convert_capsule_to_cryptofig_vector(capsule);
+    if (swarm_db_.store_vector(cv)) {
+         LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: New capsule added. ID: " << capsule.id);
     } else {
-        capsules.push_back(capsule);
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: New capsule added. ID: " << capsule.id);
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Kapsül LMDB'ye eklenemedi. ID: " << capsule.id);
     }
 }
 
 std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, int top_k) const {
     LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Semantic search for query: " << query << ", Top K: " << top_k);
     std::vector<Capsule> results;
-    for (const auto& capsule : capsules) {
-        if (capsule.topic.find(query) != std::string::npos || capsule.plain_text_summary.find(query) != std::string::npos) {
-            results.push_back(capsule);
+
+    // TODO: hnswlib entegrasyonu yapıldığında buradaki mantık değişecek, doğrudan vektör araması yapılacak.
+    // Şimdilik, verimli olmasa da, tüm LMDB verilerini çekip string bazlı arama yapıyoruz.
+    if (swarm_db_.is_open()) {
+        std::vector<std::string> all_ids = swarm_db_.get_all_ids();
+        for (const auto& id : all_ids) {
+            std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
+            if (cv) {
+                Capsule current_capsule = convert_cryptofig_vector_to_capsule(*cv);
+                if (current_capsule.topic.find(query) != std::string::npos || 
+                    current_capsule.plain_text_summary.find(query) != std::string::npos ||
+                    current_capsule.content.find(query) != std::string::npos) {
+                    results.push_back(current_capsule);
+                }
+            }
         }
     }
+        
     if (results.empty()) {
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: '" << query << "' sorgusu için sonuç bulunamadı.");
     }
@@ -80,9 +139,16 @@ std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, in
 std::vector<Capsule> KnowledgeBase::search_by_topic(const std::string& topic) const {
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Topic'e göre arama yapılıyor: " << topic);
     std::vector<Capsule> results;
-    for (const auto& capsule : capsules) {
-        if (capsule.topic == topic) {
-            results.push_back(capsule);
+    if (swarm_db_.is_open()) {
+        std::vector<std::string> all_ids = swarm_db_.get_all_ids();
+        for (const auto& id : all_ids) {
+            std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
+            if (cv) {
+                Capsule current_capsule = convert_cryptofig_vector_to_capsule(*cv);
+                if (current_capsule.topic.find(topic) != std::string::npos) {
+                    results.push_back(current_capsule);
+                }
+            }
         }
     }
     if (results.empty()) {
@@ -91,12 +157,11 @@ std::vector<Capsule> KnowledgeBase::search_by_topic(const std::string& topic) co
     return results;
 }
 
-std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) const {
+std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) { 
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: ID'ye göre kapsül aranıyor: " << id);
-    for (const auto& capsule : capsules) {
-        if (capsule.id == id) {
-            return capsule;
-        }
+    std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id); // get_vector() burada const olmayan metod içinde çağrılabilir
+    if (cv) {
+        return convert_cryptofig_vector_to_capsule(*cv);
     }
     LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: ID '" << id << "' ile kapsül bulunamadı.");
     return std::nullopt;
@@ -104,10 +169,7 @@ std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) 
 
 void KnowledgeBase::quarantine_capsule(const std::string& id) {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinaya alınıyor. ID: " << id);
-    auto it = std::remove_if(capsules.begin(), capsules.end(), [&](const Capsule& c){ return c.id == id; });
-    if (it != capsules.end()) {
-        quarantined_capsules.push_back(*it);
-        capsules.erase(it, capsules.end());
+    if (swarm_db_.delete_vector(id)) {
         LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinaya alındı. ID: " << id);
     } else {
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Karantinaya alınacak ID '" << id << "' ile kapsül bulunamadı.");
@@ -116,101 +178,81 @@ void KnowledgeBase::quarantine_capsule(const std::string& id) {
 
 void KnowledgeBase::revert_capsule(const std::string& id) {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinadan geri alınıyor. ID: " << id);
-    auto it = std::remove_if(quarantined_capsules.begin(), quarantined_capsules.end(), [&](const Capsule& c){ return c.id == id; });
-    if (it != quarantined_capsules.end()) {
-        capsules.push_back(*it);
-        quarantined_capsules.erase(it, quarantined_capsules.end());
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül karantinadan geri alındı. ID: " << id);
-    } else {
-        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Karantinadan geri alınacak ID '" << id << "' ile kapsül bulunamadı.");
-    }
+    LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase::revert_capsule(): Metot henüz tam olarak uygulanmadi. ID: " << id << ".");
+    // TODO: Karantinaya alınan kapsüller için ayrı bir LMDB DBI veya flag mekanizması entegre edildiğinde bu metot güncellenecek.
 }
 
 void KnowledgeBase::save(const std::string& filename) const {
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı kaydediliyor: " << filename);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::save(): LMDB tabanlı veritabanı doğrudan kalıcıdır. JSON dışa aktarma yapılıyor.");
+    
     nlohmann::json j;
-    j["active_capsules"] = capsules;
-    j["quarantined_capsules"] = quarantined_capsules;
+    std::vector<Capsule> all_active_capsules = get_all_capsules(); 
+    j["active_capsules"] = all_active_capsules;
+    j["quarantined_capsules"] = nlohmann::json::array(); // Karantinaya alınanları şimdilik boş bırakıyoruz
 
-    // YENİ: Tam dosya yolunu logla
     std::filesystem::path current_path = std::filesystem::current_path();
     std::filesystem::path file_path = current_path / filename;
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Kaydedilmeye calisilan tam dosya yolu: " << file_path.string());
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Kaydedilmeye calisilan tam dosya yolu (JSON Export): " << file_path.string());
 
-    std::ofstream o(file_path); // file_path kullan
+    std::ofstream o(file_path);
     if (o.is_open()) {
         o << std::setw(4) << j << std::endl;
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla kaydedildi.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı JSON olarak başarıyla dışa aktarıldı: " << filename);
     } else {
-        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı dosyaya kaydedilemedi: " << file_path.string());
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı JSON'a dışa aktarılamadı: " << file_path.string());
     }
 }
 
 void KnowledgeBase::load(const std::string& filename) {
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı yükleniyor: " << filename);
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::load(): LMDB tabanlı veritabanı doğrudan yüklendi (açıldı). JSON dosyasından yükleme KnowledgeImporter'a aittir.");
+    if (!swarm_db_.is_open()) {
+        if (!swarm_db_.open()) {
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase::load(): SwarmVectorDB açılamadı. Bilgi tabanı işlevsel değil.");
+        }
+    }
 
-    // YENİ DİYAGNOSTİK KOD:
     std::filesystem::path current_path = std::filesystem::current_path();
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Uygulama calisma dizini: " << current_path.string());
     std::filesystem::path file_path = current_path / filename;
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Yuklenmeye calisilan tam dosya yolu: " << file_path.string());
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Yuklenmeye calisilan tam dosya yolu (JSON Import denemesi): " << file_path.string());
 
     if (!std::filesystem::exists(file_path)) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: Dosya bulunamadi: " << file_path.string() << ". Bos bilgi tabani ile baslatiliyor.");
-        capsules.clear();
-        quarantined_capsules.clear();
-        return; // Dosya yoksa daha fazla deneme
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosya bulunamadi: " << file_path.string() << ". LMDB tabani kullanilmaya devam ediliyor.");
+        return; 
     } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Dosya var: " << file_path.string());
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: JSON dosya var: " << file_path.string());
     }
-    // END YENİ DİYAGNOSTİK KOD
-
-    std::ifstream i(file_path); // YENİ: Tam dosya yolunu kullanın
+    
+    std::ifstream i(file_path);
     if (i.is_open()) {
         try {
             nlohmann::json j;
             i >> j;
-            if (j.count("active_capsules")) {
-                capsules = j.at("active_capsules").get<std::vector<Capsule>>();
-            }
-            if (j.count("quarantined_capsules")) {
-                quarantined_capsules = j.at("quarantined_capsules").get<std::vector<Capsule>>();
-            }
-            LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı başarıyla yüklendi. Aktif kapsül sayısı: " << capsules.size() << ", Karantinaya alınan kapsül sayısı: " << quarantined_capsules.size());
+            LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: JSON dosyasindan kapsül bilgisi bulundu ancak LMDB'ye aktarilmadi (KnowledgeImporter kullanilmalidir).");
         } catch (const nlohmann::json::exception& e) {
-            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON yükleme hatası: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
-            capsules.clear();
-            quarantined_capsules.clear();
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON yükleme hatası: " << e.what() << ". LMDB tabani kullanilmaya devam ediliyor.");
         } catch (const std::exception& e) {
-            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". Boş bilgi tabanı ile başlatılıyor.");
-            capsules.clear();
-            quarantined_capsules.clear();
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". LMDB tabani kullanilmaya devam ediliyor.");
         }
     } else {
-        // Bu blok artık sadece 'std::filesystem::exists' true döndürmesine rağmen 'is_open()' başarısız olursa çalışır.
-        // Bu durumda ya izin sorunudur ya da dosya kilitlidir.
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: Dosya acilamadi: " << file_path.string() << ". Dosya var ancak acilamiyor (izin veya kilit sorunu olabilir). Bos bilgi tabani ile baslatiliyor.");
-        capsules.clear();
-        quarantined_capsules.clear();
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosya acilamadi: " << file_path.string() << ". Dosya var ancak acilamiyor (izin veya kilit sorunu olabilir). LMDB tabani kullanilmaya devam ediliyor.");
     }
-}
-
-std::vector<float> KnowledgeBase::computeEmbedding(const std::string& text) const {
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: computeEmbedding (LearningModule tarafından çağrılmalı).");
-    return std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.0f);
-}
-
-float KnowledgeBase::cosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const {
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: cosineSimilarity (henüz implemente edilmedi).");
-    if (vec1.empty() || vec2.empty() || vec1.size() != vec2.size()) {
-        return 0.0f;
-    }
-    return SafeRNG::get_instance().get_float(0.0f, 1.0f);
 }
 
 std::vector<Capsule> KnowledgeBase::get_all_capsules() const {
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Tüm aktif kapsüller isteniyor. Sayı: " << capsules.size());
-    return capsules;
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase::get_all_capsules(): Tüm aktif kapsüller LMDB'den isteniyor.");
+    std::vector<Capsule> all_capsules;
+    if (swarm_db_.is_open()) {
+        std::vector<std::string> all_ids = swarm_db_.get_all_ids();
+        for (const auto& id : all_ids) {
+            std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
+            if (cv) {
+                all_capsules.push_back(convert_cryptofig_vector_to_capsule(*cv));
+            }
+        }
+    }
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase::get_all_capsules(): Toplam " << all_capsules.size() << " kapsül LMDB'den alındı.");
+    return all_capsules;
 }
 
 } // namespace CerebrumLux

@@ -230,7 +230,7 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     return true;
 }
 
-std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id) {
+std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id) const { // const eklendi
     std::lock_guard<std::mutex> lock(mutex_); // Thread güvenliği
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: Veritabanı açık değil. Vektör getirilemedi.");
@@ -378,6 +378,44 @@ bool SwarmVectorDB::delete_vector(const std::string& id) {
     return true;
 }
 
+std::vector<std::string> SwarmVectorDB::get_all_ids() const { // const eklendi
+    std::lock_guard<std::mutex> lock(mutex_); // Thread güvenliği
+    std::vector<std::string> ids;
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_ids(): Veritabanı açık değil.");
+        return ids;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_ids(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return ids;
+    }
+
+    MDB_cursor* cursor;
+    rc = mdb_cursor_open(txn, dbi_, &cursor);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_ids(): mdb_cursor_open başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return ids;
+    }
+
+    MDB_val key, data;
+    while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == MDB_SUCCESS) {
+        ids.emplace_back(static_cast<char*>(key.mv_data), key.mv_size);
+    }
+
+    mdb_cursor_close(cursor);
+    mdb_txn_abort(txn); // Salt okunur işlem olduğu için abort etmek güvenlidir
+
+    if (rc != MDB_NOTFOUND) { // MDB_NOTFOUND, listenin sonuna ulaştığımızı gösterir, bir hata değildir.
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_ids(): mdb_cursor_get döngüsü başarısız: " << mdb_strerror(rc));
+        ids.clear(); // Hata durumunda boş liste döndür
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_all_ids(): Toplam " << ids.size() << " ID getirildi.");
+    return ids;
+}
 
 } // namespace SwarmVectorDB
 } // namespace CerebrumLux
