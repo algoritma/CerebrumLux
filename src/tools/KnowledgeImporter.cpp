@@ -11,6 +11,8 @@
 #include "../swarm_vectordb/DataModels.h"   // CryptofigVector için
 #include "../swarm_vectordb/VectorDB.h"     // SwarmVectorDB için
 
+#include <lmdb.h> // MDB_cursor, mdb_cursor_open, mdb_cursor_get için
+
 // Geçici olarak Eigen başlık dosyasını dahil ediyoruz, çünkü CryptofigVector constructor'ı Eigen kullanır.
 // Daha sonra, bu işlem için ayrı bir embedding hesaplama modülü olacak.
 #include <Eigen/Dense>
@@ -26,6 +28,12 @@ public:
 
     // İçe aktarma işlemini başlatır
     bool import_data();
+
+    // Veritabanındaki tüm ID'leri ve boyutları listeler
+    bool list_data(); // Removed const
+
+    // json_path_ değerine dışarıdan erişim için getter
+    const std::string& get_json_path() const { return json_path_; }
 
 private:
     std::string db_path_;
@@ -114,6 +122,52 @@ bool KnowledgeImporter::import_data() {
     return true;
 }
 
+bool KnowledgeImporter::list_data() { // Removed const
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Veritabanı içeriği listeleniyor. DB Yolu: " << db_path_);
+
+    if (!swarm_db_.open()) { // swarm_db_ artık const değil, open() çağrılabilir
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): SwarmVectorDB açılamadı.");
+        return false;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(swarm_db_.get_env(), nullptr, MDB_RDONLY, &txn); // get_env() kullanıldı
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        swarm_db_.close();
+        return false;
+    }
+
+    MDB_cursor* cursor;
+    rc = mdb_cursor_open(txn, swarm_db_.get_dbi(), &cursor); // get_dbi() kullanıldı
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): mdb_cursor_open başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        swarm_db_.close();
+        return false;
+    }
+
+    MDB_val key, data;
+    int count = 0;
+    while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == MDB_SUCCESS) {
+        std::string id_str(static_cast<char*>(key.mv_data), key.mv_size);
+        LOG_DEFAULT(LogLevel::INFO, "  ID: " << id_str << ", Boyut: " << data.mv_size << " byte.");
+        count++;
+    }
+
+    mdb_cursor_close(cursor);
+    mdb_txn_abort(txn); // Salt okunur işlem olduğu için abort etmek güvenlidir
+    swarm_db_.close();
+
+    if (rc != MDB_NOTFOUND) { // MDB_NOTFOUND, listenin sonuna ulaştığımızı gösterir, bir hata değildir.
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): mdb_cursor_get döngüsü başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Veritabanında toplam " << count << " vektör bulundu.");
+    return true;
+}
+
 SwarmVectorDB::CryptofigVector KnowledgeImporter::convert_capsule_to_cryptofig_vector(const Capsule& capsule) const {
     // Mevcut kapsülden CryptofigVector'e basit dönüştürme.
     // cryptofig (vector<uint8_t>): Base64 decode etmeliyiz
@@ -147,41 +201,13 @@ SwarmVectorDB::CryptofigVector KnowledgeImporter::convert_capsule_to_cryptofig_v
     );
 }
 
-
 } // namespace Tools
 } // namespace CerebrumLux
 
-// CLI için ana fonksiyon
-int main(int argc, char* argv[]) {
-    std::cout << "DEBUG: main() fonksiyonuna girildi." << std::endl; // İlk kontrol noktası
-
-    // Logger'ı sadece CLI için başlat. Log dosyası adını açıkça belirleyelim.
-    // CWD'ye yazılmasını bekliyoruz.
-    CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::TRACE, "importer_log", "CLI"); // TRACE seviyesine yükseltildi, dosya adı eklendi
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Logger başarıyla başlatıldı.");
-    std::cout << "DEBUG: Logger başlatıldı." << std::endl; // Logger sonrası kontrol noktası
-
-    if (argc < 3) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "Kullanım: KnowledgeImporter <db_path> <json_path>");
-        std::cerr << "ERROR: Kullanım: KnowledgeImporter <db_path> <json_path>" << std::endl;
-        return 1;
-    }
-    std::cout << "DEBUG: Argümanlar kontrol edildi." << std::endl;
-
-    std::string db_path = argv[1];
-    std::string json_path = argv[2];
-
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Argümanlar: db_path=" << db_path << ", json_path=" << json_path);
-    std::cout << "DEBUG: Argümanlar: db_path=" << db_path << ", json_path=" << json_path << std::endl;
-
-    CerebrumLux::Tools::KnowledgeImporter importer(db_path, json_path);
-    std::cout << "DEBUG: KnowledgeImporter nesnesi oluşturuldu." << std::endl;
-    if (importer.import_data()) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Veri içe aktarma işlemi başarıyla tamamlandı.");
-        std::cout << "DEBUG: İçe aktarma başarılı." << std::endl;
-        return 0;
-    } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "Veri içe aktarma işlemi başarısız oldu.");
-        return 1;
-    }
+int main(int argc, char** argv) {
+    using namespace CerebrumLux::Tools;
+    KnowledgeImporter importer("data/luxdb", "knowledge.json");
+    importer.import_data();
+    importer.list_data();
+    return 0;
 }

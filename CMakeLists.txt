@@ -88,11 +88,6 @@ target_include_directories(CerebrumLuxCore PUBLIC
 
 target_link_libraries(CerebrumLuxCore PUBLIC
     Qt6::Core
-    # NOTE: CerebrumLuxCore, statik bir kütüphane olduğundan,
-    # bağımlılıklarını (Qt, OpenSSL, Gumbo, LMDB, Eigen3, zlib, winpthread)
-    # nihai yürütülebilir dosyaların 'target_link_libraries' bölümünde
-    # 'CerebrumLuxCore'dan sonra listelemek genellikle MinGW için en güvenilir yöntemdir.
-    # Ancak burada da ekliyoruz ki, dolaylı bağımlılıklar için CMake bulsun.
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
@@ -175,6 +170,9 @@ target_include_directories(CerebrumLuxGUI PRIVATE
 # Importer CLI executable
 # -----------------------------
 add_executable(knowledge_importer "${PROJECT_SRC_DIR}/tools/KnowledgeImporter.cpp")
+# knowledge_importer bir konsol uygulamasıdır, GUI değildir:
+set_target_properties(knowledge_importer PROPERTIES WIN32_EXECUTABLE FALSE)
+target_link_options(knowledge_importer PRIVATE -mconsole)
 target_link_libraries(knowledge_importer PRIVATE
     CerebrumLuxCore # knowledge_importer'ın CerebrumLuxCore'a bağlı olduğunu belirt
     Qt6::Core # KnowledgeImporter'ın kendisi Qt Core kullanıyorsa (Logger için)

@@ -51,10 +51,14 @@ public:
     // Verilen hash'e sahip vektörü siler
     bool delete_vector(const std::string& hash);
 
+    // LMDB ortam ve DBI handle'ları için getter'lar (list_data için gerekli)
+    MDB_env* get_env() { return env_; }
+    MDB_dbi get_dbi() { return dbi_; }
+
 private:
     std::string db_path_;
-    MDB_env* env_ = nullptr; // LMDB ortamı
-    MDB_dbi dbi_ = 0;        // LMDB veritabanı handle'ı
+    MDB_env* env_; // LMDB ortamı
+    MDB_dbi dbi_;  // LMDB veritabanı handle'ı
     std::mutex mutex_;       // Thread güvenliği için
 
     // Kopyalama ve atamayı engelle

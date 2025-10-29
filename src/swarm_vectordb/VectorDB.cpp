@@ -66,8 +66,8 @@ void SwarmConsensusTree::update_tree(const CryptofigVector& cv) {
 
 SwarmVectorDB::SwarmVectorDB(const std::string& db_path) : db_path_(db_path) {
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB Kurucusu: Başlatıldı. DB Yolu: " << db_path_);
-    env_ = nullptr; // Başlangıçta env_ null olarak ayarlı
-    dbi_ = 0;       // Başlangıçta dbi_ null olarak ayarlı
+    env_ = nullptr; // env_ ve dbi_ üyelerini açıkça başlat
+    dbi_ = 0;
 }
 
 SwarmVectorDB::~SwarmVectorDB() {
