@@ -1,7 +1,7 @@
 #include "StegoDetector.h"
 #include <cmath> // log2 için
 #include <map>   // frekans sayımı için
-#include "../../core/logger.h" // LOG_DEFAULT için
+#include "../core/logger.h" // LOG_DEFAULT için
 
 namespace CerebrumLux { // Yeni eklendi
 

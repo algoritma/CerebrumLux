@@ -1,6 +1,6 @@
 // src/crypto/CryptoUtils.cpp
 #include "CryptoUtils.h"
-#include "../../core/logger.h" // LOG_DEFAULT için
+#include "../core/logger.h" // LOG_DEFAULT için
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <openssl/pem.h>

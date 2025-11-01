@@ -1,7 +1,7 @@
 #include "UnicodeSanitizer.h"
 #include <algorithm>
 #include <cctype> // iscntrl için
-#include "../../core/logger.h" // LOG_DEFAULT için
+#include "../core/logger.h" // LOG_DEFAULT için
 
 namespace CerebrumLux { // Yeni eklendi
 

@@ -11,6 +11,9 @@
 #include <numeric> // std::iota için (embedding için)
 #include <iomanip> // std::setw için
 
+#include <random> // Deterministic embedding için
+#include <functional> // std::hash için
+
 // Özel olarak CryptofigVector embedding dönüşümü için (şimdilik)
 #include <Eigen/Dense> 
 
@@ -96,6 +99,27 @@ KnowledgeBase::KnowledgeBase(const std::string& db_path) : db_path_(db_path), sw
     }
 }
 
+// YENİ: Deterministic placeholder embedding hesaplama metodu
+std::vector<float> KnowledgeBase::computeEmbedding(const std::string& text) const {
+    // TODO: Gerçek NLP modülü entegre edildiğinde bu kısım güncellenecek.
+    // Şimdilik, deterministic bir placeholder embedding üretiyoruz.
+    // hnswlib wrapper'da 128 boyutlu embedding kullanıldığı için burada da 128 boyut döndürüyoruz.
+    const int embedding_dim = 128; 
+    std::vector<float> embedding(embedding_dim);
+
+    // Sorgu metninden deterministik bir seed oluştur
+    std::hash<std::string> hasher;
+    unsigned int seed = static_cast<unsigned int>(hasher(text));
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // Rastgele float değerleri
+
+    for (int i = 0; i < embedding_dim; ++i) {
+        embedding[i] = dist(rng);
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Query '" << text << "' için deterministik embedding olusturuldu.");
+    return embedding;
+}
+
 void KnowledgeBase::add_capsule(const Capsule& capsule) {
     // Önce kapsülün zaten var olup olmadığını kontrol et (güncelleme için)
     if (swarm_db_.get_vector(capsule.id)) { 
@@ -113,51 +137,45 @@ std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, in
     LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Semantic search for query: " << query << ", Top K: " << top_k);
     std::vector<Capsule> results;
 
-    // TODO: hnswlib entegrasyonu yapıldığında buradaki mantık değişecek, doğrudan vektör araması yapılacak.
-    // Şimdilik, verimli olmasa da, tüm LMDB verilerini çekip string bazlı arama yapıyoruz.
-    if (swarm_db_.is_open()) {
-        std::vector<std::string> all_ids = swarm_db_.get_all_ids();
-        for (const auto& id : all_ids) {
-            std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
-            if (cv) {
-                Capsule current_capsule = convert_cryptofig_vector_to_capsule(*cv);
-                if (current_capsule.topic.find(query) != std::string::npos || 
-                    current_capsule.plain_text_summary.find(query) != std::string::npos ||
-                    current_capsule.content.find(query) != std::string::npos) {
-                    results.push_back(current_capsule);
-                }
-            }
+    if (!swarm_db_.is_open()) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: SwarmVectorDB acik degil. Semantik arama yapilamadi.");
+        return results;
+    }
+
+    // 1. Sorgu metni için embedding hesapla
+    std::vector<float> query_embedding = computeEmbedding(query);
+    if (query_embedding.empty()) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Sorgu embedding'i olusturulamadi. Semantik arama yapilamadi.");
+        return results;
+    }
+
+    // 2. SwarmVectorDB'yi kullanarak benzer vektörleri ara (hnswlib kullanacak)
+    std::vector<std::string> similar_ids = swarm_db_.search_similar_vectors(query_embedding, top_k);
+
+    // 3. Bulunan ID'lere karşılık gelen kapsülleri LMDB'den getir
+    for (const auto& id : similar_ids) {
+        std::optional<Capsule> capsule_opt = find_capsule_by_id(id); 
+        if (capsule_opt) {
+            results.push_back(*capsule_opt);
         }
     }
         
     if (results.empty()) {
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: '" << query << "' sorgusu için sonuç bulunamadı.");
+    } else {
+        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: '" << query << "' sorgusu için " << results.size() << " semantik sonuç bulundu.");
     }
     return results;
 }
 
 std::vector<Capsule> KnowledgeBase::search_by_topic(const std::string& topic) const {
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Topic'e göre arama yapılıyor: " << topic);
-    std::vector<Capsule> results;
-    if (swarm_db_.is_open()) {
-        std::vector<std::string> all_ids = swarm_db_.get_all_ids();
-        for (const auto& id : all_ids) {
-            std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
-            if (cv) {
-                Capsule current_capsule = convert_cryptofig_vector_to_capsule(*cv);
-                if (current_capsule.topic.find(topic) != std::string::npos) {
-                    results.push_back(current_capsule);
-                }
-            }
-        }
-    }
-    if (results.empty()) {
-        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: '" << topic << "' konusu için sonuç bulunamadı.");
-    }
-    return results;
+    // Topic tabanlı aramayı da semantik aramaya dönüştürüyoruz.
+    // computeEmbedding metodunun topic stringini anlamlı bir vektöre çevireceği varsayılır.
+    return semantic_search(topic);
 }
 
-std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) { 
+std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) const { 
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: ID'ye göre kapsül aranıyor: " << id);
     std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id); // get_vector() burada const olmayan metod içinde çağrılabilir
     if (cv) {

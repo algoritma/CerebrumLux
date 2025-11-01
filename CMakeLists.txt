@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # -----------------------------
 # Qt6 entegrasyonu
 # -----------------------------
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Charts REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Widgets Network Charts REQUIRED)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -24,6 +24,7 @@ find_package(OpenSSL REQUIRED) # OpenSSL kütüphanelerini bul
 
 # --- Yeni Kütüphaneler: Eigen3 (vcpkg üzerinden) ---
 find_package(Eigen3 CONFIG REQUIRED)          # Eigen3 için vcpkg tarafından sağlanan hedef
+find_package(hnswlib CONFIG REQUIRED) # hnswlib için vcpkg tarafından sağlanan hedef
 
 # gumbo kütüphanesini bul (HTML5 parser)
 # find_package(gumbo CONFIG REQUIRED) # Gumbo manuel olarak bağlanıyor
@@ -36,8 +37,8 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/communication/*.cpp"
     "${PROJECT_SRC_DIR}/core/*.cpp"
     "${PROJECT_SRC_DIR}/data_models/*.cpp"
-    "${PROJECT_SRC_DIR}/gui/panels/*.cpp"
-    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp"
+    #"${PROJECT_SRC_DIR}/gui/panels/*.cpp"
+    #"${PROJECT_SRC_DIR}/gui/*.cpp"
     "${PROJECT_SRC_DIR}/meta/*.cpp"
     "${PROJECT_SRC_DIR}/planning_execution/*.cpp"
     "${PROJECT_SRC_DIR}/sensors/*.cpp"
@@ -45,6 +46,7 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
     "${PROJECT_SRC_DIR}/learning/*.cpp"
     "${PROJECT_SRC_DIR}/crypto/*.cpp"
     "${PROJECT_SRC_DIR}/swarm_vectordb/*.cpp" # Yeni Swarm-VectorDB modülü eklendi
+    "${PROJECT_SRC_DIR}/hnswlib_wrapper.cpp"
 )
 
 file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
@@ -52,8 +54,8 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
     "${PROJECT_SRC_DIR}/communication/*.h"
     "${PROJECT_SRC_DIR}/core/*.h"
     "${PROJECT_SRC_DIR}/data_models/*.h"
-    "${PROJECT_SRC_DIR}/gui/panels/*.h"
-    "${PROJECT_SRC_DIR}/gui/engine_integration.h"
+    #"${PROJECT_SRC_DIR}/gui/panels/*.h"
+    #"${PROJECT_SRC_DIR}/gui/*.h"
     "${PROJECT_SRC_DIR}/meta/*.h"
     "${PROJECT_SRC_DIR}/planning_execution/*.h"
     "${PROJECT_SRC_DIR}/sensors/*.h"
@@ -61,6 +63,7 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
     "${PROJECT_SRC_DIR}/learning/*.h"
     "${PROJECT_SRC_DIR}/crypto/*.h"
     "${PROJECT_SRC_DIR}/swarm_vectordb/*.h" # Yeni Swarm-VectorDB modülü eklendi
+    "${PROJECT_SRC_DIR}/hnswlib_wrapper.h"
 )
 
 add_library(CerebrumLuxCore STATIC ${CEREBRUMLUX_CORE_SOURCES} ${CEREBRUMLUX_CORE_HEADERS})
@@ -71,8 +74,9 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}/communication"
     "${PROJECT_SRC_DIR}/core"
     "${PROJECT_SRC_DIR}/data_models"
-    "${PROJECT_SRC_DIR}/gui"
-    "${PROJECT_SRC_DIR}/gui/panels"
+    #"${PROJECT_SRC_DIR}/gui"
+    #"${PROJECT_SRC_DIR}/gui/panels"
+    # GUI include dizinleri buradan kaldırıldı (Core GUI'den bağımsız olmalı)
     "${PROJECT_SRC_DIR}/meta"
     "${PROJECT_SRC_DIR}/planning_execution"
     "${PROJECT_SRC_DIR}/sensors"
@@ -83,21 +87,22 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
     "${PROJECT_SRC_DIR}/swarm_vectordb" # Yeni Swarm-VectorDB modülü include dizini eklendi
     "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
+    "C:/vcpkg/installed/x64-mingw-static/include/hnswlib" # hnswlib başlık dizini
     ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri (find_package ile gelir)
 )
 
 target_link_libraries(CerebrumLuxCore PUBLIC
+    # WebFetcher'ın QObject, QNetworkAccessManager, QTextDocument gibi bağımlılıkları için gereklidir.
     Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
     Qt6::Network
-    Qt6::Charts # Charts modülü
+    Qt6::Gui
     OpenSSL::SSL # OpenSSL SSL kütüphanesi
     OpenSSL::Crypto
     gumbo # gumbo kütüphanesini doğrudan bağla
     "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini tam yolla bağla
     Eigen3::Eigen # Eigen3 kütüphanesi (vcpkg tarafından sağlanan hedef)
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib kütüphanesini CerebrumLuxCore'a statik olarak bağla
+    hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla (doğrudan dosya yolu kaldırıldı)
     winpthread # winpthread kütüphanesini CerebrumLuxCore'a bağla
     ws2_32 # Windows Sockets
     advapi32 # Advanced API Services
@@ -114,9 +119,17 @@ target_link_directories(CerebrumLuxCore PUBLIC
 # GUI executable
 # -----------------------------
 add_executable(CerebrumLuxGUI WIN32
+    # Ana GUI dosyaları
     "${PROJECT_SRC_DIR}/main.cpp"
     "${PROJECT_SRC_DIR}/gui/MainWindow.cpp"
     "${PROJECT_SRC_DIR}/gui/MainWindow.ui"
+    # GUI panel
+    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp" # GUI kaynağı buraya taşındı
+    "${PROJECT_SRC_DIR}/gui/panels/CapsuleTransferPanel.cpp"
+    "${PROJECT_SRC_DIR}/gui/panels/GraphPanel.cpp"
+    "${PROJECT_SRC_DIR}/gui/panels/KnowledgeBasePanel.cpp"
+    "${PROJECT_SRC_DIR}/gui/panels/LogPanel.cpp"
+    "${PROJECT_SRC_DIR}/gui/panels/SimulationPanel.cpp"
 )
 
 target_link_options(CerebrumLuxGUI PRIVATE -Wl,--subsystem,windows)
@@ -125,7 +138,7 @@ target_link_libraries(CerebrumLuxGUI PRIVATE
     CerebrumLuxCore
     Qt6::Core
     Qt6::Gui
-    Qt6::Widgets
+    #Qt6::Widgets
     Qt6::Network
     Qt6::Charts
     OpenSSL::SSL
@@ -163,6 +176,7 @@ target_include_directories(CerebrumLuxGUI PRIVATE
     "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için
     "${PROJECT_SRC_DIR}/swarm_vectordb" # Yeni Swarm-VectorDB modülü include dizini eklendi
     "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
+    "C:/vcpkg/installed/x64-mingw-static/include/hnswlib" # hnswlib başlık dizini
     ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri
 )
 
@@ -182,6 +196,7 @@ target_link_libraries(knowledge_importer PRIVATE
     "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini importer'a bağla
     Eigen3::Eigen # Eigen3 kütüphanesini importer'a bağla
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i importer'a statik olarak bağla
+    hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla (doğrudan dosya yolu kaldırıldı)
     winpthread # winpthread'i importer'a bağla
     ws2_32
     crypt32
@@ -199,6 +214,7 @@ target_include_directories(knowledge_importer PRIVATE
     "${PROJECT_SRC_DIR}/learning" # Capsule için
     "${PROJECT_SRC_DIR}/swarm_vectordb" # SwarmVectorDB DataModels için
     "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
+    "C:/vcpkg/installed/x64-mingw-static/include/hnswlib" # hnswlib başlık dizini
     ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri
 )
 
@@ -222,6 +238,7 @@ target_link_libraries(test_response_engine PRIVATE
     "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini teste bağla
     Eigen3::Eigen # Eigen3 kütüphanesini teste bağla
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i teste statik olarak bağla
+    #hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla
     advapi32
     winmm
     # PROBLEMLİ BAYRAKLAR KALDIRILDI: mingw32, stdc++, gcc, -Wl,--enable-stdcall-fixup
@@ -250,6 +267,7 @@ target_link_libraries(test_learning_module PRIVATE
     "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini teste bağla
     Eigen3::Eigen # Eigen3 kütüphanesini teste bağla
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i teste statik olarak bağla
+    hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla
     ws2_32
     crypt32
     gdi32
@@ -280,7 +298,8 @@ target_link_libraries(nlp_online_trainer PRIVATE
     "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu eğiticisine bağla
     "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini eğiticisine bağla
     Eigen3::Eigen # Eigen3 kütüphanesini eğiticisine bağla
-    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i eğiticisine statik olarak bağla
+    #"C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i eğiticisine statik olarak bağla
+    hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla
     ws2_32
     crypt32
     gdi32

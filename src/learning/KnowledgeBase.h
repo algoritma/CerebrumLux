@@ -20,7 +20,7 @@ public:
     void add_capsule(const Capsule& capsule);
     std::vector<Capsule> semantic_search(const std::string& query, int top_k = 3) const;
     std::vector<Capsule> search_by_topic(const std::string& topic) const;
-    std::optional<Capsule> find_capsule_by_id(const std::string& id); 
+    std::optional<Capsule> find_capsule_by_id(const std::string& id) const; // const eklendi
     void quarantine_capsule(const std::string& id);
     void revert_capsule(const std::string& id);
     void save(const std::string& filename = "knowledge.json") const;
