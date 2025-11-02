@@ -13,11 +13,22 @@
 #include <random>    // SafeRNG için
 #include <stdexcept> // std::runtime_error için
 #include <sstream>   // stringstream için
+#include <functional> // std::hash için (statik embedding için)
 
 namespace CerebrumLux {
 
+namespace { // Anonim namespace for static RNG
+    std::random_device s_rd_nlp;
+    std::mt19937 s_gen_nlp(s_rd_nlp());
+    std::uniform_real_distribution<float> s_dist_nlp(-1.0f, 1.0f);
+}
+
+// Statik üyelerin tanımı
+std::mt19937 NaturalLanguageProcessor::s_rng(s_rd_nlp()); // Statik RNG'yi başlat
+std::uniform_real_distribution<float> NaturalLanguageProcessor::s_dist(-1.0f, 1.0f); // Statik dağıtımı başlat
+
 NaturalLanguageProcessor::NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef)
-    : goal_manager(goal_manager_ref), kbRef_(kbRef)
+    : goal_manager(goal_manager_ref), kbRef_(kbRef) // Bu constructor diğer NLP fonksiyonları için referansları almaya devam eder
 {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NaturalLanguageProcessor: Initialized.");
 
@@ -79,7 +90,8 @@ CerebrumLux::UserIntent NaturalLanguageProcessor::infer_intent_from_text(const s
 
     // YENİ KOD: KnowledgeBase'den semantik arama ile niyet çıkarımı (eğer kural tabanlı başarısız olursa)
     // Kullanıcının girdisine en yakın 1-2 kapsülü ara
-    std::vector<CerebrumLux::Capsule> related_capsules = kbRef_.semantic_search(lower_text, 2);
+    std::vector<float> user_input_embedding = NaturalLanguageProcessor::generate_text_embedding(lower_text); // Statik metod çağrısı
+    std::vector<CerebrumLux::Capsule> related_capsules = kbRef_.semantic_search(user_input_embedding, 2); // Embedding ile ara
     if (!related_capsules.empty()) {
         // En alakalı kapsülün konusunu niyete çevirmeye çalış
         // Basitçe: eğer topic bir niyete karşılık geliyorsa, onu kullan.
@@ -148,19 +160,22 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     bool clarification_needed = false;
 
     // Adım 1: Bağlama duyarlı, Bilgi Tabanından (KnowledgeBase) yanıt arama (GELİŞTİRİLDİ)
-    std::vector<CerebrumLux::Capsule> search_results;
-    std::string search_query_str;
+    std::vector<CerebrumLux::Capsule> search_results; // Arama sonuçları
+    std::string search_query_str; // Loglama ve prompt oluşturma için metin sorgusu
+    std::vector<float> search_query_embedding; // KnowledgeBase'e gönderilecek embedding
     if (!relevant_keywords.empty()) { // Kullanıcı girdisinden türetilen anahtar kelimeler varsa
         search_query_str = relevant_keywords[0];
         if (relevant_keywords.size() > 1) search_query_str += " " + relevant_keywords[1];
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de arama yapılıyor: " << search_query_str);
-        search_results = kb.semantic_search(search_query_str, 3); // En alakalı ilk 3 kapsülü çek
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de arama yapılıyor (sorgu: " << search_query_str << ").");
+        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(search_query_str); // Statik metod çağrısı
+        search_results = kb.semantic_search(search_query_embedding, 3); // Embedding ile ara
     }
     // Eğer anahtar kelime yoksa ancak niyet araştırma veya soru ise, daha genel bir arama yapabiliriz.
     else if ((current_intent == CerebrumLux::UserIntent::Research || current_intent == CerebrumLux::UserIntent::Question) && !kb.get_all_capsules().empty()) {
         // dynamic_sequence'den veya current_abstract_state'den ipuçları alabiliriz.
         // Şimdilik daha genel bir arama yapalım.
-        search_results = kb.semantic_search("", 1); // Boş sorgu = en alakalı (genel olarak) kapsülü getirir.
+        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(""); // Statik metod çağrısı
+        search_results = kb.semantic_search(search_query_embedding, 1); // Embedding ile ara
         search_query_str = "Genel bilgi araması";
     }
 
@@ -436,6 +451,24 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
         response += "Niyetiniz '" + CerebrumLux::intent_to_string(intent) + "' gibi görünüyor, ancak daha fazla bilgiye ihtiyacım var.";
     }
     return response;
+}
+
+// YENİ EKLENDİ: Metin girdisinden embedding hesaplama (şimdilik placeholder)
+std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text) { // Statik metod
+    // TODO: Gerçek NLP/Embedding model entegrasyonu yapıldığında bu kısım güncellenecek.
+    // Şimdilik, deterministic bir placeholder embedding üretiyoruz.
+    const int embedding_dim = 128; 
+    std::vector<float> embedding(embedding_dim);
+
+    // Sorgu metninden deterministik bir seed oluştur
+    unsigned int seed = static_cast<unsigned int>(std::hash<std::string>{}(text)); // Deterministic seed
+    s_rng.seed(seed); // Statik RNG'yi seed'le
+
+    for (int i = 0; i < embedding_dim; ++i) {
+        embedding[i] = s_dist(s_rng); // Statik RNG ve dağıtımı kullan
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için deterministik embedding olusturuldu.");
+    return embedding;
 }
 
 } // namespace CerebrumLux

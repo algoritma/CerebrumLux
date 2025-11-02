@@ -28,6 +28,7 @@
 #include "../core/enums.h" // UserIntent, AbstractState, AIAction, AIGoal, SensorType, InsightType, UrgencyLevel için
 #include "../core/utils.h" // intent_to_string, abstract_state_to_string, goal_to_string, action_to_string için
 #include "../crypto/CryptoManager.h" // CryptoManager için
+#include "../communication/natural_language_processor.h" // Statik generate_text_embedding için
 
 // CerebrumLux namespace'ini kullanıma açmıyoruz, her yerde tam niteleme yapıyoruz.
 
@@ -313,12 +314,14 @@ int main() {
     // LearningModule ve KnowledgeBase testleri
     // Kripto Yöneticisi gerekiyor
     CerebrumLux::Crypto::CryptoManager cryptoManager;
-    CerebrumLux::KnowledgeBase test_kb;
+    // LearningModule kurucusu NaturalLanguageProcessor referansı almaz hale getirildiği için, test_lm için DummyKnowledgeBase yeterli.
+    CerebrumLux::KnowledgeBase test_kb("test_db_path"); // LMDB yolu ile başlatıldı
     CerebrumLux::LearningModule test_lm(test_kb, cryptoManager);
 
     // Kapsül öğrenme testi
     test_lm.learnFromText("Bu bir test metnidir.", "Test Kaynak", "Genel");
-    assert(test_kb.search_by_topic("Genel").size() == 1);
+    std::vector<float> genel_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("Genel");
+    assert(test_kb.search_by_topic(genel_embedding).size() == 1);
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LearningModule Test: Metinden öğrenme başarılı.");
 
     // Kapsül karantinaya alma testi

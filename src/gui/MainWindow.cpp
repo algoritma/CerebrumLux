@@ -14,6 +14,7 @@
 #include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
+#include "../communication/natural_language_processor.h" // generate_text_embedding için
 #include "../learning/LearningModule.h"
 
 #include "../external/nlohmann/json.hpp"
@@ -122,7 +123,9 @@ void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationDa
 }
 
 void MainWindow::updateGui() {
-    std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().semantic_search("StepSimulation", 100);
+    // Statik NLP metodunu kullanarak embedding alıyoruz.
+    std::vector<float> sim_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("StepSimulation");
+    std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().semantic_search(sim_query_embedding, 100);
     QVector<CerebrumLux::SimulationData> sim_data;
     for (const auto& cap : capsules_for_sim) {
         sim_data.append(convertCapsuleToSimulationData(cap));
@@ -134,7 +137,7 @@ void MainWindow::updateGui() {
     }
 
 
-    auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search("GraphData", 100);
+    auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search(CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("GraphData"), 100);
     QMap<qreal, qreal> graph_data;
     for (const auto& cap : capsules_for_graph) {
         graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), cap.confidence);

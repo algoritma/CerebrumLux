@@ -139,8 +139,9 @@ std::vector<AIInsight> AIInsightsEngine::generateCodeAnalysisInsights(const Dyna
                         insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),
                         current_sequence.latent_cryptofig_vector,
                         {current_sequence.id},
-                        std::string(file_path)
-                    )
+                        std::string(file_path),
+                        current_sequence.id // source_cryptofig_id olarak current_sequence.id kullanıldı
+                        )
                 );
                 LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_HighLoc_' içgörüsü eklendi. Dosya: " << file_path << ", Vector boyutu: " << code_analysis_insights.size());
             } else {
@@ -160,7 +161,8 @@ std::vector<AIInsight> AIInsightsEngine::generateCodeAnalysisInsights(const Dyna
                         insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),
                         current_sequence.latent_cryptofig_vector,
                         {current_sequence.id},
-                        std::string(file_path)
+                        std::string(file_path),
+                        current_sequence.id // source_cryptofig_id olarak current_sequence.id kullanıldı
                     )
                 ); 
                 LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_CriticalLoc_' içgörüsü eklendi. Dosya: " << file_path << ", Vector boyutu: " << code_analysis_insights.size());
@@ -201,7 +203,8 @@ std::vector<AIInsight> AIInsightsEngine::generateSimulatedMetricCodeDevelopmentI
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Critical),
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                "src/communication/ai_insights_engine.cpp"
+                "src/communication/ai_insights_engine.cpp",
+                current_sequence.id // source_cryptofig_id olarak current_sequence.id kullanıldı
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_HighComplexityLowReadability_' içgörüsü eklendi. Vector boyutu: " << simulated_metric_code_dev_insights.size());
@@ -224,7 +227,8 @@ std::vector<AIInsight> AIInsightsEngine::generateSimulatedMetricCodeDevelopmentI
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                "src/brain/cryptofig_processor.cpp"
+                "src/brain/cryptofig_processor.cpp",
+                current_sequence.id // source_cryptofig_id olarak current_sequence.id kullanıldı
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_HighOptimizationPotential_' içgörüsü eklendi. Vector boyutu: " << simulated_metric_code_dev_insights.size());
@@ -247,7 +251,8 @@ std::vector<AIInsight> AIInsightsEngine::generateSimulatedMetricCodeDevelopmentI
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                "src/learning/LearningModule.cpp"
+                "src/learning/LearningModule.cpp",
+                current_sequence.id // source_cryptofig_id olarak current_sequence.id kullanıldı
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_MediumComplexityReadability_' içgörüsü eklendi. Vector boyutu: " << simulated_metric_code_dev_insights.size());
@@ -270,7 +275,8 @@ std::vector<AIInsight> AIInsightsEngine::generateSimulatedMetricCodeDevelopmentI
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Low),
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                "src/gui/MainWindow.cpp"
+                "src/gui/MainWindow.cpp",
+                current_sequence.id // source_cryptofig_id olarak current_sequence.id kullanıldı
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "AIInsightsEngine: 'CodeDev_MinorImprovement_' içgörüsü eklendi. Vector boyutu: " << simulated_metric_code_dev_insights.size());
@@ -302,7 +308,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 "Grafiği gözlemlemeye devam et.",
                 CerebrumLux::InsightType::None, CerebrumLux::UrgencyLevel::None,
                 current_sequence.latent_cryptofig_vector,
-                {current_sequence.id},
+                {current_sequence.id}, // related_capsule_ids
+                "", // code_file_path
                 ""
             )
         );
@@ -322,8 +329,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 "Yeni özellik geliştirme veya derinlemesine öğrenme moduna geç.",
                 CerebrumLux::InsightType::None,
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Low),
-                {},
-                {current_sequence.id},
+                {}, // associated_cryptofig (empty for StableState)
+                {current_sequence.id}, // related_capsule_ids
                 ""
             )
         );
@@ -368,7 +375,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High),
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                ""
+                "", // code_file_path
+                current_sequence.id // source_cryptofig_id
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: 'PerformanceAnomaly_' içgörüsü eklendi. Toplam: " << general_insights.size());
@@ -386,7 +394,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                ""
+                "", // code_file_path
+                current_sequence.id // source_cryptofig_id
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: 'LearningOpportunity_' içgörüsü eklendi. Toplam: " << general_insights.size());
@@ -401,9 +410,9 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 knowledge_topic_to_string(CerebrumLux::KnowledgeTopic::ResourceManagement),
                 "Arka plan uygulamalarını kontrol edin veya gereksiz isleri durdurun.",
                 CerebrumLux::InsightType::ResourceOptimization,
-                insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium),
-                {},
-                {current_sequence.id},
+                insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium), // UrgencyLevel
+                {}, // associated_cryptofig
+                {current_sequence.id}, // related_capsule_ids
                 ""
             )
         );
@@ -422,7 +431,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::High), // Düzeltildi: UrgencyLevel yerine InsightSeverity
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                ""
+                "", // code_file_path
+                current_sequence.id // source_cryptofig_id
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: 'SecurityAlert_' içgörüsü eklendi. Toplam: " << general_insights.size());
@@ -440,7 +450,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Low), // Düzeltildi: UrgencyLevel yerine InsightSeverity
                 current_sequence.latent_cryptofig_vector,
                 {current_sequence.id},
-                ""
+                "", // code_file_path
+                current_sequence.id // source_cryptofig_id
             )
         );
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: 'UserContext_' içgörüsü eklendi. Toplam: " << general_insights.size());

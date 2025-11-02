@@ -11,6 +11,7 @@
 #include "../communication/ai_insights_engine.h"
 #include "../crypto/CryptoManager.h"
 #include "UnicodeSanitizer.h" // Tam tanıma ihtiyaç duyulduğu için eklendi
+#include "../communication/natural_language_processor.h" // generate_text_embedding için
 #include "StegoDetector.h"    // Tam tanıma ihtiyaç duyulduğu için eklendi
 #include "WebFetcher.h" // WebFetcher için
 #include "web_page_parser.h" // WebPageParser için

@@ -17,20 +17,21 @@ class KnowledgeBase {
 public:
     KnowledgeBase(); // Varsayılan kurucu
     KnowledgeBase(const std::string& db_path); // LMDB yolu ile yeni kurucu
-    void add_capsule(const Capsule& capsule);
-    std::vector<Capsule> semantic_search(const std::string& query, int top_k = 3) const;
-    std::vector<Capsule> search_by_topic(const std::string& topic) const;
+    void add_capsule(const Capsule& capsule); 
+    std::vector<Capsule> semantic_search(const std::vector<float>& query_embedding, int top_k = 3) const;
+    std::vector<Capsule> search_by_topic(const std::vector<float>& topic_embedding, int top_k = 3) const;
     std::optional<Capsule> find_capsule_by_id(const std::string& id) const; // const eklendi
     void quarantine_capsule(const std::string& id);
     void revert_capsule(const std::string& id);
     void save(const std::string& filename = "knowledge.json") const;
     void load(const std::string& filename = "knowledge.json");
-   
-    // Bu metodlar LMDB entegrasyonu ile değişecek veya daha sonra refaktör edilecek
-    std::vector<float> computeEmbedding(const std::string& text) const; 
+
     float cosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const; 
 
     virtual std::vector<Capsule> get_all_capsules() const; // YENİ: Tüm kapsülleri döndüren metot (virtual yapıldı)
+
+    CerebrumLux::SwarmVectorDB::SwarmVectorDB& get_swarm_db() { return swarm_db_; } // SwarmVectorDB'ye erişim için
+    const CerebrumLux::SwarmVectorDB::SwarmVectorDB& get_swarm_db() const { return swarm_db_; } // Const versiyonu
 
 private:
     std::string db_path_; // LMDB veritabanı yolu

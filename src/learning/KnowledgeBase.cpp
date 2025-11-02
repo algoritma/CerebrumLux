@@ -9,10 +9,6 @@
 #include <chrono> // Time functions
 #include <filesystem> // YENİ: std::filesystem için eklendi
 #include <numeric> // std::iota için (embedding için)
-#include <iomanip> // std::setw için
-
-#include <random> // Deterministic embedding için
-#include <functional> // std::hash için
 
 // Özel olarak CryptofigVector embedding dönüşümü için (şimdilik)
 #include <Eigen/Dense> 
@@ -34,9 +30,24 @@ SwarmVectorDB::CryptofigVector KnowledgeBase::convert_capsule_to_cryptofig_vecto
     }
 
     // std::vector<float> to Eigen::VectorXf
-    Eigen::VectorXf embedding_eigen(capsule.embedding.size());
-    for (size_t i = 0; i < capsule.embedding.size(); ++i) {
-        embedding_eigen(i) = capsule.embedding[i];
+    // KRİTİK DÜZELTME: embedding_eigen'in boyutunu her zaman CryptofigAutoencoder::INPUT_DIM olarak ayarla.
+    const int EMBEDDING_DIM = CerebrumLux::CryptofigAutoencoder::INPUT_DIM;
+    Eigen::VectorXf embedding_eigen(EMBEDDING_DIM);
+
+    // JSON'dan okunan capsule.embedding boyutunu kontrol et
+    if (capsule.embedding.size() != EMBEDDING_DIM) {
+        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Capsule ID " << capsule.id 
+                    << " için JSON'dan okunan embedding boyutu (" << capsule.embedding.size() 
+                    << ") beklenen (" << EMBEDDING_DIM << ") ile uyuşmuyor. Boyut düzeltiliyor.");
+    }
+    
+    // Verileri kopyala, fazla ise kırp, eksik ise 0 ile doldur
+    for (int i = 0; i < EMBEDDING_DIM; ++i) {
+        if (i < capsule.embedding.size()) {
+            embedding_eigen(i) = capsule.embedding[i];
+        } else {
+            embedding_eigen(i) = 0.0f; // Eksik elemanları sıfırla
+        }
     }
 
     std::string fisher_query_str = "Is this data relevant to " + capsule.topic + "?";
@@ -99,27 +110,6 @@ KnowledgeBase::KnowledgeBase(const std::string& db_path) : db_path_(db_path), sw
     }
 }
 
-// YENİ: Deterministic placeholder embedding hesaplama metodu
-std::vector<float> KnowledgeBase::computeEmbedding(const std::string& text) const {
-    // TODO: Gerçek NLP modülü entegre edildiğinde bu kısım güncellenecek.
-    // Şimdilik, deterministic bir placeholder embedding üretiyoruz.
-    // hnswlib wrapper'da 128 boyutlu embedding kullanıldığı için burada da 128 boyut döndürüyoruz.
-    const int embedding_dim = 128; 
-    std::vector<float> embedding(embedding_dim);
-
-    // Sorgu metninden deterministik bir seed oluştur
-    std::hash<std::string> hasher;
-    unsigned int seed = static_cast<unsigned int>(hasher(text));
-    std::mt19937 rng(seed);
-    std::uniform_real_distribution<float> dist(-1.0f, 1.0f); // Rastgele float değerleri
-
-    for (int i = 0; i < embedding_dim; ++i) {
-        embedding[i] = dist(rng);
-    }
-    LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Query '" << text << "' için deterministik embedding olusturuldu.");
-    return embedding;
-}
-
 void KnowledgeBase::add_capsule(const Capsule& capsule) {
     // Önce kapsülün zaten var olup olmadığını kontrol et (güncelleme için)
     if (swarm_db_.get_vector(capsule.id)) { 
@@ -133,8 +123,8 @@ void KnowledgeBase::add_capsule(const Capsule& capsule) {
     }
 }
 
-std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, int top_k) const {
-    LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Semantic search for query: " << query << ", Top K: " << top_k);
+std::vector<Capsule> KnowledgeBase::semantic_search(const std::vector<float>& query_embedding, int top_k) const {
+    LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Semantic search initiated with embedding. Top K: " << top_k);
     std::vector<Capsule> results;
 
     if (!swarm_db_.is_open()) {
@@ -143,9 +133,8 @@ std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, in
     }
 
     // 1. Sorgu metni için embedding hesapla
-    std::vector<float> query_embedding = computeEmbedding(query);
     if (query_embedding.empty()) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Sorgu embedding'i olusturulamadi. Semantik arama yapilamadi.");
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: semantic_search'e boş sorgu embedding'i verildi. Arama yapilamadi.");
         return results;
     }
 
@@ -160,22 +149,21 @@ std::vector<Capsule> KnowledgeBase::semantic_search(const std::string& query, in
         }
     }
         
+    // query string'i yerine "Embedding ile arama" gibi bir ifade kullanılabilir log'larda
     if (results.empty()) {
-        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: '" << query << "' sorgusu için sonuç bulunamadı.");
+        LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Embedding ile arama için sonuç bulunamadı.");
     } else {
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: '" << query << "' sorgusu için " << results.size() << " semantik sonuç bulundu.");
+        LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Embedding ile arama için " << results.size() << " semantik sonuç bulundu.");
     }
     return results;
 }
 
-std::vector<Capsule> KnowledgeBase::search_by_topic(const std::string& topic) const {
-    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Topic'e göre arama yapılıyor: " << topic);
-    // Topic tabanlı aramayı da semantik aramaya dönüştürüyoruz.
-    // computeEmbedding metodunun topic stringini anlamlı bir vektöre çevireceği varsayılır.
-    return semantic_search(topic);
+std::vector<Capsule> KnowledgeBase::search_by_topic(const std::vector<float>& topic_embedding, int top_k) const {
+    LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Topic embedding ile arama yapılıyor. Top K: " << top_k);
+    return semantic_search(topic_embedding, top_k); // Doğrudan embedding ile arama
 }
 
-std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) const { 
+std::optional<Capsule> KnowledgeBase::find_capsule_by_id(const std::string& id) const {
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: ID'ye göre kapsül aranıyor: " << id);
     std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id); // get_vector() burada const olmayan metod içinde çağrılabilir
     if (cv) {

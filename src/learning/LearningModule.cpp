@@ -142,7 +142,8 @@ void LearningModule::onWebFetchError(const QString& url, const QString& error_me
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
     LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Topic'e göre arama yapılıyor: " << topic);
-    return knowledgeBase.search_by_topic(topic);
+    std::vector<float> topic_embedding = this->compute_embedding(topic); // Kendi compute_embedding metodunu kullanarak embedding oluştur.
+    return knowledgeBase.search_by_topic(topic_embedding); // Embedding ile KnowledgeBase'de arama yap.
 }
 
 void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights) {

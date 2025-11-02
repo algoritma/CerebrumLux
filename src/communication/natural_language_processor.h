@@ -24,7 +24,12 @@ struct ChatResponse {
 };
 
 
-class NaturalLanguageProcessor {
+class NaturalLanguageProcessor { // NaturalLanguageProcessor sınıfı
+
+private:
+    static std::mt19937 s_rng; // Statik RNG motoru
+    static std::uniform_real_distribution<float> s_dist; // Statik dağıtım
+
 public:
     NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef);
 
@@ -47,6 +52,9 @@ public:
     void trainFromKnowledgeBase(const CerebrumLux::KnowledgeBase& kb); // YENİ: KB'den eğitim
     void load_model(const std::string& path);
     void save_model(const std::string& path) const;
+
+    // YENİ EKLENDİ: Metin girdisinden embedding hesaplama (STATİK ve placeholder) - 'const' kaldırıldı.
+    static std::vector<float> generate_text_embedding(const std::string& text);
 
     // public yapıldı (önceki oturumda yapılmıştı)
     std::string fallback_response_for_intent(CerebrumLux::UserIntent intent, CerebrumLux::AbstractState state, const CerebrumLux::DynamicSequence& sequence) const;

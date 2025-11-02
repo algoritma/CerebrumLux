@@ -3,9 +3,11 @@
 
 #include <vector>
 #include <string>  // For std::string
+#include <numeric> // std::accumulate için
+#include <algorithm> // std::min, std::max için
+#include <cmath>   // std::exp için (burada gerek yok, autoencoder.cpp'ye taşındı)
 // #include "../core/enums.h" // LogLevel için (burada gerek yok, autoencoder.cpp'ye taşındı)
 // #include "../core/utils.h" // SafeRNG ve diğerleri için (burada gerek yok, autoencoder.cpp'ye taşındı)
-#include <cmath>   // std::exp için (burada gerek yok, autoencoder.cpp'ye taşındı)
 
 
 namespace CerebrumLux { // CryptofigAutoencoder sınıfı bu namespace içine alınmalı
@@ -13,8 +15,8 @@ namespace CerebrumLux { // CryptofigAutoencoder sınıfı bu namespace içine al
 class CryptofigAutoencoder {
 public:
     // Yapılandırma parametreleri
-    static const int INPUT_DIM = 18;  // statistical_features_vector boyutu (10'dan 18'e güncellendi)
-    static const int LATENT_DIM = 3;  // latent_cryptofig_vector boyutu
+    static const int INPUT_DIM = 128; // KRİTİK DÜZELTME: Bu 128 olmalı. statistical_features_vector boyutu
+    static const int LATENT_DIM = 3; // Bu, projenin tasarım kararıdır. latent_cryptofig_vector boyutu
 
     CryptofigAutoencoder();
 
@@ -36,17 +38,19 @@ public:
     void load_weights(const std::string& filename);
 
 private:
-    // Ağırlıklar ve bias'lar
-    std::vector<float> encoder_weights_1; // INPUT_DIM * LATENT_DIM
-    std::vector<float> encoder_bias_1;    // LATENT_DIM
-
-    std::vector<float> decoder_weights_1; // LATENT_DIM * INPUT_DIM
-    std::vector<float> decoder_bias_1;    // INPUT_DIM
+    // Model ağırlıkları (basit placeholder)
+    std::vector<float> encoder_weights; // Değişiklik: std::vector<std::vector<float>> yerine std::vector<float>
+    std::vector<float> encoder_bias;
+    std::vector<float> decoder_weights; // Değişiklik: std::vector<std::vector<float>> yerine std::vector<float>
+    std::vector<float> decoder_bias;
 
     // Yardımcı fonksiyonlar
     float sigmoid(float x) const;
-    float sigmoid_derivative(float x) const;
-    void initialize_random_weights();
+    float sigmoid_derivative(float x) const; // Keep this
+    // void initialize_random_weights(); // REMOVED: No longer needed after unifying with initialize_weights()
+    void initialize_weights(); // This is the unified initialization method
+    
+
 };
 
 } // namespace CerebrumLux

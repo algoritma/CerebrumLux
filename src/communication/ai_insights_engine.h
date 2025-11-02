@@ -31,6 +31,7 @@ struct AIInsight {
     std::vector<float> associated_cryptofig; // İlişkili kriptofig
     std::vector<std::string> related_capsule_ids;
     std::string code_file_path; // Aktif üye oldu!
+    std::string source_cryptofig_id; // YENİ: Kaynak CryptofigVector'ün ID'si
 
     // Default constructor for aggregate initialization
     AIInsight() : id(""), observation(""), context(""), recommended_action(""),
@@ -46,16 +47,18 @@ struct AIInsight {
                        UrgencyLevel urgency_val,
                        const std::vector<float>& cryptofig_val = {},
                        const std::vector<std::string>& capsule_ids_val = {},
-                       const std::string& code_file_path_val = "")
+                       const std::string& code_file_path_val = "",
+                       const std::string& source_cryptofig_id_val = "")
         : id(id_val),
           observation(observation_val),
           context(context_val),
           recommended_action(recommended_action_val),
           type(type_val),
           urgency(urgency_val),
-          associated_cryptofig(cryptofig_val),
+          associated_cryptofig(cryptofig_val), // This is the embedding
           related_capsule_ids(capsule_ids_val),
-          code_file_path(code_file_path_val) {}
+          code_file_path(code_file_path_val),
+          source_cryptofig_id(source_cryptofig_id_val) {} // Initialize new member
 
     // Açıkça Copy/Move Semantics tanımları (varsayılanlar kullanılabilir)
     AIInsight(const AIInsight& other) = default; 
@@ -75,6 +78,7 @@ struct AIInsight {
         j["associated_cryptofig"] = i.associated_cryptofig;
         j["related_capsule_ids"] = i.related_capsule_ids;
         j["code_file_path"] = i.code_file_path; // code_file_path da JSON'a eklendi
+        j["source_cryptofig_id"] = i.source_cryptofig_id; // Yeni üye JSON'a eklendi
     }
 
     friend void from_json(const nlohmann::json& j, AIInsight& i) {
@@ -86,7 +90,8 @@ struct AIInsight {
         i.urgency = static_cast<UrgencyLevel>(j.at("urgency").get<int>()); // int'ten enum'a dönüştür
         j.at("associated_cryptofig").get_to(i.associated_cryptofig);
         j.at("related_capsule_ids").get_to(i.related_capsule_ids);
-        j.at("code_file_path").get_to(i.code_file_path); // Düzeltme: code_file_path'in her zaman var olduğunu varsayıyoruz (yoksa exception fırlatır)
+        j.at("code_file_path").get_to(i.code_file_path);
+        if (j.contains("source_cryptofig_id")) j.at("source_cryptofig_id").get_to(i.source_cryptofig_id); // Yeni üye JSON'dan okunuyor
     }
 };
 
