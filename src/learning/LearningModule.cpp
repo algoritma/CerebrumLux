@@ -519,15 +519,28 @@ void LearningModule::update_q_values(const std::vector<float>& state_embedding, 
     }
     EmbeddingStateKey state_key = ss.str();
 
-    // Q-table'ı güncelle (şimdilik basit bir atama/toplama) - Gelecekte buraya Q-learning denklemi gelecek.
-    // Eğer Q-value henüz yoksa 0'dan başlar (map'in varsayılan kurucuları sayesinde).
-    float current_q_value = q_table.q_values[state_key][action];
-    float learning_rate_rl = 0.1f; // RL öğrenme oranı
-    float discount_factor = 0.9f; // İndirim faktörü
+    // Q-Table'ı güncellemek için Q-Learning denklemini uygulayalım:
+    // Q(s,a) = Q(s,a) + alpha * (reward + gamma * max_a' Q(s',a') - Q(s,a))
+    // Burada s: current_state (state_embedding), a: action, r: reward
+    // s': next_state (şimdilik bu metot sadece tek bir durumu işlediği için, next_state'i de current_state olarak kabul edeceğiz)
+    // max_a' Q(s',a'): next_state için mümkün olan tüm eylemlerin maksimum Q-değeri.
 
-    // Basit Q-learning benzeri güncelleme (next_state'siz)
-    // Q(s,a) = Q(s,a) + alpha * (r - Q(s,a))
-    q_table.q_values[state_key][action] = current_q_value + learning_rate_rl * (reward - current_q_value);
+    float current_q_value = q_table.q_values[state_key][action];
+    float learning_rate_rl = 0.1f; // RL öğrenme oranı (alpha)
+    float discount_factor = 0.9f; // İndirim faktörü (gamma)
+
+    // Adım 1: next_state (s') için maksimum Q-değerini bul (şimdilik current_state'i next_state olarak kullanıyoruz)
+    float max_next_q = 0.0f;
+    if (q_table.q_values.count(state_key)) { // Eğer mevcut durum Q-table'da varsa
+        for (const auto& action_pair : q_table.q_values[state_key]) {
+            if (action_pair.second > max_next_q) {
+                max_next_q = action_pair.second;
+            }
+        }
+    }
+
+    // Adım 2: Q-Learning denklemini uygula
+    q_table.q_values[state_key][action] = current_q_value + learning_rate_rl * (reward + discount_factor * max_next_q - current_q_value);
 
     LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. State: " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[state_key][action]);
 }
