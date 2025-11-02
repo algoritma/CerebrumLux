@@ -77,7 +77,7 @@ public:
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
 
-    // Sparse Q-Table kalıcılığı için metotlar
+        // Sparse Q-Table kalıcılığı için metotlar
     void save_q_table() const;
     void load_q_table();
 

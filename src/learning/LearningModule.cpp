@@ -30,6 +30,7 @@ LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoMan
             this, &LearningModule::onStructuredWebContentFetched, Qt::QueuedConnection); // Qt::QueuedConnection eklendi
     connect(webFetcher.get(), &WebFetcher::fetch_error,
             this, &LearningModule::onWebFetchError, Qt::QueuedConnection); // Qt::QueuedConnection eklendi
+    LOG_DEFAULT(LogLevel::TRACE, "LearningModule::LearningModule: WebFetcher sinyalleri bağlandı.");
 
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized with CryptoManager.");
     load_q_table(); // Q-table'ı başlangıçta LMDB'den yükle
@@ -506,40 +507,52 @@ void LearningModule::processCodeSuggestionFeedback(const std::string& capsuleId,
     // Örneğin, bu kapsülün topic'ini veya içeriğini analiz ederek ilgili metrikleri güncelleyebiliriz.
 }
 
-void LearningModule::update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float float_reward) {
+void LearningModule::update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward) {
     // State embedding'ini bir string anahtara dönüştür (basitçe float değerlerini birleştir)
     // Bu, RL durum temsili için bir placeholder'dır.
     std::stringstream ss;
-    static_cast<std::ostream&>(ss) << "EMB:"; // StateKey'in başında bir ön ek
+    ss << std::string("EMB:"); // StateKey'in başında bir ön ek (tutarlılık için)
     for (float val : state_embedding) {
         ss << std::fixed << std::setprecision(5) << val << "|"; // Hassasiyeti artırarak daha iyi anahtar
     }
     std::string state_key = ss.str();
 
-    // Q-table'ı güncelle (şimdilik basit bir atama/toplama) - Gelecekte Q-learning denklemi buraya gelecek.
-    // Eğer Q-value henüz yoksa 0'dan başlar.
-    q_table.q_values[state_key][action] += float_reward; 
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. State: " << state_key.substr(0, std::min((size_t)50, state_key.length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << float_reward << ", Yeni Q-Value: " << q_table.q_values[state_key][action]);
+    // Q-table'ı güncelle (şimdilik basit bir atama/toplama) - Gelecekte buraya Q-learning denklemi gelecek.
+    // Eğer Q-value henüz yoksa 0'dan başlar (map'in varsayılan kurucuları sayesinde).
+    float current_q_value = q_table.q_values[state_key][action];
+    float learning_rate_rl = 0.1f; // RL öğrenme oranı
+    float discount_factor = 0.9f; // İndirim faktörü
+
+    // Basit Q-learning benzeri güncelleme (next_state'siz)
+    // Q(s,a) = Q(s,a) + alpha * (r - Q(s,a))
+    q_table.q_values[state_key][action] = current_q_value + learning_rate_rl * (reward - current_q_value);
+
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. State: " << state_key.substr(0, std::min((size_t)50, state_key.length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[state_key][action]);
 }
 
 // YENİ: Q-Table'ı LMDB'ye kaydetme
 void LearningModule::save_q_table() const {
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'ye kaydediliyor. Toplam durum: " << q_table.q_values.size());
 
+    if (!knowledgeBase.get_swarm_db().is_open()) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table kaydedilemedi: SwarmVectorDB açık değil.");
+        return;
+    }
+
     // Her bir state key için action map'ini JSON olarak serileştirip kaydet
     for (const auto& state_pair : q_table.q_values) {
-        std::string state_key = state_pair.first;
+        std::string state_key_str = state_pair.first; // Use std::string directly
         nlohmann::json action_map_json;
         for (const auto& action_pair : state_pair.second) {
             action_map_json[CerebrumLux::action_to_string(action_pair.first)] = action_pair.second;
         }
         std::string action_map_json_str = action_map_json.dump();
 
-        if (!knowledgeBase.get_swarm_db().store_q_value_json(state_key, action_map_json_str)) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table kaydetme başarısız: StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+        if (!knowledgeBase.get_swarm_db().store_q_value_json(state_key_str, action_map_json_str)) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table kaydetme başarısız: StateKey (kısmi): " << state_key_str.substr(0, std::min((size_t)50, state_key_str.length())));
         }
     }
-    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table kaydetme tamamlandı.");
+    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table kaydetme tamamlandı. Toplam kaydedilen durum: " << q_table.q_values.size());
 }
 
 // YENİ: Q-Table'ı LMDB'den yükleme
@@ -547,13 +560,6 @@ void LearningModule::load_q_table() {
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'den yükleniyor.");
     q_table.q_values.clear(); // Mevcut Q-tablosunu temizle
 
-    // LMDB'den tüm Q-table kayıtlarını al
-    // SwarmVectorDB'nin q_values_dbi_ DBI'sindeki tüm anahtarları almak için bir yöntem gerekiyor.
-    // Geçici olarak, SwarmVectorDB'nin get_all_ids_internal gibi bir mekanizma ile genelleştirilmiş bir şekilde
-    // belirli bir DBI'daki tüm anahtarları dönmesini sağlayacak bir helper fonsiyonu ihtiyacı var.
-    // Şimdilik, LMDB'ye manuel erişim yaparak bu işlemi gerçekleştireceğiz.
-
-    // KnowledgeBase'in swarm_db'si açık değilse, açmaya çalış.
     if (!knowledgeBase.get_swarm_db().is_open()) {
         if (!knowledgeBase.get_swarm_db().open()) {
             LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table yüklenemedi: SwarmVectorDB açılamadı.");
@@ -561,43 +567,19 @@ void LearningModule::load_q_table() {
         }
     }
 
-    // SwarmVectorDB'den tüm state key'leri al ve yükle
-    std::vector<StateKey> all_state_keys; // Yeni bir helper fonksiyonu ile alınacak
-    // For now, let's manually get it using cursor directly (if SwarmVectorDB does not provide get_all_keys_for_dbi)
-    // This is complex, so let's defer. For now, assume a way to get all state_keys.
-    // Or: iterate through SwarmVectorDB's own get_all_ids (for cryptofig_vectors) and try to query q-values for them.
-    // A better approach is to ask SwarmVectorDB to provide a generic method to get all keys for a given DBI.
-
-    // **KRİTİK NOT:** `SwarmVectorDB`'de `get_all_keys_for_dbi(MDB_dbi dbi)` gibi genel bir metot olmadığı için,
-    // `q_table.q_values`'u yüklerken tüm `StateKey`'leri doğrudan almanın bir yolu yok.
-    // Şimdilik, `q_values_dbi_` içindeki tüm kayıtları elle okuyan bir mekanizma (veya `SwarmVectorDB`'ye eklenecek bir metot) varsaymalıyız.
-    // Mevcut durumda, eğer LMDB'de kayıt yoksa `q_table.q_values` boş kalacaktır, bu da normaldir.
-    LOG_DEFAULT(LogLevel::WARNING, "[LearningModule] Q-Table yükleme mantığı daha fazla geliştirme gerektiriyor (SwarmVectorDB'den tüm StateKey'leri almanın genel bir yolu eksik).");
-
-    // Test amaçlı: Var olan CryptofigVector ID'lerinden bazı Q-değerlerini yüklemeye çalışabiliriz.
-    std::vector<std::string> all_cryptofig_ids = knowledgeBase.get_swarm_db().get_all_ids();
-    for (const auto& id : all_cryptofig_ids) {
-        // CryptofigVector'ı al, embedding'ini state key olarak kullan.
-        std::optional<std::unique_ptr<CerebrumLux::SwarmVectorDB::CryptofigVector>> cv_opt = knowledgeBase.get_swarm_db().get_vector(id);
-        if (cv_opt && (*cv_opt)->embedding.size() == CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
-            std::stringstream ss;
-            static_cast<std::ostream&>(ss) << "EMB:";
-            for (float val : (*cv_opt)->embedding) {
-                ss << std::fixed << std::setprecision(5) << val << "|";
-            }
-            std::string state_key = ss.str();
-
-            std::optional<std::string> action_map_json_str_opt = knowledgeBase.get_swarm_db().get_q_value_json(state_key);
-            if (action_map_json_str_opt) {
-                try {
-                    nlohmann::json action_map_json = nlohmann::json::parse(*action_map_json_str_opt);
-                    for (nlohmann::json::const_iterator action_it = action_map_json.begin(); action_it != action_map_json.end(); ++action_it) {
-                        q_table.q_values[state_key][CerebrumLux::string_to_action(action_it.key())] = action_it.value().get<float>();
-                    }
-                    LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Q-Table için durum yükleniyor. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
-                } catch (const nlohmann::json::exception& e) {
-                    LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table yüklenemedi: JSON ayrıştırma hatası: " << e.what());
+    std::vector<std::string> all_q_state_keys = knowledgeBase.get_swarm_db().get_all_keys_for_dbi(knowledgeBase.get_swarm_db().q_values_dbi()); // Use getter
+    for (const auto& state_key_obj : all_q_state_keys) { // Renamed to state_key_obj to avoid confusion
+        std::string state_key_str = static_cast<std::string>(state_key_obj); // Explicitly convert StateKey to std::string
+        std::optional<std::string> action_map_json_str_opt = knowledgeBase.get_swarm_db().get_q_value_json(state_key_str);
+        if (action_map_json_str_opt) {
+            try {
+                nlohmann::json action_map_json = nlohmann::json::parse(*action_map_json_str_opt);
+                for (nlohmann::json::const_iterator action_it = action_map_json.begin(); action_it != action_map_json.end(); ++action_it) {
+                    q_table.q_values[state_key_str][CerebrumLux::string_to_action(action_it.key())] = action_it.value().get<float>();
                 }
+                LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Q-Table için durum yükleniyor. StateKey (kısmi): " << state_key_str.substr(0, std::min((size_t)50, state_key_str.length())));
+            } catch (const nlohmann::json::exception& e) {
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table yüklenemedi: JSON ayrıştırma hatası: " << e.what() << ". StateKey (kısmi): " << state_key_str.substr(0, std::min((size_t)50, state_key_str.length())));
             }
         }
     }

@@ -63,10 +63,13 @@ public:
     bool store_q_value_json(const StateKey& state_key, const std::string& action_map_json_str);
     std::optional<std::string> get_q_value_json(const StateKey& state_key) const;
     bool delete_q_value_json(const StateKey& state_key);
+    std::vector<StateKey> get_all_keys_for_dbi(MDB_dbi dbi) const; // YEN─░: Belirli bir DBI'daki t├╝m anahtarlar─▒ d├Ând├╝r├╝r
+
 
     // LMDB ortam ve DBI handle'ları için getter'lar (list_data için gerekli)
     MDB_env* get_env() const { return env_; }
     MDB_dbi get_dbi() const { return dbi_; }
+    MDB_dbi q_values_dbi() const { return q_values_dbi_; } // YENİ: q_values_dbi_ için getter
 
 private:
     std::string db_path_;

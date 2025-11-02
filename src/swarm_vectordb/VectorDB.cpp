@@ -208,6 +208,40 @@ bool SwarmVectorDB::open() {
     }
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
 
+    // YENİ: Q-Table DBI'larını aç
+    rc = mdb_dbi_open(txn, "q_values_db", MDB_CREATE, &q_values_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarılı.");
+
+    rc = mdb_dbi_open(txn, "q_metadata_db", MDB_CREATE, &q_metadata_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
+
+    // YENİ: Q-Table DBI'larını aç
+    rc = mdb_dbi_open(txn, "q_values_db", MDB_CREATE, &q_values_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarılı.");
+
+    rc = mdb_dbi_open(txn, "q_metadata_db", MDB_CREATE, &q_metadata_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
+
     rc = mdb_txn_commit(txn);
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_commit başarısız: " << mdb_strerror(rc) << ", Yol: " << db_path_);
@@ -443,6 +477,15 @@ void SwarmVectorDB::close() {
         if (hnsw_next_label_dbi_ != 0) {
             mdb_dbi_close(env_, hnsw_next_label_dbi_);
             hnsw_next_label_dbi_ = 0;
+        }
+        // YENİ: Q-Table DBI'larını kapat
+        if (q_values_dbi_ != 0) {
+            mdb_dbi_close(env_, q_values_dbi_);
+            q_values_dbi_ = 0;
+        }
+        if (q_metadata_dbi_ != 0) {
+            mdb_dbi_close(env_, q_metadata_dbi_);
+            q_metadata_dbi_ = 0;
         }
         // YENİ: Q-Table DBI'larını kapat
         if (q_values_dbi_ != 0) {
@@ -892,8 +935,6 @@ std::vector<std::string> SwarmVectorDB::get_all_ids() const {
     return ids;
 }
 
-
-
 // YENİ: SparseQTable kalıcılığı için metotlar
 bool SwarmVectorDB::store_q_value_json(const StateKey& state_key, const std::string& action_map_json_str) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -1002,6 +1043,45 @@ bool SwarmVectorDB::delete_q_value_json(const StateKey& state_key) {
     }
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::delete_q_value_json(): Q-değeri başarıyla silindi. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
     return true;
+}
+
+std::vector<StateKey> SwarmVectorDB::get_all_keys_for_dbi(MDB_dbi dbi) const {
+    std::vector<StateKey> keys;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_keys_for_dbi(): Veritabanı açık değil.");
+        return keys;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_keys_for_dbi(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return keys;
+    }
+
+    MDB_cursor* cursor;
+    rc = mdb_cursor_open(txn, dbi, &cursor);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_keys_for_dbi(): mdb_cursor_open başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return keys;
+    }
+
+    MDB_val key, data;
+    while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == MDB_SUCCESS) {
+        keys.emplace_back(static_cast<char*>(key.mv_data), key.mv_size);
+    }
+
+    mdb_cursor_close(cursor);
+    mdb_txn_abort(txn);
+
+    if (rc != MDB_NOTFOUND) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_keys_for_dbi(): mdb_cursor_get döngüsü başarısız: " << mdb_strerror(rc));
+        keys.clear();
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_all_keys_for_dbi(): Toplam " << keys.size() << " anahtar getirildi.");
+    return keys;
 }
 
 } // namespace SwarmVectorDB
