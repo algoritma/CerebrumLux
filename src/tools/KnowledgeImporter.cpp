@@ -110,6 +110,9 @@ bool KnowledgeImporter::import_data() {
             capsule.plain_text_summary = json_capsule.value("plain_text_summary", "");
             capsule.content = json_capsule.value("content", "");
             capsule.cryptofig_blob_base64 = json_capsule.value("cryptofig_blob_base64", "");
+            if (json_capsule.contains("embedding") && json_capsule["embedding"].is_array()) {
+                capsule.embedding = json_capsule["embedding"].get<std::vector<float>>();
+            }
 
             m_knowledge_base.add_capsule(capsule); // Doğrudan KnowledgeBase'e ekle
             imported_count++; 
@@ -215,9 +218,20 @@ SwarmVectorDB::CryptofigVector KnowledgeImporter::convert_capsule_to_cryptofig_v
         }
     }
 
-    Eigen::VectorXf embedding(128);
-    for (int i = 0; i < 128; ++i) {
-        embedding(i) = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+    const int EMBEDDING_DIM = 128;
+    Eigen::VectorXf embedding(EMBEDDING_DIM);
+    if (capsule.embedding.size() == EMBEDDING_DIM) {
+        for (int i = 0; i < EMBEDDING_DIM; ++i) {
+            embedding(i) = capsule.embedding[i];
+        }
+    } else {
+        // Boyut uyuşmuyorsa veya boşsa, sıfırla doldur
+        for (int i = 0; i < EMBEDDING_DIM; ++i) {
+            embedding(i) = 0.0f;
+        }
+        if (!capsule.embedding.empty()) {
+             LOG_DEFAULT(LogLevel::WARNING, "KnowledgeImporter: Capsule ID " << capsule.id << " için embedding boyutu (" << capsule.embedding.size() << ") beklenen (" << EMBEDDING_DIM << ") ile uyuşmuyor. Sıfırlarla dolduruldu.");
+        }
     }
 
     std::string fisher_query_str = "Is this data relevant to " + capsule.topic + "?";
@@ -226,6 +240,7 @@ SwarmVectorDB::CryptofigVector KnowledgeImporter::convert_capsule_to_cryptofig_v
         cryptofig_bytes,
         embedding,
         fisher_query_str,
+        capsule.topic,
         capsule.id,
         capsule.id
     );

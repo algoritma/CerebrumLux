@@ -96,5 +96,12 @@
     "cmake.configureSettings": {
         "CMAKE_PREFIX_PATH": "C:/Qt/6.9.2/mingw_64",
         "OPENSSL_ROOT_DIR": "C:/vcpkg/installed/x64-mingw-static"
-    }
+    },
+    "python-envs.pythonProjects": [
+        {
+            "path": "src",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ]
 }

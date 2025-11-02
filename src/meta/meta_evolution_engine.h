@@ -44,6 +44,9 @@ private:
     LearningModule& learning_module;
 };
 
+// StateKey alias'ı global namespace'ten CerebrumLux namespace'ine taşındı (veya uygun yere eklendi)
+// using StateKey = std::string; // If needed here
+
 } // namespace CerebrumLux
 
 #endif // META_EVOLUTION_ENGINE_H

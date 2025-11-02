@@ -55,10 +55,18 @@ struct AIInsight {
           recommended_action(recommended_action_val),
           type(type_val),
           urgency(urgency_val),
-          associated_cryptofig(cryptofig_val), // This is the embedding
+          // associated_cryptofig'i her zaman INPUT_DIM boyutunda başlat
+          associated_cryptofig(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f),
           related_capsule_ids(capsule_ids_val),
           code_file_path(code_file_path_val),
-          source_cryptofig_id(source_cryptofig_id_val) {} // Initialize new member
+          source_cryptofig_id(source_cryptofig_id_val) {
+            // Contradiction Resolution: Copy the contents from the passed vector.
+            if (!cryptofig_val.empty()) {
+                std::copy(cryptofig_val.begin(), 
+                          cryptofig_val.begin() + std::min(cryptofig_val.size(), (size_t)CerebrumLux::CryptofigAutoencoder::INPUT_DIM), 
+                          associated_cryptofig.begin());
+            }
+          }
 
     // Açıkça Copy/Move Semantics tanımları (varsayılanlar kullanılabilir)
     AIInsight(const AIInsight& other) = default; 
@@ -69,16 +77,23 @@ struct AIInsight {
     // nlohmann::json ile serileştirme için friend fonksiyonlar
     friend void to_json(nlohmann::json& j, const AIInsight& i) {
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsight::to_json: Serileştirme basladi (ID: " << i.id << ", Type: " << static_cast<int>(i.type) << ")");
+        
+        std::vector<float> final_cryptofig = i.associated_cryptofig;
+        if (final_cryptofig.size() != CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+            final_cryptofig.resize(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "AIInsight::to_json: associated_cryptofig boyutu INPUT_DIM ile uyuşmuyor. Boyut düzeltildi. ID: " << i.id);
+        }
+
         j["id"] = i.id;
         j["observation"] = i.observation;
         j["context"] = i.context;
         j["recommended_action"] = i.recommended_action;
-        j["type"] = static_cast<int>(i.type); // Enum'ları int olarak serileştir
-        j["urgency"] = static_cast<int>(i.urgency); // Enum'ları int olarak serileştir
-        j["associated_cryptofig"] = i.associated_cryptofig;
+        j["type"] = static_cast<int>(i.type);
+        j["urgency"] = static_cast<int>(i.urgency);
+        j["associated_cryptofig"] = final_cryptofig;
         j["related_capsule_ids"] = i.related_capsule_ids;
-        j["code_file_path"] = i.code_file_path; // code_file_path da JSON'a eklendi
-        j["source_cryptofig_id"] = i.source_cryptofig_id; // Yeni üye JSON'a eklendi
+        j["code_file_path"] = i.code_file_path;
+        j["source_cryptofig_id"] = i.source_cryptofig_id;
     }
 
     friend void from_json(const nlohmann::json& j, AIInsight& i) {
@@ -86,12 +101,21 @@ struct AIInsight {
         j.at("observation").get_to(i.observation);
         j.at("context").get_to(i.context);
         j.at("recommended_action").get_to(i.recommended_action);
-        i.type = static_cast<InsightType>(j.at("type").get<int>()); // int'ten enum'a dönüştür
-        i.urgency = static_cast<UrgencyLevel>(j.at("urgency").get<int>()); // int'ten enum'a dönüştür
-        j.at("associated_cryptofig").get_to(i.associated_cryptofig);
+        i.type = static_cast<InsightType>(j.at("type").get<int>());
+        i.urgency = static_cast<UrgencyLevel>(j.at("urgency").get<int>());
+
+        if (j.contains("associated_cryptofig") && j.at("associated_cryptofig").is_array()) {
+            j.at("associated_cryptofig").get_to(i.associated_cryptofig);
+            if (i.associated_cryptofig.size() != CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+                i.associated_cryptofig.resize(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+            }
+        } else {
+            i.associated_cryptofig.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+        }
+
         j.at("related_capsule_ids").get_to(i.related_capsule_ids);
         j.at("code_file_path").get_to(i.code_file_path);
-        if (j.contains("source_cryptofig_id")) j.at("source_cryptofig_id").get_to(i.source_cryptofig_id); // Yeni üye JSON'dan okunuyor
+        if (j.contains("source_cryptofig_id")) j.at("source_cryptofig_id").get_to(i.source_cryptofig_id);
     }
 };
 

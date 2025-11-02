@@ -227,7 +227,47 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
 
         insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)500, insight.observation.length())) + "...";
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
-        insight_capsule.embedding = compute_embedding(insight_capsule.content);
+
+        // KRİTİK DÜZELTME: AIInsight'ın associated_cryptofig'ini doğrudan Capsule'ın embedding'i olarak kullan
+        if (!insight.associated_cryptofig.empty()) {
+            // Ensure the embedding is of INPUT_DIM (128) size
+            if (insight.associated_cryptofig.size() == CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+                insight_capsule.embedding = insight.associated_cryptofig;
+                LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "[LearningModule] AIInsight associated_cryptofig'i Capsule embedding olarak kullanıldı. ID: " << insight.id);
+            } else {
+                // If size is different, resize and copy
+                insight_capsule.embedding.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+                std::copy(insight.associated_cryptofig.begin(),
+                          insight.associated_cryptofig.begin() + std::min((size_t)CerebrumLux::CryptofigAutoencoder::INPUT_DIM, insight.associated_cryptofig.size()),
+                          insight_capsule.embedding.begin());
+                LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] AIInsight associated_cryptofig boyutu INPUT_DIM ile uyuşmuyor. Boyut düzeltildi ve kullanıldı. ID: " << insight.id);
+            }
+        } else {
+            // Eğer associated_cryptofig boşsa, içeriğinden embedding hesapla (fallback)
+            insight_capsule.embedding = compute_embedding(insight_capsule.content);
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] AIInsight için associated_cryptofig boştu. İçerikten yeni embedding hesaplandı. ID: " << insight.id);
+        }
+
+        // YENİ KOD: Sparse Q-Table'ı güncelle (placeholder mantık)
+        // Embedding'in boş olmadığından emin ol
+        if (!insight_capsule.embedding.empty() && insight_capsule.embedding.size() == CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+            CerebrumLux::AIAction action = CerebrumLux::AIAction::None; // Placeholder action
+            float reward = 0.0f; // Placeholder reward
+
+            // Insight'ın türü ve aciliyetine göre basit bir action/reward ataması
+            // Daha sofistike bir modelleme burada yapılacaktır.
+            if (insight.urgency == CerebrumLux::UrgencyLevel::Critical) action = CerebrumLux::AIAction::PrioritizeTask;
+            else if (insight.urgency == CerebrumLux::UrgencyLevel::High) action = CerebrumLux::AIAction::SuggestResearch;
+            else if (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion) action = CerebrumLux::AIAction::RefactorCode;
+            else if (insight.type == CerebrumLux::InsightType::LearningOpportunity) action = CerebrumLux::AIAction::MaximizeLearning;
+
+            reward = static_cast<float>(insight.urgency) * 0.1f; // Aciliyet ile orantılı reward (0.0 - 0.5 arası)
+            if (action == CerebrumLux::AIAction::RefactorCode) reward += 0.2f; // Kod refaktörü için ek ödül
+
+            update_q_values(insight_capsule.embedding, action, reward);
+        } else {
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] Sparse Q-Table güncellenemedi: Embedding boş veya yanlış boyut. ID: " << insight.id);
+        }
         insight_capsule.cryptofig_blob_base64 = cryptofig_encode(insight_capsule.embedding);
         insight_capsule.code_file_path = insight.code_file_path; //EKLENDİ: AIInsight'tan code_file_path Capsule'a aktarılıyor
 
@@ -461,6 +501,21 @@ void LearningModule::processCodeSuggestionFeedback(const std::string& capsuleId,
     }
     // Gelecekte: Bu geri bildirim, AIInsightsEngine'ın öneri üretim mantığını veya IntentLearner'ı eğitmek için kullanılabilir.
     // Örneğin, bu kapsülün topic'ini veya içeriğini analiz ederek ilgili metrikleri güncelleyebiliriz.
+}
+
+// YENİ METOT: Sparse Q-Table'ı güncellemek için (şimdilik placeholder)
+void LearningModule::update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward) {
+    // State embedding'ini bir string anahtara dönüştür (basitçe float değerlerini birleştir)
+    // Bu, RL durum temsili için bir placeholder'dır.
+    std::stringstream ss;
+    for (float val : state_embedding) {
+        ss << std::fixed << std::setprecision(5) << val << "|"; // Hassasiyeti artırarak daha iyi anahtar
+    }
+    std::string state_key = ss.str();
+
+    // Q-table'ı güncelle (şimdilik basit bir atama/toplama) - Gelecekte Q-learning denklemi buraya gelecek
+    q_table.q_values[state_key][action] += reward; 
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. State: " << state_key.substr(0, std::min((size_t)50, state_key.length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[state_key][action]);
 }
 
 } // namespace CerebrumLux

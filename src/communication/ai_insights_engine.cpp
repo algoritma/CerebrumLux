@@ -329,7 +329,7 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 "Yeni özellik geliştirme veya derinlemesine öğrenme moduna geç.",
                 CerebrumLux::InsightType::None,
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Low),
-                {}, // associated_cryptofig (empty for StableState)
+                current_sequence.latent_cryptofig_vector, // Eğer boş değilse latent cryptofig'i ata
                 {current_sequence.id}, // related_capsule_ids
                 ""
             )
@@ -411,8 +411,8 @@ std::vector<AIInsight> AIInsightsEngine::generateGeneralNonCodeDevelopmentInsigh
                 "Arka plan uygulamalarını kontrol edin veya gereksiz isleri durdurun.",
                 CerebrumLux::InsightType::ResourceOptimization,
                 insight_severity_to_urgency_level(CerebrumLux::InsightSeverity::Medium), // UrgencyLevel
-                {}, // associated_cryptofig
-                {current_sequence.id}, // related_capsule_ids
+                current_sequence.latent_cryptofig_vector, // Eğer boş değilse latent cryptofig'i ata
+                {current_sequence.id},
                 ""
             )
         );

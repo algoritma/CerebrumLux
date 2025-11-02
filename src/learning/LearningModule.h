@@ -11,6 +11,7 @@
 #include "../communication/ai_insights_engine.h"
 #include "../crypto/CryptoManager.h"
 #include "UnicodeSanitizer.h" // Tam tanıma ihtiyaç duyulduğu için eklendi
+#include "../swarm_vectordb/DataModels.h" // SparseQTable için
 #include "../communication/natural_language_processor.h" // generate_text_embedding için
 #include "StegoDetector.h"    // Tam tanıma ihtiyaç duyulduğu için eklendi
 #include "WebFetcher.h" // WebFetcher için
@@ -76,6 +77,9 @@ public:
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
 
+    // Sparse Q-Table'ı güncellemek için metot (şimdilik placeholder)
+    void update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward);
+
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
 
     std::vector<float> compute_embedding(const std::string& text) const;
@@ -102,6 +106,7 @@ private:
     QObject* parentApp; // QApplication'a bağlanmak için (m_parentApp yerine parentApp)
     bool webFetchInProgress = false; // Web çekme işleminin devam edip etmediğini gösterir
     QString currentWebFetchQuery; // Şu anki web çekme sorgusunu tutar
+    CerebrumLux::SwarmVectorDB::SparseQTable q_table; // Sparse Q-Table üyesi eklendi
 
     bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
     Capsule decrypt_payload(const Capsule& encrypted_capsule) const;

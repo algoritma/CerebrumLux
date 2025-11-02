@@ -490,6 +490,12 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     // 7. cv.content_hash
     serialized_data.insert(serialized_data.end(), reinterpret_cast<const uint8_t*>(cv.content_hash.data()), reinterpret_cast<const uint8_t*>(cv.content_hash.data()) + content_hash_len);
 
+    // YENİ: 8. topic_len
+    size_t topic_len = cv.topic.size();
+    serialized_data.insert(serialized_data.end(), reinterpret_cast<const uint8_t*>(&topic_len), reinterpret_cast<const uint8_t*>(&topic_len) + sizeof(size_t));
+    // YENİ: 9. cv.topic
+    serialized_data.insert(serialized_data.end(), reinterpret_cast<const uint8_t*>(cv.topic.data()), reinterpret_cast<const uint8_t*>(cv.topic.data()) + topic_len);
+
     data.mv_size = serialized_data.size();
     data.mv_data = serialized_data.data();
 
@@ -500,27 +506,15 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
         return false;
     }
 
-    rc = mdb_txn_commit(txn);
-    if (rc != MDB_SUCCESS) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_txn_commit başarısız: " << mdb_strerror(rc));
-        return false;
-    }
-
-    // HNSW index'e de ekle
+    // HNSW index'e de ekle (aynı transaction içinde)
     if (hnsw_index_) {
-        // Eğer ID zaten haritada varsa, mevcut elemanı güncelle (hnswlib doğrudan güncelleme desteklemez,
-        // bu durumda eskiyi silip yeniyi eklemek gerekir, ancak bu karmaşık. Şimdilik sadece ekleme yapıyoruz.)
-        if (id_to_hnsw_label_map_.count(cv.id)) {
-            // LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::store_vector(): ID '" << cv.id << "' zaten HNSW index'te var, yeni embedding eklenmiyor/güncellenmiyor.");
-            // Henüz hnswlib removePoint API'si veya updatePoint API'si kullanılmıyor.
-        } else {
+        if (!id_to_hnsw_label_map_.count(cv.id)) {
             hnswlib::labeltype current_label = next_hnsw_label_++;
             std::vector<float> emb(cv.embedding.data(), cv.embedding.data() + cv.embedding.size());
             hnsw_index_->add_item(emb, current_label);
             hnsw_label_to_id_map_[current_label] = cv.id;
             id_to_hnsw_label_map_[cv.id] = current_label;
 
-            // Haritaları LMDB'ye kaydet (daha güvenli MDB_val kullanımı)
             const std::string label_str_key_store = std::to_string(current_label);
             MDB_val label_key_mdb_store, id_val_mdb_store;
             label_key_mdb_store.mv_size = label_str_key_store.length();
@@ -539,17 +533,24 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
             rc = mdb_put(txn, id_to_hnsw_label_map_dbi_, &id_key_mdb_store, &label_val_mdb_store, 0);
             if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): id_to_hnsw_label_map put başarısız (ID: " << cv.id << ", label: " << label_str_val_store << "): " << mdb_strerror(rc));
 
-            // next_hnsw_label_ kaydet
             MDB_val next_label_key, next_label_data;
             const std::string next_label_key_str = "next_hnsw_label";
+            const std::string next_hnsw_label_str_val = std::to_string(next_hnsw_label_);
             next_label_key.mv_size = next_label_key_str.size();
             next_label_key.mv_data = (void*)next_label_key_str.data();
-            next_label_data.mv_size = sizeof(hnswlib::labeltype); next_label_data.mv_data = &next_hnsw_label_;
+            next_label_data.mv_size = next_hnsw_label_str_val.size();
+            next_label_data.mv_data = (void*)next_hnsw_label_str_val.data();
             rc = mdb_put(txn, hnsw_next_label_dbi_, &next_label_key, &next_label_data, 0);
             if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): next_hnsw_label_ put başarısız: " << mdb_strerror(rc));
 
             LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB: HNSW index'e vektör eklendi. ID: " << cv.id << ", Label: " << current_label);
         }
+    }
+
+    rc = mdb_txn_commit(txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_txn_commit başarısız: " << mdb_strerror(rc));
+        return false;
     }
 
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB: Vektör başarıyla depolandı. ID: " << cv.id << ", Boyut: " << data.mv_size << " byte.");
@@ -672,6 +673,29 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     cv->content_hash.assign(reinterpret_cast<const char*>(current_ptr + offset), content_hash_len); // This was previously the end, should be here
     offset += content_hash_len; 
     remaining_size -= content_hash_len; // After this, remaining_size should be 0 if all fields are correctly deserialized.
+
+    // YENİ: 8. Deserialize topic_len
+    size_t topic_len;
+    if (remaining_size < sizeof(size_t)) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: CryptofigVector deserialization hatasi: topic uzunluk verisi eksik. ID: " << id);
+        if (!existing_txn) mdb_txn_abort(current_txn);
+        return nullptr;
+    }
+    std::memcpy(&topic_len, current_ptr + offset, sizeof(size_t));
+    offset += sizeof(size_t);
+    remaining_size -= sizeof(size_t);
+
+    // YENİ: 9. Deserialize cv.topic
+    if (remaining_size < topic_len) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: CryptofigVector deserialization hatasi: topic verisi eksik. ID: " << id);
+        if (!existing_txn) mdb_txn_abort(current_txn);
+        return nullptr;
+    }
+    cv->topic.assign(reinterpret_cast<const char*>(current_ptr + offset), topic_len);
+    offset += topic_len;
+    remaining_size -= topic_len;
+
+
 
     // Check if there's any remaining data unread, indicates serialization/deserialization mismatch
     if (remaining_size != 0) { // This check should now be more reliable

@@ -44,7 +44,11 @@ enum class AIAction : unsigned char {
     UpdateKnowledgeBase,
     MonitorPerformance,
     CalibrateSensors,
-    ExecutePlan
+    ExecutePlan,
+    PrioritizeTask, // Yeni eklenen eylem
+    RefactorCode,   // Yeni eklenen eylem
+    SuggestResearch,
+    MaximizeLearning
 };
 
 // Niyet Türleri

@@ -68,13 +68,26 @@ struct Capsule {
         std::stringstream ss(ts_str);
         ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
         c.timestamp_utc = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+
+        // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak
+        // Daha sonra KnowledgeBase.cpp'de 128 boyuta düzeltilecek.
+        if (j.contains("embedding") && j.at("embedding").is_array()) {
+            // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak
+        // Daha sonra KnowledgeBase.cpp'de 128 boyuta düzeltilecek.
+        if (j.contains("embedding") && j.at("embedding").is_array()) {
+            j.at("embedding").get_to(c.embedding);
+        } else {
+            c.embedding.clear(); // JSON'da yoksa veya geçersizse boş bırak
+        }
+        } else {
+            c.embedding.clear(); // JSON'da yoksa veya geçersizse boş bırak
+        }
         
         j.at("topic").get_to(c.topic);
         j.at("source").get_to(c.source);
         j.at("content").get_to(c.content);
         j.at("plain_text_summary").get_to(c.plain_text_summary);
         j.at("cryptofig_blob_base64").get_to(c.cryptofig_blob_base64);
-        j.at("embedding").get_to(c.embedding);
         j.at("confidence").get_to(c.confidence);
         j.at("encrypted_content").get_to(c.encrypted_content);
         j.at("signature_base64").get_to(c.signature_base64);

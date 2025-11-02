@@ -30,14 +30,14 @@ SwarmVectorDB::CryptofigVector KnowledgeBase::convert_capsule_to_cryptofig_vecto
     }
 
     // std::vector<float> to Eigen::VectorXf
-    // KRİTİK DÜZELTME: embedding_eigen'in boyutunu her zaman CryptofigAutoencoder::INPUT_DIM olarak ayarla.
+    // embedding_eigen'in boyutunu her zaman CryptofigAutoencoder::INPUT_DIM olarak ayarla.
     const int EMBEDDING_DIM = CerebrumLux::CryptofigAutoencoder::INPUT_DIM;
     Eigen::VectorXf embedding_eigen(EMBEDDING_DIM);
 
     // JSON'dan okunan capsule.embedding boyutunu kontrol et
     if (capsule.embedding.size() != EMBEDDING_DIM) {
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Capsule ID " << capsule.id 
-                    << " için JSON'dan okunan embedding boyutu (" << capsule.embedding.size() 
+                    << " için JSON'dan okunan embedding boyutu (" << capsule.embedding.size()
                     << ") beklenen (" << EMBEDDING_DIM << ") ile uyuşmuyor. Boyut düzeltiliyor.");
     }
     
@@ -49,22 +49,22 @@ SwarmVectorDB::CryptofigVector KnowledgeBase::convert_capsule_to_cryptofig_vecto
             embedding_eigen(i) = 0.0f; // Eksik elemanları sıfırla
         }
     }
-
+    
     std::string fisher_query_str = "Is this data relevant to " + capsule.topic + "?";
-
     return SwarmVectorDB::CryptofigVector(
         cryptofig_bytes,
         embedding_eigen,
         fisher_query_str,
-        capsule.id,
-        capsule.id // content_hash olarak da ID kullanıldı, gerçekte hashlenmeli
+        capsule.topic,              // YENİ: topic de CryptofigVector'a aktarıldı
+        capsule.id,                 // ID
+        capsule.id                  // content_hash (şimdilik ID ile aynı, daha sonra hashlenmeli)
     );
 }
 
 Capsule KnowledgeBase::convert_cryptofig_vector_to_capsule(const SwarmVectorDB::CryptofigVector& cv) const {
     Capsule capsule;
     capsule.id = cv.id;
-    capsule.topic = ""; // Topic doğrudan CryptofigVector'de saklanmadığı için boş bırakıldı
+    capsule.topic = cv.topic; // YENİ: Topic CryptofigVector'dan okundu
     capsule.source = "SwarmVectorDB"; // Kaynak olarak DB belirtilebilir
     capsule.confidence = 1.0f; // Varsayılan güven
     capsule.plain_text_summary = cv.fisher_query; // Fisher query'yi özet olarak kullan
