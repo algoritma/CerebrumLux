@@ -169,8 +169,32 @@ std::string action_to_string(AIAction action) {
         case AIAction::MonitorPerformance: return "MonitorPerformance";
         case AIAction::CalibrateSensors: return "CalibrateSensors";
         case AIAction::ExecutePlan: return "ExecutePlan";
+        case AIAction::PrioritizeTask: return "PrioritizeTask";
+        case AIAction::RefactorCode: return "RefactorCode";
+        case AIAction::SuggestResearch: return "SuggestResearch";
+        case AIAction::MaximizeLearning: return "MaximizeLearning";
         default: return "UnknownAction";
     }
+}
+
+AIAction string_to_action(const std::string& action_str) {
+    if (action_str == "None") return AIAction::None;
+    if (action_str == "RespondToUser") return AIAction::RespondToUser;
+    if (action_str == "SuggestSelfImprovement") return AIAction::SuggestSelfImprovement;
+    if (action_str == "AdjustLearningRate") return AIAction::AdjustLearningRate;
+    if (action_str == "RequestMoreData") return AIAction::RequestMoreData;
+    if (action_str == "QuarantineCapsule") return AIAction::QuarantineCapsule;
+    if (action_str == "InitiateHandshake") return AIAction::InitiateHandshake;
+    if (action_str == "PerformWebSearch") return AIAction::PerformWebSearch;
+    if (action_str == "UpdateKnowledgeBase") return AIAction::UpdateKnowledgeBase;
+    if (action_str == "MonitorPerformance") return AIAction::MonitorPerformance;
+    if (action_str == "CalibrateSensors") return AIAction::CalibrateSensors;
+    if (action_str == "ExecutePlan") return AIAction::ExecutePlan;
+    if (action_str == "PrioritizeTask") return AIAction::PrioritizeTask;
+    if (action_str == "RefactorCode") return AIAction::RefactorCode;
+    if (action_str == "SuggestResearch") return AIAction::SuggestResearch;
+    if (action_str == "MaximizeLearning") return AIAction::MaximizeLearning;
+    return AIAction::None; // Default case
 }
 
 std::string sensor_type_to_string(SensorType type) {

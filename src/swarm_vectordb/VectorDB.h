@@ -59,6 +59,11 @@ public:
     // Veritabanındaki tüm ID'leri döndürür (dikkat: büyük DB'lerde yavaş olabilir)
     std::vector<std::string> get_all_ids() const;
 
+    // SparseQTable kalıcılığı için yeni genel metotlar
+    bool store_q_value_json(const StateKey& state_key, const std::string& action_map_json_str);
+    std::optional<std::string> get_q_value_json(const StateKey& state_key) const;
+    bool delete_q_value_json(const StateKey& state_key);
+
     // LMDB ortam ve DBI handle'ları için getter'lar (list_data için gerekli)
     MDB_env* get_env() const { return env_; }
     MDB_dbi get_dbi() const { return dbi_; }
@@ -71,6 +76,8 @@ private:
     MDB_dbi hnsw_label_to_id_map_dbi_;    // HNSW label -> CryptofigVector ID haritası için DBI
     MDB_dbi id_to_hnsw_label_map_dbi_;    // CryptofigVector ID -> HNSW label haritası için DBI
     MDB_dbi hnsw_next_label_dbi_;         // Bir sonraki hnswlib label değerini saklamak için DBI
+    MDB_dbi q_values_dbi_;                // SparseQTable'ın Q-değerlerini (StateKey -> ActionMap JSON) saklamak için DBI
+    MDB_dbi q_metadata_dbi_;              // SparseQTable ile ilgili meta verileri (örn. öğrenme oranları) JSON olarak saklamak için DBI
 
     // HNSW index'i std::unique_ptr ile yönetiyoruz
     std::unique_ptr<CerebrumLux::HNSW::HNSWIndex> hnsw_index_; 

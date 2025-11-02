@@ -77,8 +77,12 @@ public:
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
 
+    // Sparse Q-Table kalıcılığı için metotlar
+    void save_q_table() const;
+    void load_q_table();
+
     // Sparse Q-Table'ı güncellemek için metot (şimdilik placeholder)
-    void update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward);
+    void update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float float_reward);
 
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
 

@@ -191,6 +191,23 @@ bool SwarmVectorDB::open() {
     }
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'hnsw_next_label_dbi' başarılı.");
 
+    // YENİ: Q-Table DBI'larını aç
+    rc = mdb_dbi_open(txn, "q_values_db", MDB_CREATE, &q_values_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarılı.");
+
+    rc = mdb_dbi_open(txn, "q_metadata_db", MDB_CREATE, &q_metadata_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
+
     rc = mdb_txn_commit(txn);
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_commit başarısız: " << mdb_strerror(rc) << ", Yol: " << db_path_);
@@ -426,6 +443,15 @@ void SwarmVectorDB::close() {
         if (hnsw_next_label_dbi_ != 0) {
             mdb_dbi_close(env_, hnsw_next_label_dbi_);
             hnsw_next_label_dbi_ = 0;
+        }
+        // YENİ: Q-Table DBI'larını kapat
+        if (q_values_dbi_ != 0) {
+            mdb_dbi_close(env_, q_values_dbi_);
+            q_values_dbi_ = 0;
+        }
+        if (q_metadata_dbi_ != 0) {
+            mdb_dbi_close(env_, q_metadata_dbi_);
+            q_metadata_dbi_ = 0;
         }
 
         if (dbi_ != 0) {
@@ -866,6 +892,117 @@ std::vector<std::string> SwarmVectorDB::get_all_ids() const {
     return ids;
 }
 
+
+
+// YENİ: SparseQTable kalıcılığı için metotlar
+bool SwarmVectorDB::store_q_value_json(const StateKey& state_key, const std::string& action_map_json_str) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_q_value_json(): Veritabanı açık değil. Q-değeri depolanamadı.");
+        return false;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_q_value_json(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+
+    MDB_val key, data;
+    key.mv_size = state_key.length();
+    key.mv_data = (void*)state_key.c_str();
+    data.mv_size = action_map_json_str.length();
+    data.mv_data = (void*)action_map_json_str.c_str();
+
+    rc = mdb_put(txn, q_values_dbi_, &key, &data, 0);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_q_value_json(): mdb_put başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return false;
+    }
+
+    rc = mdb_txn_commit(txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_q_value_json(): mdb_txn_commit başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::store_q_value_json(): Q-değeri başarıyla depolandı. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+    return true;
+}
+
+std::optional<std::string> SwarmVectorDB::get_q_value_json(const StateKey& state_key) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_q_value_json(): Veritabanı açık değil. Q-değeri getirilemedi.");
+        return std::nullopt;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_q_value_json(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return std::nullopt;
+    }
+
+    MDB_val key, data;
+    key.mv_size = state_key.length();
+    key.mv_data = (void*)state_key.c_str();
+
+    rc = mdb_get(txn, q_values_dbi_, &key, &data);
+    if (rc == MDB_NOTFOUND) {
+        LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_q_value_json(): Q-değeri bulunamadı. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+        mdb_txn_abort(txn);
+        return std::nullopt;
+    } else if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_q_value_json(): mdb_get başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return std::nullopt;
+    }
+
+    std::string json_str(static_cast<char*>(data.mv_data), data.mv_size);
+    mdb_txn_abort(txn);
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_q_value_json(): Q-değeri başarıyla getirildi. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+    return json_str;
+}
+
+bool SwarmVectorDB::delete_q_value_json(const StateKey& state_key) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_q_value_json(): Veritabanı açık değil. Q-değeri silinemedi.");
+        return false;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_q_value_json(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+
+    MDB_val key;
+    key.mv_size = state_key.length();
+    key.mv_data = (void*)state_key.c_str();
+
+    rc = mdb_del(txn, q_values_dbi_, &key, nullptr);
+    if (rc == MDB_NOTFOUND) {
+        LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::delete_q_value_json(): Silinecek Q-değeri bulunamadı. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+        mdb_txn_abort(txn);
+        return true;
+    } else if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_q_value_json(): mdb_del başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return false;
+    }
+
+    rc = mdb_txn_commit(txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_q_value_json(): mdb_txn_commit başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::delete_q_value_json(): Q-değeri başarıyla silindi. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+    return true;
+}
 
 } // namespace SwarmVectorDB
 } // namespace CerebrumLux

@@ -48,6 +48,7 @@ std::string intent_to_string(UserIntent intent);
 std::string abstract_state_to_string(AbstractState state);
 std::string goal_to_string(AIGoal goal);
 std::string action_to_string(AIAction action);
+AIAction string_to_action(const std::string& action_str);
 std::string sensor_type_to_string(SensorType type);
 std::string key_type_to_string(KeyType type);
 std::string key_event_type_to_string(KeyEventType type);
