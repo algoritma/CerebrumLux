@@ -31,11 +31,11 @@ struct CryptofigVector {
 
 // Sparse Q-Table (RL için)
 // Durum anahtarı olarak embedding vektörlerinin string temsili kullanılabilir
-using StateKey = std::string; 
+using EmbeddingStateKey = std::string; 
 
 struct SparseQTable {
-    // Q-değerleri: StateKey (embedding string temsili) -> Action (enum) -> Q-Value (float)
-    std::map<StateKey, std::map<CerebrumLux::AIAction, float>> q_values;
+    // Q-değerleri: EmbeddingStateKey (embedding string temsili) -> Action (enum) -> Q-Value (float)
+    std::map<EmbeddingStateKey, std::map<CerebrumLux::AIAction, float>> q_values;
 
     SparseQTable() = default;
     // Kopyalama ve atama operatörleri varsayılan olarak kullanılabilir.
@@ -57,7 +57,7 @@ struct SparseQTable {
         sqt.q_values.clear();
         const nlohmann::json& q_map_json = j.at("q_values");
         for (nlohmann::json::const_iterator it = q_map_json.begin(); it != q_map_json.end(); ++it) {
-            StateKey state_key = it.key();
+            EmbeddingStateKey state_key = it.key();
             const nlohmann::json& action_map_json = it.value();
             for (nlohmann::json::const_iterator action_it = action_map_json.begin(); action_it != action_map_json.end(); ++action_it) {
                 sqt.q_values[state_key][CerebrumLux::string_to_action(action_it.key())] = action_it.value().get<float>();

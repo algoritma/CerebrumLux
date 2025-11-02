@@ -42,7 +42,16 @@ Cerebrum Lux projesinin temel altyapısı ve ana AI bileşenleri başarıyla ent
 *   **Kullanıcı Profili ve Kişiselleştirme:** `UserProfileManager` sınıfı kullanıcı tercihlerini, alışkanlıklarını ve geri bildirimleri yönetir.
 *   **Learning Module & KnowledgeBase Entegrasyonu:** `Capsule`, `KnowledgeBase`, `LearningModule`, `WebFetcher` sınıfları entegre edilmiştir. `LearningModule` AIInsightsEngine'dan gelen içgörüleri Capsule'lara dönüştürür ve KnowledgeBase'e kaydeder. KnowledgeBase JSON formatında kalıcı veri tutar.
 *   **Güvenli ve Akıllı Kapsül Transferi Modülü:** Yeni `Capsule` yapısı, kriptografik ve meta-veri alanlarını içerecek şekilde güncellenmiştir. `KnowledgeBase` API'si revize edilmiş, `LearningModule` içerisinde AES-256-GCM (şifreleme/şifre çözme) ve Ed25519 (imzalama/doğrulama) için OpenSSL API'leri kullanılarak implementasyonlar sağlanmıştır. `UnicodeSanitizer` ve `StegoDetector` entegrasyonu tamamlanmıştır. `CapsuleTransferPanel` GUI'ye entegre edilmiştir ve test senaryolarında beklenen şekilde çalışmaktadır.
-*   **Altyapısal Gelişmeler:** `std::string` standardizasyonu, geliştirilmiş `Logger` sınıfı, merkezileştirilmiş `SafeRNG`, `CMakeLists.txt` optimizasyonları ve `VSCode Debug` yapılandırmaları tamamlanmıştır.
+*   **Vektör Veritabanı ve Gelişmiş Arama (Swarm-VectorDB & HNSWlib):** Projeye yeni entegre edilen `Swarm-VectorDB` modülü ve `hnswlib_wrapper` aracılığıyla yüksek performanslı yaklaşık en yakın komşu (ANN) arama yetenekleri kazanılmıştır. Bu sayede vektörel gösterimler üzerinde hızlı ve ölçeklenebilir arama işlemleri yapılabilmektedir.
+*   **Doğrusal Cebir (Eigen3):** Sayısal hesaplamalar ve doğrusal cebir işlemleri için yüksek performanslı ve geniş kapsamlı Eigen3 kütüphanesi entegre edilmiştir.
+*   **HTML5 Ayrıştırma (Gumbo):** Web içeriklerinin işlenmesi için Gumbo HTML5 ayrıştırma kütüphanesi entegrasyonu tamamlanmıştır.
+*   **Veri Depolama (LMDB):** Hafif ve yüksek performanslı gömülü bir veritabanı olan LMDB (Lightning Memory-Mapped Database) entegre edilmiştir.
+*   **Veri Sıkıştırma (Zlib):** Veri sıkıştırma ve açma işlemleri için Zlib kütüphanesi kullanıma alınmıştır.
+*   **Yeni CLI Araçları:**
+    *   `knowledge_importer.exe`: Bilgi tabanına dış kaynaklardan veri almak için bir komut satırı aracı geliştirilmiştir.
+    *   `nlp_online_trainer.exe`: Doğal Dil İşleme (NLP) modellerini çevrimiçi olarak eğitmek için bir araç eklenmiştir.
+*   **Gelişmiş Test Altyapısı:** Yeni `test_learning_module.exe` test paketi, öğrenme modülünün işlevselliğini doğrulamak için eklenmiştir. Mevcut testlerdeki bazı sorunlu derleme bayrakları kaldırılmıştır.
+*   **Altyapısal Gelişmeler:** `std::string` standardizasyonu, geliştirilmiş `Logger` sınıfı, merkezileştirilmiş `SafeRNG`, `CMakeLists.txt` optimizasyonları ve `VSCode Debug` yapılandırmaları tamamlanmıştır. Core kütüphanesinin GUI'den bağımsızlığı artırılmış, GUI bileşenlerinin Core içerisinden çıkarılmasıyla daha modüler bir yapıya geçilmiştir.
 
 ---
 
@@ -56,8 +65,16 @@ Cerebrum Lux'ı derlemek ve çalıştırmak için aşağıdaki adımları izleyi
 *   [CMake](https://cmake.org/download/) (Derleme sistemi)
 *   [Git](https://git-scm.com/downloads) (Depoyu klonlamak için)
 *   [Qt6](https://www.qt.io/download) (GUI için)
-*   [vcpkg](https://vcpkg.io/en/getting-started) (OpenSSL kurulumu için önerilir)
-    *   `vcpkg install openssl:x64-mingw-static` komutu ile OpenSSL'i kurmanız tavsiye edilir.
+*   [vcpkg](https://vcpkg.io/en/getting-started) (Gerekli kütüphanelerin kurulumu için önerilir)
+    *   Aşağıdaki komutlarla gerekli kütüphaneleri kurmanız tavsiye edilir:
+        ```bash
+        vcpkg install openssl:x64-mingw-static
+        vcpkg install eigen3:x64-mingw-static #
+        vcpkg install hnswlib:x64-mingw-static #
+        vcpkg install gumbo:x64-mingw-static #
+        vcpkg install lmdb:x64-mingw-static #
+        vcpkg install zlib:x64-mingw-static #
+        ```
 
 **Adımlar:**
 
@@ -72,12 +89,14 @@ Cerebrum Lux'ı derlemek ve çalıştırmak için aşağıdaki adımları izleyi
     mkdir build
     cd build
 cmake .. -G "MinGW Makefiles" `
-   -DCMAKE_C_COMPILER="C:/Qt/Tools/mingw1310_64/bin/gcc.exe" `
-   -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe" `
-   -DCMAKE_PREFIX_PATH="C:/Qt/6.9.2/mingw_64" `
-   -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-   -DOPENSSL_ROOT_DIR="C:/vcpkg/installed/x64-mingw-static" `
-   -DOPENSSL_USE_STATIC_LIBS=TRUE
+  -DCMAKE_C_COMPILER="C:/Qt/Tools/mingw1310_64/bin/gcc.exe" `
+  -DCMAKE_CXX_COMPILER="C:/Qt/Tools/mingw1310_64/bin/g++.exe" `
+  -DCMAKE_MAKE_PROGRAM="C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe" `
+  -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/mingw_64" `
+  -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+  -DOPENSSL_ROOT_DIR="C:/vcpkg/installed/x64-mingw-static" `
+  -Dhnswlib_DIR="C:/vcpkg/installed/x64-mingw-static/share/hnswlib" `
+  -DOPENSSL_USE_STATIC_LIBS=TRUE
     ```
 3.  **Projeyi Derleyin:**
     ```bash
@@ -97,9 +116,17 @@ cmake .. -G "MinGW Makefiles" `
     ```bash
     ./CerebrumLuxGUI.exe
     ```
-    Testleri çalıştırmak için:
+    Yanıt motoru testlerini çalıştırmak için:
     ```bash
     ./test_response_engine.exe
+    ```
+    Öğrenme modülü testlerini çalıştırmak için:
+    ```bash
+    ./test_learning_module.exe
+    ```
+    Bilgi içe aktarıcısını çalıştırmak için:
+    ```bash
+    ./knowledge_importer.exe
     ```
     NLP eğiticisini çalıştırmak için:
     ```bash

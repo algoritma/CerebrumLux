@@ -936,7 +936,7 @@ std::vector<std::string> SwarmVectorDB::get_all_ids() const {
 }
 
 // YENİ: SparseQTable kalıcılığı için metotlar
-bool SwarmVectorDB::store_q_value_json(const StateKey& state_key, const std::string& action_map_json_str) {
+bool SwarmVectorDB::store_q_value_json(const EmbeddingStateKey& state_key, const std::string& action_map_json_str) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_q_value_json(): Veritabanı açık değil. Q-değeri depolanamadı.");
@@ -968,11 +968,11 @@ bool SwarmVectorDB::store_q_value_json(const StateKey& state_key, const std::str
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_q_value_json(): mdb_txn_commit başarısız: " << mdb_strerror(rc));
         return false;
     }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::store_q_value_json(): Q-değeri başarıyla depolandı. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::store_q_value_json(): Q-değeri başarıyla depolandı. EmbeddingStateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
     return true;
 }
 
-std::optional<std::string> SwarmVectorDB::get_q_value_json(const StateKey& state_key) const {
+std::optional<std::string> SwarmVectorDB::get_q_value_json(const EmbeddingStateKey& state_key) const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_q_value_json(): Veritabanı açık değil. Q-değeri getirilemedi.");
@@ -992,7 +992,7 @@ std::optional<std::string> SwarmVectorDB::get_q_value_json(const StateKey& state
 
     rc = mdb_get(txn, q_values_dbi_, &key, &data);
     if (rc == MDB_NOTFOUND) {
-        LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_q_value_json(): Q-değeri bulunamadı. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+        LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_q_value_json(): Q-değeri bulunamadı. EmbeddingStateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
         mdb_txn_abort(txn);
         return std::nullopt;
     } else if (rc != MDB_SUCCESS) {
@@ -1003,11 +1003,11 @@ std::optional<std::string> SwarmVectorDB::get_q_value_json(const StateKey& state
 
     std::string json_str(static_cast<char*>(data.mv_data), data.mv_size);
     mdb_txn_abort(txn);
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_q_value_json(): Q-değeri başarıyla getirildi. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_q_value_json(): Q-değeri başarıyla getirildi. EmbeddingStateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
     return json_str;
 }
 
-bool SwarmVectorDB::delete_q_value_json(const StateKey& state_key) {
+bool SwarmVectorDB::delete_q_value_json(const EmbeddingStateKey& state_key) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_q_value_json(): Veritabanı açık değil. Q-değeri silinemedi.");
@@ -1027,7 +1027,7 @@ bool SwarmVectorDB::delete_q_value_json(const StateKey& state_key) {
 
     rc = mdb_del(txn, q_values_dbi_, &key, nullptr);
     if (rc == MDB_NOTFOUND) {
-        LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::delete_q_value_json(): Silinecek Q-değeri bulunamadı. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+        LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::delete_q_value_json(): Silinecek Q-değeri bulunamadı. EmbeddingStateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
         mdb_txn_abort(txn);
         return true;
     } else if (rc != MDB_SUCCESS) {
@@ -1041,13 +1041,13 @@ bool SwarmVectorDB::delete_q_value_json(const StateKey& state_key) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_q_value_json(): mdb_txn_commit başarısız: " << mdb_strerror(rc));
         return false;
     }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::delete_q_value_json(): Q-değeri başarıyla silindi. StateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::delete_q_value_json(): Q-değeri başarıyla silindi. EmbeddingStateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length())));
     return true;
 }
 
-std::vector<StateKey> SwarmVectorDB::get_all_keys_for_dbi(MDB_dbi dbi) const {
-    std::vector<StateKey> keys;
-    std::lock_guard<std::mutex> lock(mutex_);
+std::vector<EmbeddingStateKey> SwarmVectorDB::get_all_keys_for_dbi(MDB_dbi dbi) const {
+    std::vector<EmbeddingStateKey> keys;
+    std::lock_guard<std::mutex> lock(mutex_); // Mutex kilidi al
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_keys_for_dbi(): Veritabanı açık değil.");
         return keys;
@@ -1068,19 +1068,14 @@ std::vector<StateKey> SwarmVectorDB::get_all_keys_for_dbi(MDB_dbi dbi) const {
         return keys;
     }
 
-    MDB_val key, data;
+    MDB_val key, data; // data'ya ihtiyacımız yok ama cursor_get argümanı
     while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == MDB_SUCCESS) {
         keys.emplace_back(static_cast<char*>(key.mv_data), key.mv_size);
     }
 
     mdb_cursor_close(cursor);
-    mdb_txn_abort(txn);
-
-    if (rc != MDB_NOTFOUND) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_all_keys_for_dbi(): mdb_cursor_get döngüsü başarısız: " << mdb_strerror(rc));
-        keys.clear();
-    }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_all_keys_for_dbi(): Toplam " << keys.size() << " anahtar getirildi.");
+    mdb_txn_abort(txn); // Salt okunur işlem iptal edilebilir
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_all_keys_for_dbi(): DBI " << dbi << " için toplam " << keys.size() << " anahtar getirildi.");
     return keys;
 }
 
