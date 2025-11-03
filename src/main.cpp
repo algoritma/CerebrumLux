@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
     //CerebrumLux::KnowledgeBase kb; // ORİJİNAL KONUM: Bu satır taşındı.
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase created." << std::endl;
     early_diagnostic_log.flush();
-    kb.load("knowledge.json"); // kb artık yukarıda tanımlı
+    kb.import_from_json("knowledge.json"); // kb artık yukarıda tanımlı
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase loaded." << std::endl;
     early_diagnostic_log.flush();
     CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app); // YENİ: &app parent olarak eklendi
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
         kb.add_capsule(sim_capsule);
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: 'StepSimulation' kapsülü eklendi: " << sim_capsule.id);
     }
-    kb.save("knowledge.json"); // Yeni kapsülleri dosyaya kaydet
+    kb.export_to_json("knowledge.json");
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Örnek 'StepSimulation' kapsülleri KnowledgeBase'e eklendi ve kaydedildi.");
     */
    
@@ -252,7 +252,7 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Exiting QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
 
-    kb.save("knowledge.json");
+    kb.export_to_json("knowledge.json");
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Application exited with code: " << result << std::endl;
     early_diagnostic_log.close();

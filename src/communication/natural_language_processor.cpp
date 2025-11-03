@@ -454,20 +454,39 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
 }
 
 // YENİ EKLENDİ: Metin girdisinden embedding hesaplama (şimdilik placeholder)
-std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text) { // Statik metod
-    // TODO: Gerçek NLP/Embedding model entegrasyonu yapıldığında bu kısım güncellenecek.
-    // Şimdilik, deterministic bir placeholder embedding üretiyoruz.
+std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text) {
+    // TODO: Gerçek bir NLP/Embedding modeli (örn. FastText, Sentence-BERT) burada entegre edilecek.
+    // Şimdilik, deterministik ve anlamsal olarak biraz daha ilişkili bir placeholder embedding üretiyoruz.
+    // Basit kelime tabanlı vektörleme: Kelimelerin hash değerlerini toplar ve normalize eder.
+
     const int embedding_dim = 128; 
     std::vector<float> embedding(embedding_dim);
+    
+    if (text.empty()) {
+        // Boş metin için tümüyle sıfırlanmış bir embedding döndür
+        return embedding;
+    }
 
-    // Sorgu metninden deterministik bir seed oluştur
-    unsigned int seed = static_cast<unsigned int>(std::hash<std::string>{}(text)); // Deterministic seed
-    s_rng.seed(seed); // Statik RNG'yi seed'le
+    std::hash<std::string> hasher;
+    std::stringstream ss(text);
+    std::string word;
+    long long total_hash_sum = 0; // Toplam hash değeri için long long
+    int word_count = 0;
+
+    while (ss >> word) {
+        total_hash_sum += hasher(word);
+        word_count++;
+    }
+
+    // Hash toplamını deterministik bir seed olarak kullan
+    unsigned int seed = static_cast<unsigned int>(total_hash_sum % 1000000007); // Daha küçük bir pozitif sayıya çevir
+    s_rng.seed(seed);
 
     for (int i = 0; i < embedding_dim; ++i) {
-        embedding[i] = s_dist(s_rng); // Statik RNG ve dağıtımı kullan
+        embedding[i] = s_dist(s_rng); // Deterministic olarak float değerleri üret
     }
-    LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için deterministik embedding olusturuldu.");
+
+    LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için anlamsal placeholder embedding olusturuldu (Seed: " << seed << ").");
     return embedding;
 }
 

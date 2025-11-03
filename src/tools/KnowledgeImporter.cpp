@@ -68,16 +68,16 @@ KnowledgeImporter::~KnowledgeImporter() {
 bool KnowledgeImporter::import_data() {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Veri içe aktarma başlatılıyor...");
 
-    if (!m_knowledge_base.get_swarm_db().open()) { // m_knowledge_base üzerinden open çağrısı
-        std::cerr << "Hata: SwarmVectorDB veritabanı (import_data) açılamadı. Lütfen dosya yollarını ve izinleri kontrol edin." << std::endl;
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter: SwarmVectorDB açılamadı. İçe aktarma başarısız.");
-        return false;
-    }
+    // KnowledgeBase::import_from_json metodu artık SwarmVectorDB'yi kendi içinde açıp kapatıyor.
+    // Bu sayede KnowledgeImporter daha temiz bir arayüze sahip olur.
+    // m_knowledge_base.import_from_json çağrısı yapılmalı
+
+    m_knowledge_base.import_from_json(json_path_); // Yeni import metodu çağrıldı
 
     std::ifstream ifs(json_path_);
     if (!ifs.is_open()) { // No change needed
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter: knowledge.json dosyası açılamadı: " << json_path_);
-        m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+        // import_from_json zaten kapatıyor, burada tekrar kapatmaya gerek yok.
         return false;
     }
 
@@ -87,69 +87,63 @@ bool KnowledgeImporter::import_data() {
         LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: JSON dosyası başarıyla okundu ve ayrıştırıldı.");
     } catch (const nlohmann::json::parse_error& e) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter: JSON ayrıştırma hatası: " << e.what() << " - " << json_path_);
-        m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+        // import_from_json zaten kapatıyor, burada tekrar kapatmaya gerek yok.
         return false;
     }
     ifs.close();
 
     if (!j.contains("active_capsules") || !j["active_capsules"].is_array()) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter: JSON dosyasında 'active_capsules' dizisi bulunamadı veya geçersiz.");
-        m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+        // import_from_json zaten kapatıyor, burada tekrar kapatmaya gerek yok.
         return false;
     }
 
     int imported_count = 0;
     for (const auto& json_capsule : j["active_capsules"]) {
         try {
-            LOG_DEFAULT(LogLevel::TRACE, "KnowledgeImporter: Kapsül işleniyor - ID: " << json_capsule.value("id", "UNKNOWN"));
             CerebrumLux::Capsule capsule;
             capsule.id = json_capsule.value("id", "");
             capsule.topic = json_capsule.value("topic", "");
             capsule.source = json_capsule.value("source", "");
-            capsule.confidence = json_capsule.value("confidence", 0.0f);
-            capsule.plain_text_summary = json_capsule.value("plain_text_summary", "");
             capsule.content = json_capsule.value("content", "");
             capsule.cryptofig_blob_base64 = json_capsule.value("cryptofig_blob_base64", "");
-            if (json_capsule.contains("embedding") && json_capsule["embedding"].is_array()) {
-                capsule.embedding = json_capsule["embedding"].get<std::vector<float>>();
-            }
 
-            m_knowledge_base.add_capsule(capsule); // Doğrudan KnowledgeBase'e ekle
-            imported_count++; 
+            m_knowledge_base.add_capsule(capsule); 
+            imported_count++;
         } catch (const std::exception& e) {
             LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter: Kapsül işleme hatası (ID: " << json_capsule.value("id", "UNKNOWN") << "): " << e.what());
         }
         LOG_DEFAULT(LogLevel::TRACE, "KnowledgeImporter: Bir kapsül işlendi.");
     }
 
-    m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Veri içe aktarma tamamlandı. Toplam içe aktarılan vektör: " << imported_count);
     return true;
 }
 
 bool KnowledgeImporter::list_data() {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Veritabanı içeriği listeleniyor. DB Yolu: " << db_path_);
-    if (!m_knowledge_base.get_swarm_db().open()) { // m_knowledge_base üzerinden open çağrısı
+
+    if (!m_knowledge_base.get_swarm_db().open()) { 
         std::cerr << "Hata: SwarmVectorDB veritabanı (list_data) açılamadı. Lütfen dosya yollarını ve izinleri kontrol edin." << std::endl;
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): SwarmVectorDB açılamadı.");
         return false;
     }
 
-    MDB_txn* txn; // rc burada tanımlanır
+    MDB_txn* txn;
     int rc; // rc bildirimi eklendi
-    rc = mdb_txn_begin(m_knowledge_base.get_swarm_db().get_env(), nullptr, MDB_RDONLY, &txn); // m_knowledge_base üzerinden env alın
+    rc = mdb_txn_begin(m_knowledge_base.get_swarm_db().get_env(), nullptr, MDB_RDONLY, &txn); 
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
-        m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+        m_knowledge_base.get_swarm_db().close(); 
         return false;
     }
 
-    MDB_cursor* cursor; // cursor burada tanımlanır
-    rc = mdb_cursor_open(txn, m_knowledge_base.get_swarm_db().get_dbi(), &cursor); // m_knowledge_base üzerinden dbi alın
+    MDB_cursor* cursor;
+    rc = mdb_cursor_open(txn, m_knowledge_base.get_swarm_db().get_dbi(), &cursor); 
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): mdb_cursor_open başarısız: " << mdb_strerror(rc));
         mdb_txn_abort(txn);
-        m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+        m_knowledge_base.get_swarm_db().close(); 
         return false;
     }
 
@@ -163,7 +157,7 @@ bool KnowledgeImporter::list_data() {
 
     mdb_cursor_close(cursor);
     mdb_txn_abort(txn);
-    m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+    m_knowledge_base.get_swarm_db().close(); 
 
     if (rc != MDB_NOTFOUND) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::list_data(): mdb_cursor_get döngüsü başarısız: " << mdb_strerror(rc));
@@ -178,34 +172,36 @@ bool KnowledgeImporter::perform_semantic_search(const std::string& query, int to
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Semantik arama başlatılıyor. Sorgu: '" << query << "', Top K: " << top_k);
 
     // Arama işlemi için veritabanını aç
-    if (!m_knowledge_base.get_swarm_db().open()) { // m_knowledge_base üzerinden open çağrısı
+    if (!m_knowledge_base.get_swarm_db().open()) { 
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::perform_semantic_search(): SwarmVectorDB açılamadı. Arama yapılamadı.");
         return false;
     }
 
     // Sorgu metni için embedding hesapla (statik NaturalLanguageProcessor metodunu kullan)
     std::vector<float> query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding(query);
-    if (query_embedding.empty()) { // No change needed
+    if (query_embedding.empty()) { 
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::perform_semantic_search(): Sorgu embedding'i olusturulamadi. Arama yapilamadi.");
-        m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+        m_knowledge_base.get_swarm_db().close(); 
         return false;
     }
 
-    LOG_DEFAULT(LogLevel::TRACE, "KnowledgeImporter::perform_semantic_search(): Sorgu embedding'i hesaplandı.");
+    std::vector<std::string> similar_ids = m_knowledge_base.get_swarm_db().search_similar_vectors(query_embedding, top_k);
 
-    // semantic_search artık embedding vektörü alıyor
-    std::vector<CerebrumLux::Capsule> search_results = m_knowledge_base.semantic_search(query_embedding, top_k);
-
-    if (search_results.empty()) {
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Semantik arama sonucunda '" << query << "' için benzer vektör bulunamadı.");
+    LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Semantik arama sonuçları (Top " << top_k << "):");
+    if (similar_ids.empty()) {
+        LOG_DEFAULT(LogLevel::INFO, "  Hiç benzer vektör bulunamadı.");
     } else {
-        LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Semantik arama sonuçları (" << search_results.size() << " adet):");
-        for (const auto& capsule : search_results) {
-            LOG_DEFAULT(LogLevel::INFO, "  ID: " << capsule.id << ", Konu: '" << capsule.topic << "', Özet: '" << capsule.plain_text_summary.substr(0, std::min((size_t)100, capsule.plain_text_summary.length())) << "'");
+        for (const auto& id : similar_ids) {
+            std::optional<CerebrumLux::Capsule> capsule = m_knowledge_base.find_capsule_by_id(id);
+            if (capsule) {
+                LOG_DEFAULT(LogLevel::INFO, "  ID: " << capsule->id << ", Konu: " << capsule->topic << ", Özet: " << capsule->plain_text_summary.substr(0, std::min((size_t)100, capsule->plain_text_summary.length())) << "...");
+            } else {
+                LOG_DEFAULT(LogLevel::WARNING, "  ID: " << id << " için kapsül bulunamadı.");
+            }
         }
     }
 
-    m_knowledge_base.get_swarm_db().close(); // m_knowledge_base üzerinden close çağrısı
+    m_knowledge_base.get_swarm_db().close(); 
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeImporter: Semantik arama başarıyla tamamlandı.");
     return true;
 }

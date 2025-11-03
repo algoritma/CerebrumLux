@@ -22,20 +22,23 @@ public:
     std::vector<Capsule> search_by_topic(const std::vector<float>& topic_embedding, int top_k = 3) const;
     std::optional<Capsule> find_capsule_by_id(const std::string& id) const; // const eklendi
     void quarantine_capsule(const std::string& id);
-    void revert_capsule(const std::string& id);
-    void save(const std::string& filename = "knowledge.json") const;
-    void load(const std::string& filename = "knowledge.json");
+    void revert_capsule(const std::string& id); // Karantinadan geri alma
 
-    float cosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const; 
+    // JSON'a dışa aktırma ve JSON'dan içe aktarma (ana operasyonlar için değil, araçlar için)
+    void export_to_json(const std::string& filename = "knowledge_export.json") const;
+    void import_from_json(const std::string& filename = "knowledge_import.json"); // Adı değiştirildi
+   
+    // LMDB tabanlı SwarmVectorDB'ye doğrudan erişim için getter'lar
+    CerebrumLux::SwarmVectorDB::SwarmVectorDB& get_swarm_db() { return swarm_db_; }
+    const CerebrumLux::SwarmVectorDB::SwarmVectorDB& get_swarm_db() const { return swarm_db_; }
+    virtual std::vector<Capsule> get_all_capsules() const; // Reverted to const
 
-    virtual std::vector<Capsule> get_all_capsules() const; // YENİ: Tüm kapsülleri döndüren metot (virtual yapıldı)
+    float cosineSimilarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const; // Moved from public to private/protected if not used externally
 
-    CerebrumLux::SwarmVectorDB::SwarmVectorDB& get_swarm_db() { return swarm_db_; } // SwarmVectorDB'ye erişim için
-    const CerebrumLux::SwarmVectorDB::SwarmVectorDB& get_swarm_db() const { return swarm_db_; } // Const versiyonu
 
 private:
     std::string db_path_; // LMDB veritabanı yolu
-    CerebrumLux::SwarmVectorDB::SwarmVectorDB swarm_db_; // LMDB tabanlı veritabanı
+    mutable CerebrumLux::SwarmVectorDB::SwarmVectorDB swarm_db_; // LMDB tabanlı veritabanı
 
     // Yardımcı dönüşüm metodları
     SwarmVectorDB::CryptofigVector convert_capsule_to_cryptofig_vector(const Capsule& capsule) const;

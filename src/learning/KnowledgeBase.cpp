@@ -188,75 +188,98 @@ void KnowledgeBase::revert_capsule(const std::string& id) {
     // TODO: Karantinaya alınan kapsüller için ayrı bir LMDB DBI veya flag mekanizması entegre edildiğinde bu metot güncellenecek.
 }
 
-void KnowledgeBase::save(const std::string& filename) const {
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::save(): LMDB tabanlı veritabanı doğrudan kalıcıdır. JSON dışa aktarma yapılıyor.");
-    
+void KnowledgeBase::export_to_json(const std::string& filename) const {
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::export_to_json(): Bilgi tabanı JSON olarak dışa aktarılıyor.");
+
     nlohmann::json j;
     std::vector<Capsule> all_active_capsules = get_all_capsules(); 
     j["active_capsules"] = all_active_capsules;
-    j["quarantined_capsules"] = nlohmann::json::array(); // Karantinaya alınanları şimdilik boş bırakıyoruz
 
     std::filesystem::path current_path = std::filesystem::current_path();
     std::filesystem::path file_path = current_path / filename;
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Kaydedilmeye calisilan tam dosya yolu (JSON Export): " << file_path.string());
 
-    std::ofstream o(file_path);
+    std::ofstream o(file_path); // std::ofstream için <fstream> dahil edilmeli
     if (o.is_open()) {
         o << std::setw(4) << j << std::endl;
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı JSON olarak başarıyla dışa aktarıldı: " << filename);
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Bilgi tabanı JSON olarak başarıyla dışa aktarıldı: " << file_path.string());
     } else {
-        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı JSON'a dışa aktarılamadı: " << file_path.string());
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı JSON'a dışa aktarılamadı (dosya açılamadı): " << file_path.string());
     }
 }
 
-void KnowledgeBase::load(const std::string& filename) {
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::load(): LMDB tabanlı veritabanı doğrudan yüklendi (açıldı). JSON dosyasından yükleme KnowledgeImporter'a aittir.");
-    if (!swarm_db_.is_open()) {
+void KnowledgeBase::import_from_json(const std::string& filename) { // Adı değiştirildi
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::import_from_json(): JSON dosyasından kapsüller içe aktarılıyor.");
+    if (!swarm_db_.is_open()) { // SwarmVectorDB'nin açık olduğundan emin ol
         if (!swarm_db_.open()) {
             LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase::load(): SwarmVectorDB açılamadı. Bilgi tabanı işlevsel değil.");
         }
     }
 
     std::filesystem::path current_path = std::filesystem::current_path();
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Uygulama calisma dizini: " << current_path.string());
     std::filesystem::path file_path = current_path / filename;
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Yuklenmeye calisilan tam dosya yolu (JSON Import denemesi): " << file_path.string());
 
     if (!std::filesystem::exists(file_path)) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosya bulunamadi: " << file_path.string() << ". LMDB tabani kullanilmaya devam ediliyor.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosya bulunamadi: " << file_path.string() << ". İçe aktarma atlandı.");
         return; 
-    } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: JSON dosya var: " << file_path.string());
     }
-    
-    std::ifstream i(file_path);
+
+    std::ifstream i(file_path); // std::ifstream için <fstream> dahil edilmeli
     if (i.is_open()) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: JSON dosya var: " << file_path.string());
         try {
             nlohmann::json j;
             i >> j;
-            LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: JSON dosyasindan kapsül bilgisi bulundu ancak LMDB'ye aktarilmadi (KnowledgeImporter kullanilmalidir).");
+            if (j.contains("active_capsules") && j["active_capsules"].is_array()) {
+                for (const auto& json_capsule : j["active_capsules"]) {
+                    CerebrumLux::Capsule capsule = json_capsule.get<CerebrumLux::Capsule>();
+                    add_capsule(capsule); // Her kapsülü KnowledgeBase'e ekle
+                }
+                LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: JSON dosyasindan kapsüller başarıyla içe aktarıldı: " << file_path.string());
+            } else {
+                LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosyasinda 'active_capsules' dizisi bulunamadı veya geçersiz. İçe aktarma atlandı.");
+            }
         } catch (const nlohmann::json::exception& e) {
-            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON yükleme hatası: " << e.what() << ". LMDB tabani kullanilmaya devam ediliyor.");
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: JSON ayrıştırma hatası: " << e.what() << ". İçe aktarma başarısız.");
         } catch (const std::exception& e) {
-            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". LMDB tabani kullanilmaya devam ediliyor.");
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "KnowledgeBase: Bilgi tabanı yükleme sırasında genel hata: " << e.what() << ". İçe aktarma başarısız.");
         }
     } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosya acilamadi: " << file_path.string() << ". Dosya var ancak acilamiyor (izin veya kilit sorunu olabilir). LMDB tabani kullanilmaya devam ediliyor.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosya acilamadi: " << file_path.string() << ". Dosya var ancak acilamiyor (izin veya kilit sorunu olabilir). İçe aktarma atlandı.");
+    }
+
+    if (swarm_db_.is_open()) { // İşlem bitiminde SwarmVectorDB'yi kapat
+        swarm_db_.close();
     }
 }
 
 std::vector<Capsule> KnowledgeBase::get_all_capsules() const {
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase::get_all_capsules(): Tüm aktif kapsüller LMDB'den isteniyor.");
     std::vector<Capsule> all_capsules;
-    if (swarm_db_.is_open()) {
-        std::vector<std::string> all_ids = swarm_db_.get_all_ids();
-        for (const auto& id : all_ids) {
-            std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
-            if (cv) {
-                all_capsules.push_back(convert_cryptofig_vector_to_capsule(*cv));
-            }
+
+    bool close_after_operation = false; // Flag to track if we opened swarm_db_ in this function
+    if (!swarm_db_.is_open()) { // SwarmVectorDB açık değilse aç
+        if (!swarm_db_.open()) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase::get_all_capsules(): SwarmVectorDB açılamadı. Kapsüller getirilemedi.");
+            return all_capsules;
+        }
+        close_after_operation = true; // Mark to close it later
+    }
+
+    // Burada önceki kod devam edecek: swarm_db_ üzerinden ID'leri al ve kapsüllere dönüştür
+    std::vector<std::string> all_ids = swarm_db_.get_all_ids();
+    for (const auto& id : all_ids) {
+        std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = swarm_db_.get_vector(id);
+        if (cv) {
+            all_capsules.push_back(convert_cryptofig_vector_to_capsule(*cv));
         }
     }
+
+    if (close_after_operation) {
+        swarm_db_.close(); // Kendi açtığımızı kapat
+    }
+
     LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase::get_all_capsules(): Toplam " << all_capsules.size() << " kapsül LMDB'den alındı.");
     return all_capsules;
 }
