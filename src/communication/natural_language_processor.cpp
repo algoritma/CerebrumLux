@@ -13,23 +13,121 @@
 #include <random>    // SafeRNG için
 #include <stdexcept> // std::runtime_error için
 #include <sstream>   // stringstream için
+#include <fstream>   // FastText model yükleme için
 #include <functional> // std::hash için (statik embedding için)
+#include <algorithm> // std::min için
+#include <QCoreApplication> // Çalıştırılabilir dosya yolunu almak için
+
+#include <filesystem>
+
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 namespace CerebrumLux {
 
-namespace { // Anonim namespace for static RNG
-    std::random_device s_rd_nlp;
-    std::mt19937 s_gen_nlp(s_rd_nlp());
-    std::uniform_real_distribution<float> s_dist_nlp(-1.0f, 1.0f);
+std::map<Language, std::unique_ptr<fasttext::FastText>> NaturalLanguageProcessor::s_fastTextModels;
+
+// YENİ: Model yükleme durumu kontrolü (GUI donmasını önlemek için)
+#include <future>
+#include <atomic>
+static std::atomic<bool> s_isFastTextLoading{false};
+
+// YENİ: Dil string'ini enum'a çeviren yardımcı fonksiyon
+Language string_to_lang(const std::string& lang_str) {
+    std::string lower_lang_str = lang_str;
+    std::transform(lower_lang_str.begin(), lower_lang_str.end(), lower_lang_str.begin(),
+                   [](unsigned char c){ return static_cast<unsigned char>(std::tolower(c)); });
+    if (lower_lang_str == "en" || lower_lang_str == "english") return Language::EN;
+    if (lower_lang_str == "de" || lower_lang_str == "german") return Language::DE;
+    if (lower_lang_str == "tr" || lower_lang_str == "turkish") return Language::TR;
+    return Language::UNKNOWN;
 }
 
-// Statik üyelerin tanımı
-std::mt19937 NaturalLanguageProcessor::s_rng(s_rd_nlp()); // Statik RNG'yi başlat
-std::uniform_real_distribution<float> NaturalLanguageProcessor::s_dist(-1.0f, 1.0f); // Statik dağıtımı başlat
+// YENİ (GUI dostu): FastText modellerini asenkron yükleme
+void NaturalLanguageProcessor::load_fasttext_models() {
+    // Aynı anda birden fazla yükleme başlatılmasın
+    if (s_isFastTextLoading.load()) {
+        LOG_DEFAULT(LogLevel::DEBUG, "NLP: FastText modeli zaten yükleniyor, yeni istek atlandı.");
+        return;
+    }
+
+    // Eğer zaten yüklenmişse tekrar yükleme
+    if (!s_fastTextModels.empty() && s_fastTextModels.begin()->second && s_fastTextModels.begin()->second->getDimension() > 0) {
+        return;
+    }
+
+    s_isFastTextLoading.store(true);
+
+    // Arka planda yükleme (GUI'yi engellemeden)
+    static std::future<void> model_loading_future;
+    model_loading_future = std::async(std::launch::async, []() {
+        try {
+            // --- GÜVENİLİR VARLIK YOLU OLUŞTURMA ---
+            std::filesystem::path app_dir;
+#ifdef _WIN32
+            char path[MAX_PATH];
+            GetModuleFileNameA(NULL, path, MAX_PATH);
+            app_dir = std::filesystem::path(path).parent_path();
+#else
+            if (QCoreApplication::instance()) {
+                app_dir = QCoreApplication::applicationDirPath().toStdString();
+            } else {
+                app_dir = std::filesystem::current_path();
+            }
+#endif
+
+            std::filesystem::path assets_dir = app_dir.parent_path() / "assets";
+            if (!std::filesystem::exists(assets_dir)) {
+                assets_dir = app_dir.parent_path().parent_path() / "assets";
+            }
+
+            static const std::map<Language, std::string> model_files = {
+                {Language::EN, "cc.en.300.bin"},
+                {Language::DE, "cc.de.300.bin"},
+                {Language::TR, "cc.tr.300.bin"}
+            };
+
+            s_fastTextModels.clear();
+            bool any_model_loaded = false;
+
+            for (const auto& pair : model_files) {
+                Language lang = pair.first;
+                std::filesystem::path model_path = assets_dir / pair.second;
+                std::string absolute_path_str = std::filesystem::weakly_canonical(model_path).string();
+
+                LOG_DEFAULT(LogLevel::TRACE, "NLP: FastText modeli yüklemeye çalışılıyor: " << absolute_path_str);
+                if (std::filesystem::exists(model_path)) {
+                    try {
+                        auto model = std::make_unique<fasttext::FastText>();
+                        model->loadModel(absolute_path_str);
+                        s_fastTextModels[lang] = std::move(model);
+                        LOG_DEFAULT(LogLevel::INFO, "NLP: FastText modeli başarıyla yüklendi: " << absolute_path_str);
+                        any_model_loaded = true;
+                    } catch (const std::exception& e) {
+                        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli yüklenirken hata oluştu (" << absolute_path_str << "): " << e.what());
+                    }
+                } else {
+                    LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli bulunamadı: " << absolute_path_str);
+                }
+            }
+            if (!any_model_loaded) {
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: Hiçbir FastText modeli yüklenemedi. Embedding'ler fallback placeholder olacaktır.");
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText yükleme sırasında beklenmeyen hata: " << e.what());
+        }
+
+        s_isFastTextLoading.store(false);
+        LOG_DEFAULT(LogLevel::INFO, "NLP: FastText model yükleme işlemi tamamlandı (async).");
+    });
+}
 
 NaturalLanguageProcessor::NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef)
-    : goal_manager(goal_manager_ref), kbRef_(kbRef) // Bu constructor diğer NLP fonksiyonları için referansları almaya devam eder
+    : goal_manager(goal_manager_ref), kbRef_(kbRef)
 {
+    // YENİ: Tüm FastText modellerini yükle
+    load_fasttext_models();
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NaturalLanguageProcessor: Initialized.");
 
     // Niyet anahtar kelime haritasını başlat (Mevcut kod aynı kalır)
@@ -90,7 +188,7 @@ CerebrumLux::UserIntent NaturalLanguageProcessor::infer_intent_from_text(const s
 
     // YENİ KOD: KnowledgeBase'den semantik arama ile niyet çıkarımı (eğer kural tabanlı başarısız olursa)
     // Kullanıcının girdisine en yakın 1-2 kapsülü ara
-    std::vector<float> user_input_embedding = NaturalLanguageProcessor::generate_text_embedding(lower_text); // Statik metod çağrısı
+    std::vector<float> user_input_embedding = NaturalLanguageProcessor::generate_text_embedding(lower_text, Language::EN); // Statik metod çağrısı
     std::vector<CerebrumLux::Capsule> related_capsules = kbRef_.semantic_search(user_input_embedding, 2); // Embedding ile ara
     if (!related_capsules.empty()) {
         // En alakalı kapsülün konusunu niyete çevirmeye çalış
@@ -167,14 +265,14 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
         search_query_str = relevant_keywords[0];
         if (relevant_keywords.size() > 1) search_query_str += " " + relevant_keywords[1];
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de arama yapılıyor (sorgu: " << search_query_str << ").");
-        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(search_query_str); // Statik metod çağrısı
+        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(search_query_str, Language::EN); // Statik metod çağrısı
         search_results = kb.semantic_search(search_query_embedding, 3); // Embedding ile ara
     }
     // Eğer anahtar kelime yoksa ancak niyet araştırma veya soru ise, daha genel bir arama yapabiliriz.
     else if ((current_intent == CerebrumLux::UserIntent::Research || current_intent == CerebrumLux::UserIntent::Question) && !kb.get_all_capsules().empty()) {
         // dynamic_sequence'den veya current_abstract_state'den ipuçları alabiliriz.
         // Şimdilik daha genel bir arama yapalım.
-        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(""); // Statik metod çağrısı
+        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding("", Language::EN); // Statik metod çağrısı
         search_results = kb.semantic_search(search_query_embedding, 1); // Embedding ile ara
         search_query_str = "Genel bilgi araması";
     }
@@ -454,39 +552,39 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
 }
 
 // YENİ EKLENDİ: Metin girdisinden embedding hesaplama (şimdilik placeholder)
-std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text) {
-    // TODO: Gerçek bir NLP/Embedding modeli (örn. FastText, Sentence-BERT) burada entegre edilecek.
-    // Şimdilik, deterministik ve anlamsal olarak biraz daha ilişkili bir placeholder embedding üretiyoruz.
-    // Basit kelime tabanlı vektörleme: Kelimelerin hash değerlerini toplar ve normalize eder.
+std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text, Language lang) {
+    load_fasttext_models();
+    const int embedding_dim = 128; // Hedef embedding boyutu
+    std::vector<float> embedding(embedding_dim, 0.0f);
 
-    const int embedding_dim = 128; 
-    std::vector<float> embedding(embedding_dim);
-    
-    if (text.empty()) {
-        // Boş metin için tümüyle sıfırlanmış bir embedding döndür
+    auto model_it = s_fastTextModels.find(lang);
+
+    if (model_it != s_fastTextModels.end() && model_it->second && model_it->second->getDimension() > 0) { // Model hazır mı kontrolü
+        fasttext::FastText& model = *(model_it->second); // unique_ptr'dan referans al
+        fasttext::Vector ft_embedding(model.getDimension()); // FastText'in kendi Vector sınıfı
+        std::stringstream text_stream(text);
+        model.getSentenceVector(text_stream, ft_embedding);
+
+
+        // FastText embedding'ini hedef boyutumuza (128) sığdır
+        for (int i = 0; i < std::min((int)ft_embedding.size(), embedding_dim); ++i) {
+            embedding[i] = ft_embedding[i];
+        }
+        LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için FastText embedding olusturuldu. Boyut: " << embedding.size());
         return embedding;
     }
 
-    std::hash<std::string> hasher;
-    std::stringstream ss(text);
-    std::string word;
-    long long total_hash_sum = 0; // Toplam hash değeri için long long
-    int word_count = 0;
-
-    while (ss >> word) {
-        total_hash_sum += hasher(word);
-        word_count++;
+    // Fallback: Model yüklenemedi veya hazır değilse deterministik kelime tabanlı hash placeholder üret
+    LOG_DEFAULT(LogLevel::WARNING, "NLP: FastText modeli veya belirtilen dil için model kullanılamıyor. Placeholder embedding üretiliyor.");
+    
+    if (text.empty()) {
+        return embedding; // Sıfırlarla dolu embedding
     }
-
-    // Hash toplamını deterministik bir seed olarak kullan
-    unsigned int seed = static_cast<unsigned int>(total_hash_sum % 1000000007); // Daha küçük bir pozitif sayıya çevir
-    s_rng.seed(seed);
 
     for (int i = 0; i < embedding_dim; ++i) {
-        embedding[i] = s_dist(s_rng); // Deterministic olarak float değerleri üret
+        embedding[i] = SafeRNG::get_instance().get_float(-1.0f, 1.0f);
     }
-
-    LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için anlamsal placeholder embedding olusturuldu (Seed: " << seed << ").");
+    LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için anlamsal placeholder embedding olusturuldu.");
     return embedding;
 }
 

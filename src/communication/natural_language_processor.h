@@ -1,5 +1,3 @@
-// src/communication/NaturalLanguageProcessor.h - Değiştirilen kısım
-
 #ifndef NATURAL_LANGUAGE_PROCESSOR_H
 #define NATURAL_LANGUAGE_PROCESSOR_H
 
@@ -7,12 +5,14 @@
 #include <vector>
 #include <map>
 #include <random> // SafeRNG için
+#include <memory> // std::unique_ptr için
 #include <optional> // std::optional için
 
 #include "../core/enums.h"
-#include "../data_models/dynamic_sequence.h"
 #include "../planning_execution/goal_manager.h" // GoalManager için
 #include "../learning/KnowledgeBase.h" // KnowledgeBase için
+
+#include "../external/fasttext/include/fasttext.h" // FastText kütüphanesini dahil et
 
 namespace CerebrumLux {
 
@@ -23,15 +23,29 @@ struct ChatResponse {
     bool needs_clarification = false; // Yanıtın belirsiz olup olmadığı ve kullanıcının onayına ihtiyaç duyup duymadığı
 };
 
+// YENİ: Desteklenen diller için enum
+enum class Language {
+    EN,
+    DE,
+    TR,
+    UNKNOWN
+};
+
+// YENİ: Dil string'ini enum'a çeviren yardımcı fonksiyon
+Language string_to_lang(const std::string& lang_str);
+
 
 class NaturalLanguageProcessor { // NaturalLanguageProcessor sınıfı
 
 private:
-    static std::mt19937 s_rng; // Statik RNG motoru
-    static std::uniform_real_distribution<float> s_dist; // Statik dağıtım
+    // YENİ: Tüm FastText modelleri için statik map
+    static std::map<Language, std::unique_ptr<fasttext::FastText>> s_fastTextModels; 
 
 public:
     NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef);
+
+    // YENİ: Tüm FastText modellerini yüklemek için statik fonksiyon
+    static void load_fasttext_models();
 
     CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const;
     CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const;
@@ -53,8 +67,7 @@ public:
     void load_model(const std::string& path);
     void save_model(const std::string& path) const;
 
-    // YENİ EKLENDİ: Metin girdisinden embedding hesaplama (STATİK ve placeholder) - 'const' kaldırıldı.
-    static std::vector<float> generate_text_embedding(const std::string& text);
+    static std::vector<float> generate_text_embedding(const std::string& text, Language lang = Language::EN);
 
     // public yapıldı (önceki oturumda yapılmıştı)
     std::string fallback_response_for_intent(CerebrumLux::UserIntent intent, CerebrumLux::AbstractState state, const CerebrumLux::DynamicSequence& sequence) const;

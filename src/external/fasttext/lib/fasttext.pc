@@ -1,0 +1,10 @@
+prefix=C:/Program Files (x86)/fasttext
+exec_prefix=C:/Program Files (x86)/fasttext/libexec
+libdir=C:/Program Files (x86)/fasttext/lib
+includedir=C:/Program Files (x86)/fasttext/include
+
+Name: fasttext
+Description: Efficient learning of word representations and sentence classification
+Version: 
+Libs: -L${libdir} -lfasttext
+Cflags: -I${includedir}

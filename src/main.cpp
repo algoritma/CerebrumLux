@@ -1,3 +1,5 @@
+
+
 #ifdef _WIN32
 #include <Windows.h>
 #endif
@@ -10,6 +12,8 @@
 #include <QDebug>
 #include <iomanip>
 #include <sstream>
+
+
 
 #include "gui/MainWindow.h"
 #include "gui/engine_integration.h"
@@ -118,11 +122,9 @@ int main(int argc, char *argv[])
 
     // --- Learning Module ---
     //CerebrumLux::KnowledgeBase kb; // ORİJİNAL KONUM: Bu satır taşındı.
-    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase created." << std::endl;
+    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase created. Will load after GUI shows." << std::endl;
     early_diagnostic_log.flush();
-    kb.import_from_json("knowledge.json"); // kb artık yukarıda tanımlı
-    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase loaded." << std::endl;
-    early_diagnostic_log.flush();
+    // kb.import_from_json("knowledge.json"); // Moved to MainWindow for async loading
     CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app); // YENİ: &app parent olarak eklendi
 
     /*
@@ -195,6 +197,20 @@ int main(int argc, char *argv[])
     window.show();
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] MainWindow shown." << std::endl;
     early_diagnostic_log.flush();
+    
+    // Asenkron FastText model ve KnowledgeBase yüklemesini tetikle
+    QTimer::singleShot(100, [&]() { // GUI açıldıktan kısa bir süre sonra
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Asenkron KnowledgeBase ve FastText model yüklemesi başlatılıyor.");
+        kb.import_from_json("knowledge.json");
+        // CerebrumLux::NaturalLanguageProcessor::load_fasttext_models(); // FastText yüklemesi generate_text_embedding çağrısı ile lazy yüklenecek
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase ve FastText model yükleme işlemleri başlatıldı (asenkron).");
+        // KB yüklendikten sonra KnowledgeBasePanel'i güncelleyelim.
+        if (window.getKnowledgeBasePanel()) {
+            window.getKnowledgeBasePanel()->updateKnowledgeBaseContent();
+        } else {
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: KnowledgeBasePanel NULL. KB içeriği güncellenemedi.");
+        }
+    });
     
     // LogPanel'in kendisi Logger'a bağlanacağı için, burada set_log_panel_text_edit gibi ekstra bir işlem yapmaya gerek yok.
     // LogPanel constructor'ı içindeki `connect` çağrısı yeterlidir.
