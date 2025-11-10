@@ -1,3 +1,5 @@
 build
+# assets cc.en.300.bin etc..
+assets/*.bin
 clean_build.bat
 export_codebase.bat

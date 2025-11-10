@@ -127,7 +127,9 @@ NaturalLanguageProcessor::NaturalLanguageProcessor(CerebrumLux::GoalManager& goa
     : goal_manager(goal_manager_ref), kbRef_(kbRef)
 {
     // YENİ: Tüm FastText modellerini yükle
-    load_fasttext_models();
+    //load_fasttext_models();
+    // DEĞİŞTİRİLDİ: FastText modellerinin yüklenmesi constructor'dan kaldırıldı.
+    // Bu işlem artık main.cpp içindeki QTimer::singleShot ile asenkron olarak çağrılacak.
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NaturalLanguageProcessor: Initialized.");
 
     // Niyet anahtar kelime haritasını başlat (Mevcut kod aynı kalır)

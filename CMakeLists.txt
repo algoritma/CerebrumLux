@@ -68,6 +68,17 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
 
 add_library(CerebrumLuxCore STATIC ${CEREBRUMLUX_CORE_SOURCES} ${CEREBRUMLUX_CORE_HEADERS})
 
+# --------------------------------------------------
+# FastText Entegrasyonu
+# --------------------------------------------------
+add_library(fasttext STATIC IMPORTED GLOBAL)
+set_target_properties(fasttext PROPERTIES
+    IMPORTED_LOCATION
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/external/fasttext/lib/libfasttext.a"
+    INTERFACE_INCLUDE_DIRECTORIES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/external/fasttext/include"
+)
+
 target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}"
     "${PROJECT_SRC_DIR}/brain"
@@ -89,6 +100,7 @@ target_include_directories(CerebrumLuxCore PUBLIC
     "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
     "C:/vcpkg/installed/x64-mingw-static/include/hnswlib" # hnswlib başlık dizini
     ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri (find_package ile gelir)
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/external/fasttext/include"
 )
 
 target_link_libraries(CerebrumLuxCore PUBLIC
@@ -103,6 +115,8 @@ target_link_libraries(CerebrumLuxCore PUBLIC
     Eigen3::Eigen # Eigen3 kütüphanesi (vcpkg tarafından sağlanan hedef)
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib kütüphanesini CerebrumLuxCore'a statik olarak bağla
     hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla (doğrudan dosya yolu kaldırıldı)
+    fasttext
+    Threads::Threads
     winpthread # winpthread kütüphanesini CerebrumLuxCore'a bağla
     ws2_32 # Windows Sockets
     advapi32 # Advanced API Services
@@ -118,21 +132,37 @@ target_link_directories(CerebrumLuxCore PUBLIC
 # -----------------------------
 # GUI executable
 # -----------------------------
-add_executable(CerebrumLuxGUI WIN32
-    # Ana GUI dosyaları
-    "${PROJECT_SRC_DIR}/main.cpp"
-    "${PROJECT_SRC_DIR}/gui/MainWindow.cpp"
-    "${PROJECT_SRC_DIR}/gui/MainWindow.ui"
-    # GUI panel
-    "${PROJECT_SRC_DIR}/gui/engine_integration.cpp" # GUI kaynağı buraya taşındı
-    "${PROJECT_SRC_DIR}/gui/panels/CapsuleTransferPanel.cpp"
-    "${PROJECT_SRC_DIR}/gui/panels/GraphPanel.cpp"
-    "${PROJECT_SRC_DIR}/gui/panels/KnowledgeBasePanel.cpp"
-    "${PROJECT_SRC_DIR}/gui/panels/LogPanel.cpp"
-    "${PROJECT_SRC_DIR}/gui/panels/SimulationPanel.cpp"
-)
-
-target_link_options(CerebrumLuxGUI PRIVATE -Wl,--subsystem,windows)
+# Debug aşamasında konsollu çalışsın, Release'te sessiz GUI olsun
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_executable(CerebrumLuxGUI WIN32
+        # Ana GUI dosyaları
+        "${PROJECT_SRC_DIR}/main.cpp"
+        "${PROJECT_SRC_DIR}/gui/MainWindow.cpp"
+        "${PROJECT_SRC_DIR}/gui/MainWindow.ui"
+        # GUI panel
+        "${PROJECT_SRC_DIR}/gui/engine_integration.cpp" # GUI kaynağı buraya taşındı
+        "${PROJECT_SRC_DIR}/gui/panels/CapsuleTransferPanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/GraphPanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/KnowledgeBasePanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/LogPanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/SimulationPanel.cpp"
+    )
+    target_link_options(CerebrumLuxGUI PRIVATE -Wl,--subsystem,windows)
+else()
+    add_executable(CerebrumLuxGUI
+        # Ana GUI dosyaları
+        "${PROJECT_SRC_DIR}/main.cpp"
+        "${PROJECT_SRC_DIR}/gui/MainWindow.cpp"
+        "${PROJECT_SRC_DIR}/gui/MainWindow.ui"
+        # GUI panel
+        "${PROJECT_SRC_DIR}/gui/engine_integration.cpp" # GUI kaynağı buraya taşındı
+        "${PROJECT_SRC_DIR}/gui/panels/CapsuleTransferPanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/GraphPanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/KnowledgeBasePanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/LogPanel.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/SimulationPanel.cpp"
+    )
+endif()
 
 target_link_libraries(CerebrumLuxGUI PRIVATE
     CerebrumLuxCore
@@ -151,10 +181,18 @@ target_link_libraries(CerebrumLuxGUI PRIVATE
     "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini GUI'ye bağla
     Eigen3::Eigen # Eigen3 kütüphanesini GUI'ye bağla
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i GUI'ye statik olarak bağla
+    Threads::Threads
     winpthread # winpthread'i GUI'ye bağla
     advapi32
     winmm
     -Wl,--stack,16777216 # Stack boyutu artışı (16MB) - GUI uygulamaları için faydalı
+)
+
+# Qt platform pluginlerini GUI build dizinine kopyala (GUI'nin açılmama sebebini önler)
+add_custom_command(TARGET CerebrumLuxGUI POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${Qt6_DIR}/../../../plugins/platforms"
+        "$<TARGET_FILE_DIR:CerebrumLuxGUI>/platforms"
 )
 
 # CerebrumLuxGUI'nin kendi include dizinleri (gerekliyse)
@@ -178,7 +216,23 @@ target_include_directories(CerebrumLuxGUI PRIVATE
     "C:/vcpkg/installed/x64-mingw-static/include" # Gumbo, LMDB ve Eigen için vcpkg include dizini
     "C:/vcpkg/installed/x64-mingw-static/include/hnswlib" # hnswlib başlık dizini
     ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/external/fasttext/include"
 )
+
+# --------------------------------------------------
+# Runtime DLL Kopyalama
+# --------------------------------------------------
+add_custom_command(TARGET CerebrumLuxGUI POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/external/fasttext/lib/libfasttext.dll"
+        $<TARGET_FILE_DIR:CerebrumLuxGUI>
+    COMMENT "Copying FastText DLL"
+)
+# --------------------------------------------------
+# Thread Desteği
+# --------------------------------------------------
+find_package(Threads REQUIRED)
+# --------------------------------------------------
 
 # -----------------------------
 # Importer CLI executable

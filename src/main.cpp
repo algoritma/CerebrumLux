@@ -202,7 +202,7 @@ int main(int argc, char *argv[])
     QTimer::singleShot(100, [&]() { // GUI açıldıktan kısa bir süre sonra
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Asenkron KnowledgeBase ve FastText model yüklemesi başlatılıyor.");
         kb.import_from_json("knowledge.json");
-        // CerebrumLux::NaturalLanguageProcessor::load_fasttext_models(); // FastText yüklemesi generate_text_embedding çağrısı ile lazy yüklenecek
+        CerebrumLux::NaturalLanguageProcessor::load_fasttext_models(); // FastText yüklemesi artık burada tetikleniyor
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase ve FastText model yükleme işlemleri başlatıldı (asenkron).");
         // KB yüklendikten sonra KnowledgeBasePanel'i güncelleyelim.
         if (window.getKnowledgeBasePanel()) {
@@ -268,7 +268,8 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Exiting QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
 
-    kb.export_to_json("knowledge.json");
+    //kb.export_to_json("knowledge.json");
+    // KALDIRILDI: Artık otomatik olarak JSON'a aktarmıyoruz. KnowledgeBase destructor'i LMDB'yi kapatır.
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Application exited with code: " << result << std::endl;
     early_diagnostic_log.close();

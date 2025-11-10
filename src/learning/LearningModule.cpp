@@ -8,6 +8,8 @@
 #include <iostream>
 #include <algorithm> // std::min için
 #include <stdexcept> // std::runtime_error için
+#include <sstream>   // std::stringstream için
+#include <iomanip>   // std::fixed, std::setprecision için
 
 #include <QCoreApplication> 
 #include <QUrlQuery> // URL kodlama için gerekli
@@ -18,20 +20,19 @@ namespace CerebrumLux {
 using EmbeddingStateKey = CerebrumLux::SwarmVectorDB::EmbeddingStateKey;
 
 LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent)
-    : QObject(parent), // parentApp yerine QObject'in parent'ı
+    : QObject(parent),
       knowledgeBase(kb),
       cryptoManager(cryptoMan),
       unicodeSanitizer(std::make_unique<UnicodeSanitizer>()),
       stegoDetector(std::make_unique<StegoDetector>()),
-      webFetcher(std::make_unique<WebFetcher>(this)), // WebFetcher'ı unique_ptr ile oluştur ve this (LearningModule) parent olarak ver
-      parentApp(parent) // parentApp üyesini başlat
+      webFetcher(std::make_unique<WebFetcher>(this)),
+      parentApp(parent)
 {
-    // WebFetcher sinyallerini LearningModule'ün slot'larına bağla
     LOG_DEFAULT(LogLevel::TRACE, "LearningModule::LearningModule: WebFetcher sinyalleri bağlanıyor.");
-    connect(webFetcher.get(), &WebFetcher::structured_content_fetched, // .get() ile raw pointer alındı
-            this, &LearningModule::onStructuredWebContentFetched, Qt::QueuedConnection); // Qt::QueuedConnection eklendi
+    connect(webFetcher.get(), &WebFetcher::structured_content_fetched,
+            this, &LearningModule::onStructuredWebContentFetched, Qt::QueuedConnection);
     connect(webFetcher.get(), &WebFetcher::fetch_error,
-            this, &LearningModule::onWebFetchError, Qt::QueuedConnection); // Qt::QueuedConnection eklendi
+            this, &LearningModule::onWebFetchError, Qt::QueuedConnection);
     LOG_DEFAULT(LogLevel::TRACE, "LearningModule::LearningModule: WebFetcher sinyalleri bağlandı.");
 
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized with CryptoManager.");
@@ -68,18 +69,16 @@ void LearningModule::learnFromText(const std::string& text,
 void LearningModule::learnFromWeb(const std::string& query) {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web'den öğrenme başlatıldı. Sorgu: " << query);
 
-    // Bir önceki web çekme işlemi devam ediyorsa yeni bir tane başlatma
     if (webFetchInProgress) {
         LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Zaten bir web çekme işlemi devam ediyor. Yeni sorgu: " << query);
         emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::Busy, "Zaten bir web çekme işlemi devam ediyor."));
         return;
     }
     webFetchInProgress = true;
-    currentWebFetchQuery = QString::fromStdString(query); // Mevcut sorguyu kaydet
+    currentWebFetchQuery = QString::fromStdString(query);
 
     std::string final_url_to_fetch = query;
     if (query.find("http://") == std::string::npos && query.find("https://") == std::string::npos && query.find(".") == std::string::npos) {
-        // Eğer URL'de protokol belirtilmemişse ve dot ('.') içermiyorsa arama sorgusu olarak kabul et
         QString encoded_query = QUrl::toPercentEncoding(QString::fromStdString(query));
         final_url_to_fetch = "https://www.google.com/search?q=" + encoded_query.toStdString();
         LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Sorgu Google arama URL'sine dönüştürüldü: " << final_url_to_fetch);
@@ -102,7 +101,6 @@ void LearningModule::learnFromWeb(const std::string& query) {
     }
 }
 
-// WebFetcher'dan gelen yapılandırılmış arama sonuçlarını işlemek için slot
 void LearningModule::onStructuredWebContentFetched(const QString& url, const std::vector<CerebrumLux::WebSearchResult>& searchResults) {
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Yapılandırılmış web içeriği çekildi. URL: " << url.toStdString() << ", Sonuç sayısı: " << searchResults.size());
     
@@ -110,25 +108,21 @@ void LearningModule::onStructuredWebContentFetched(const QString& url, const std
         CerebrumLux::Capsule web_capsule;
         web_capsule.id = "WebSearch_" + CerebrumLux::generate_unique_id();
         web_capsule.topic = "WebSearch"; 
-        web_capsule.source = url.toStdString(); // Orijinal arama URL'si (getirilen sayfanın URL'si)
+        web_capsule.source = url.toStdString();
         web_capsule.confidence = 0.75f; 
         web_capsule.plain_text_summary = QString::fromStdString(result.title + " - " + result.snippet).left(200).toStdString();
-        // Tam içerik: Başlık, URL, Snippet ve varsa ayıklanmış ana içerik birleştirilir.
         web_capsule.content = QString::fromStdString("Başlık: " + result.title + "\nURL: " + result.url + "\nAçıklama: " + result.snippet + "\n\nTam İçerik:\n" + result.main_content).toStdString();
         web_capsule.timestamp_utc = std::chrono::system_clock::now();
 
-        // CodeFile Path olarak WebSearchResult'ın URL'sini kullan
         web_capsule.code_file_path = result.url;
 
         web_capsule.embedding.resize(CryptofigAutoencoder::INPUT_DIM);
         for (size_t i = 0; i < CryptofigAutoencoder::INPUT_DIM; ++i) {
             web_capsule.embedding[i] = CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f);
         }
-        web_capsule.cryptofig_blob_base64 = cryptofig_encode(web_capsule.embedding); // compute_embedding çağrısı yerine doğrudan kodlama
+        web_capsule.cryptofig_blob_base64 = cryptofig_encode(web_capsule.embedding);
 
-        // Kapsül ID'sini daha benzersiz hale getir: URL'nin hash'i veya başlığın hash'i eklenebilir.
-        // content_hash kullanmak en iyisi:
-        if (!result.content_hash.empty()) { // Eğer içerik hash'i varsa ID'ye ekle
+        if (!result.content_hash.empty()) {
             web_capsule.id += "_" + result.content_hash;
         }
  
@@ -139,17 +133,16 @@ void LearningModule::onStructuredWebContentFetched(const QString& url, const std
     emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::Success, "Web'den öğrenme tamamlandı."));
 }
 
-// WebFetcher'dan gelen hata sinyali için slot
 void LearningModule::onWebFetchError(const QString& url, const QString& error_message) {
     LOG_DEFAULT(LogLevel::ERR_CRITICAL, "LearningModule: Web içerigi cekme hatası. URL: " << url.toStdString() << ", Hata: " << error_message.toStdString());
-    webFetchInProgress = false; // Hata durumunda işlemi serbest bırak
+    webFetchInProgress = false;
     emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::UnknownError, "Web içerigi cekme hatası: " + error_message.toStdString()));
 }
 
 std::vector<Capsule> LearningModule::search_by_topic(const std::string& topic) const {
     LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Topic'e göre arama yapılıyor: " << topic);
-    std::vector<float> topic_embedding = this->compute_embedding(topic); // Kendi compute_embedding metodunu kullanarak embedding oluştur.
-    return knowledgeBase.search_by_topic(topic_embedding); // Embedding ile KnowledgeBase'de arama yap.
+    std::vector<float> topic_embedding = this->compute_embedding(topic);
+    return knowledgeBase.search_by_topic(topic_embedding);
 }
 
 void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights) {
@@ -173,7 +166,6 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         insight_capsule.content = insight.observation;
         insight_capsule.source = "AIInsightsEngine";
         insight_capsule.topic = "AI Insight";
-        // YENİ: AIInsight'ın urgency seviyesinden confidence türet
         switch (insight.urgency) {
             case CerebrumLux::UrgencyLevel::Low: insight_capsule.confidence = 0.7f; break;
             case CerebrumLux::UrgencyLevel::Medium: insight_capsule.confidence = 0.8f; break;
@@ -183,21 +175,13 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             default: insight_capsule.confidence = 0.5f; break;
         }
 
-        // YENİ KOD: CodeDevelopmentSuggestion için özel topic ataması (GELİŞTİRİLMİŞ TEŞHİS LOGLARI)
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule]   Kontrol ediliyor: insight.type (" << static_cast<int>(insight.type) << ") == CerebrumLux::InsightType::CodeDevelopmentSuggestion (" << static_cast<int>(CerebrumLux::InsightType::CodeDevelopmentSuggestion) << ")");
-        // NOT: Projede zaman zaman farklı derleme birimlerinin farklı header sürümleriyle (stale .o) derlenmesinden
-        // dolayı enum değerlerinde uyuşmazlık görülebiliyor. Bu durumda CodeDevelopmentSuggestion'ı kaçırmamak için
-        // güvenli bir fallback mantığı ekliyoruz:
-        //  - Önce enum ile kontrol et.
-        //  - Eşleşme yoksa, insight.id'in "CodeDev_" ile başlaması veya context'in "Kod"/"Code" içermesi durumunda da kabul et.
         bool is_code_dev = (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion);
         if (!is_code_dev) {
-            // Fallback 1: ID "CodeDev" ile başlıyorsa (alt çizgi olsun olmasın)
             if (!insight.id.empty() && insight.id.rfind("CodeDev", 0) == 0) {
                 is_code_dev = true;
                 LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] Fallback: CodeDevelopment tespiti ID prefix'e gore yapildi. ID: " << insight.id);
             }
-            // Fallback 2: context veya recommended_action string'inde "Code" / "Kod" / "Refactor" gibi anahtar kelimeler varsa
             else if (insight.context.find("Kod") != std::string::npos ||
                      insight.context.find("Code") != std::string::npos ||
                      insight.recommended_action.find("Code") != std::string::npos ||
@@ -207,7 +191,7 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             }
         }
         if (is_code_dev) {
-            insight_capsule.topic = "CodeDevelopment"; // Özel olarak CodeDevelopment topic'i ata
+            insight_capsule.topic = "CodeDevelopment";
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] CodeDevelopmentSuggestion için topic 'CodeDevelopment' olarak ayarlandı. ID: " << insight.id);
         } else {
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] InsightType CodeDevelopmentSuggestion değil (" << static_cast<int>(insight.type) << "). Varsayılan topic ('AI Insight') kullanılıyor.");
@@ -218,8 +202,7 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             if (pos != std::string::npos && pos + 1 < insight.observation.length()) {
                 try {
                     insight_capsule.confidence = std::stof(insight.observation.substr(pos + 1));
-                    // Eğer CodeDevelopmentSuggestion ise topic değişmemeli, GraphData olmamalı
-                    if (insight_capsule.topic != "CodeDevelopment") { // YENİ: Conflict'i önle
+                    if (insight_capsule.topic != "CodeDevelopment") {
                         insight_capsule.topic = "GraphData";
                         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Grafik verisi için içgörü güveni çıkarıldı ve topic 'GraphData' olarak ayarlandı: " << insight_capsule.confidence);
                     } else {
@@ -234,14 +217,11 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)500, insight.observation.length())) + "...";
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
 
-        // KRİTİK DÜZELTME: AIInsight'ın associated_cryptofig'ini doğrudan Capsule'ın embedding'i olarak kullan
         if (!insight.associated_cryptofig.empty()) {
-            // Ensure the embedding is of INPUT_DIM (128) size
             if (insight.associated_cryptofig.size() == CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
                 insight_capsule.embedding = insight.associated_cryptofig;
                 LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "[LearningModule] AIInsight associated_cryptofig'i Capsule embedding olarak kullanıldı. ID: " << insight.id);
             } else {
-                // If size is different, resize and copy
                 insight_capsule.embedding.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
                 std::copy(insight.associated_cryptofig.begin(),
                           insight.associated_cryptofig.begin() + std::min((size_t)CerebrumLux::CryptofigAutoencoder::INPUT_DIM, insight.associated_cryptofig.size()),
@@ -249,33 +229,28 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
                 LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] AIInsight associated_cryptofig boyutu INPUT_DIM ile uyuşmuyor. Boyut düzeltildi ve kullanıldı. ID: " << insight.id);
             }
         } else {
-            // Eğer associated_cryptofig boşsa, içeriğinden embedding hesapla (fallback)
             insight_capsule.embedding = compute_embedding(insight_capsule.content);
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] AIInsight için associated_cryptofig boştu. İçerikten yeni embedding hesaplandı. ID: " << insight.id);
         }
 
-        // YENİ KOD: Sparse Q-Table'ı güncelle (placeholder mantık)
-        // Embedding'in boş olmadığından emin ol
         if (!insight_capsule.embedding.empty() && insight_capsule.embedding.size() == CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
-            CerebrumLux::AIAction action = CerebrumLux::AIAction::None; // Placeholder action
-            float reward = 0.0f; // Placeholder reward
+            CerebrumLux::AIAction action = CerebrumLux::AIAction::None;
+            float reward = 0.0f;
 
-            // Insight'ın türü ve aciliyetine göre basit bir action/reward ataması
-            // Daha sofistike bir modelleme burada yapılacaktır.
             if (insight.urgency == CerebrumLux::UrgencyLevel::Critical) action = CerebrumLux::AIAction::PrioritizeTask;
             else if (insight.urgency == CerebrumLux::UrgencyLevel::High) action = CerebrumLux::AIAction::SuggestResearch;
             else if (insight.type == CerebrumLux::InsightType::CodeDevelopmentSuggestion) action = CerebrumLux::AIAction::RefactorCode;
-            else if (insight.type == CerebrumLux::InsightType::LearningOpportunity) action = CerebrumLux::AIAction::MaximizeLearning;
-
-            reward = static_cast<float>(insight.urgency) * 0.1f; // Aciliyet ile orantılı reward (0.0 - 0.5 arası)
-            if (action == CerebrumLux::AIAction::RefactorCode) reward += 0.2f; // Kod refaktörü için ek ödül
+            else if (insight.urgency == CerebrumLux::UrgencyLevel::None && insight.type == CerebrumLux::InsightType::LearningOpportunity) action = CerebrumLux::AIAction::MaximizeLearning;
+            
+            reward = static_cast<float>(insight.urgency) * 0.1f;
+            if (action == CerebrumLux::AIAction::RefactorCode) reward += 0.2f;
 
             update_q_values(insight_capsule.embedding, action, reward);
         } else {
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] Sparse Q-Table güncellenemedi: Embedding boş veya yanlış boyut. ID: " << insight.id);
         }
         insight_capsule.cryptofig_blob_base64 = cryptofig_encode(insight_capsule.embedding);
-        insight_capsule.code_file_path = insight.code_file_path; //EKLENDİ: AIInsight'tan code_file_path Capsule'a aktarılıyor
+        insight_capsule.code_file_path = insight.code_file_path;
 
         knowledgeBase.add_capsule(insight_capsule);
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü EKLENDİ. ID: " << insight_capsule.id << ", Topic: " << insight_capsule.topic << ", Özet: " << insight_capsule.plain_text_summary.substr(0, std::min((size_t)50, insight_capsule.plain_text_summary.length())) << "..." << ", Confidence: " << insight_capsule.confidence);
@@ -385,7 +360,6 @@ CerebrumLux::IngestReport LearningModule::createIngestReport(CerebrumLux::Ingest
     report.result = result;
     report.message = message;
     report.timestamp = std::chrono::system_clock::now();
-    // Diğer alanlar varsayılan değerlerinde kalır veya boş bırakılır.
     return report;
 }
 
@@ -421,7 +395,6 @@ std::vector<float> LearningModule::cryptofig_decode_base64(const std::string& ba
     }
     return cryptofig_vector;
 }
-
 
 bool LearningModule::verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const {
     if (sender_id == "Unauthorized_Peer" || signature == "invalid_signature_tampered") {
@@ -498,40 +471,28 @@ void LearningModule::audit_log_append(const IngestReport& report) const {
                 << ", Kaynak Peer: " << report.source_peer_id);
 }
 
-// YENİ METOT: Kod geliştirme önerisi geri bildirimini işler
 void LearningModule::processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted) {
     if (accepted) {
         LOG_DEFAULT(LogLevel::INFO, "LearningModule: Kod Geliştirme Önerisi KABUL EDİLDİ. ID: " << capsuleId);
     } else {
         LOG_DEFAULT(LogLevel::INFO, "LearningModule: Kod Geliştirme Önerisi REDDEDİLDİ. ID: " << capsuleId);
     }
-    // Gelecekte: Bu geri bildirim, AIInsightsEngine'ın öneri üretim mantığını veya IntentLearner'ı eğitmek için kullanılabilir.
-    // Örneğin, bu kapsülün topic'ini veya içeriğini analiz ederek ilgili metrikleri güncelleyebiliriz.
 }
 
 void LearningModule::update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward) {
-    // State embedding'ini bir string anahtara dönüştür (basitçe float değerlerini birleştir)
-    // Bu, RL durum temsili için bir placeholder'dır.
     std::stringstream ss;
-    ss << std::string("EMB:"); // EmbeddingStateKey'in başında bir ön ek (tutarlılık için)
+    ss << std::string("EMB:");
     for (float val : state_embedding) {
-        ss << std::fixed << std::setprecision(5) << val << "|"; // Hassasiyeti artırarak daha iyi anahtar
+        ss << std::fixed << std::setprecision(5) << val << "|";
     }
     EmbeddingStateKey state_key = ss.str();
 
-    // Q-Table'ı güncellemek için Q-Learning denklemini uygulayalım:
-    // Q(s,a) = Q(s,a) + alpha * (reward + gamma * max_a' Q(s',a') - Q(s,a))
-    // Burada s: current_state (state_embedding), a: action, r: reward
-    // s': next_state (şimdilik bu metot sadece tek bir durumu işlediği için, next_state'i de current_state olarak kabul edeceğiz)
-    // max_a' Q(s',a'): next_state için mümkün olan tüm eylemlerin maksimum Q-değeri.
-
     float current_q_value = q_table.q_values[state_key][action];
-    float learning_rate_rl = 0.1f; // RL öğrenme oranı (alpha)
-    float discount_factor = 0.9f; // İndirim faktörü (gamma)
+    float learning_rate_rl = 0.1f;
+    float discount_factor = 0.9f;
 
-    // Adım 1: next_state (s') için maksimum Q-değerini bul (şimdilik current_state'i next_state olarak kullanıyoruz)
     float max_next_q = 0.0f;
-    if (q_table.q_values.count(state_key)) { // Eğer mevcut durum Q-table'da varsa
+    if (q_table.q_values.count(state_key)) {
         for (const auto& action_pair : q_table.q_values[state_key]) {
             if (action_pair.second > max_next_q) {
                 max_next_q = action_pair.second;
@@ -539,13 +500,11 @@ void LearningModule::update_q_values(const std::vector<float>& state_embedding, 
         }
     }
 
-    // Adım 2: Q-Learning denklemini uygula
     q_table.q_values[state_key][action] = current_q_value + learning_rate_rl * (reward + discount_factor * max_next_q - current_q_value);
 
     LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. State: " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[state_key][action]);
 }
 
-// YEN─░: Q-Table'─▒ LMDB'ye kaydetme
 void LearningModule::save_q_table() const {
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'ye kaydediliyor. Toplam durum: " << q_table.q_values.size());
 
@@ -554,9 +513,8 @@ void LearningModule::save_q_table() const {
         return;
     }
 
-    // Her bir EmbeddingStateKey için action map'ini JSON olarak serileştirip kaydet
     for (const auto& state_pair : q_table.q_values) {
-        EmbeddingStateKey state_key = state_pair.first; // Use EmbeddingStateKey directly
+        EmbeddingStateKey state_key = state_pair.first;
         nlohmann::json action_map_json;
         for (const auto& action_pair : state_pair.second) {
             action_map_json[CerebrumLux::action_to_string(action_pair.first)] = action_pair.second;
@@ -572,16 +530,11 @@ void LearningModule::save_q_table() const {
 
 void LearningModule::load_q_table() {
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'den yükleniyor.");
-    q_table.q_values.clear(); // Mevcut Q-tablosunu temizle
+    q_table.q_values.clear();
 
-    if (!knowledgeBase.get_swarm_db().is_open()) {
-        if (!knowledgeBase.get_swarm_db().open()) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table yüklenemedi: SwarmVectorDB açılamadı.");
-            return;
-        }
-    }
+    // SwarmVectorDB'nin açık olduğunu varsayıyoruz (KnowledgeBase tarafından yönetiliyor).
 
-    std::vector<CerebrumLux::SwarmVectorDB::EmbeddingStateKey> all_q_state_keys = knowledgeBase.get_swarm_db().get_all_keys_for_dbi(knowledgeBase.get_swarm_db().q_values_dbi()); // Use getter
+    std::vector<CerebrumLux::SwarmVectorDB::EmbeddingStateKey> all_q_state_keys = knowledgeBase.get_swarm_db().get_all_keys_for_dbi(knowledgeBase.get_swarm_db().q_values_dbi());
     for (const auto& state_key : all_q_state_keys) {
         std::optional<std::string> action_map_json_str_opt = knowledgeBase.get_swarm_db().get_q_value_json(state_key);
         if (action_map_json_str_opt) {

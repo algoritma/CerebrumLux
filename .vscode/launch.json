@@ -33,7 +33,11 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/knowledge_importer.exe",
-            "args": [],
+            "args": [
+                "${workspaceFolder}/build/CerebrumLux_lmdb_db",
+                "${workspaceFolder}/build/knowledge.json",
+                "${workspaceFolder}/build/CerebrumLux_lmdb_db -search \"CodeDev\""
+            ],
             "stopAtEntry": true, // Uygulama main() fonksiyonunun başında dursun
             "cwd": "${workspaceFolder}/build",
             "environment": [],
