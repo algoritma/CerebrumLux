@@ -135,7 +135,38 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
         LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: CryptofigProcessor adiminda bilinmeyen hata.");
         return;
     }
-    
+
+    // YENİ EKLENDİ: Adım 5: RL Ajanı için Q-Table Güncelleme ve Eylem Seçimi (Ön Geliştirme)
+    // Bu kısım, daha sonra PredictionEngine veya GoalManager ile entegre edilecek.
+    try {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: RL Q-Table güncelleme adımı başlatılıyor.");
+
+        // current_state_embedding olarak current_sequence'in cryptofig_embedding'ini kullanıyoruz.
+        // DÜZELTİLDİ: DynamicSequence'deki doğru üye olan latent_cryptofig_vector kullanıldı.
+        std::vector<float> current_state_embedding = current_sequence.latent_cryptofig_vector;
+        if (current_state_embedding.empty() || current_state_embedding.size() != CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+            LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MetaEvolutionEngine: Current sequence embedding boş veya boyutu uyuşmuyor. RL güncelleme atlanıyor.");
+        } else {
+            // Şimdilik basitleştirilmiş bir eylem seçimi ve reward
+            CerebrumLux::AIAction chosen_action = CerebrumLux::AIAction::MaximizeLearning; // Placeholder olarak öğrenmeyi maksimize et
+            float current_reward = 0.5f; // Placeholder reward
+
+            // TODO: Daha sonra, bu 'chosen_action' PredictionEngine veya ayrı bir DecisionModule tarafından
+            // SparseQTable'daki Q-değerlerine ve bir exploration/exploitation stratejisine göre seçilecektir.
+            // 'current_reward' ise GoalManager, AIInsightsEngine gibi diğer modüllerden türetilecektir.
+
+            learning_module.update_q_values(current_state_embedding, chosen_action, current_reward);
+            LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: RL Q-Table güncelleme tamamlandı.");
+        }
+
+    } catch (const std::exception& e) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: RL Q-Table güncelleme adiminda hata: " << e.what());
+        return;
+    } catch (...) {
+        LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MetaEvolutionEngine: RL Q-Table güncelleme adiminda bilinmeyen hata.");
+        return;
+    }
+
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Meta-evolution cycle tamamlandı.");
 }
 
