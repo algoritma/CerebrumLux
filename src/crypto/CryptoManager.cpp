@@ -11,6 +11,7 @@
 #include <openssl/kdf.h>  // HKDF için
 #include <openssl/param_build.h> // OSSL_PARAM_BLD için
 #include <openssl/params.h> // OSSL_PARAM için
+#include <filesystem> // For std::filesystem::exists
 
 namespace CerebrumLux {
 namespace Crypto {
@@ -22,12 +23,13 @@ CryptoManager::CryptoManager() :
     my_ed25519_public_key(nullptr, EVP_PKEY_free)
 {
     LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Initializing. Attempting to load or generate identity keys.");
-    try { // generate_or_load_identity_keys metodunu da try-catch ile sarmalıyoruz
+    try {
         generate_or_load_identity_keys("my_ed25519_private.pem", "my_ed25519_public.pem");
     } catch (const std::exception& e) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Anahtar olusturma/yukleme sirasinda kritik hata: " << e.what());
-        // Bu noktada uygulamayı durdurmak veya kurtarma mekanizması devreye sokmak gerekebilir.
-        // throw; // Geçici olarak exception'ı tekrar fırlatabiliriz.
+        // Bu noktada uygulamanın devam etmesini istemeyebiliriz, veya daha iyi bir kurtarma mekanizması olabilir.
+        // Şimdilik sadece logluyoruz ve uygulama diğer hatalarla karşılaşsa bile GUI'yi açmaya çalışıyoruz.
     }
 }
 
@@ -35,26 +37,67 @@ CryptoManager::~CryptoManager() {
     // Unique_ptr'ler otomatik olarak bellek yönetimini yapacaktır.
 }
 
-void CryptoManager::generate_or_load_identity_keys(const std::string& private_key_path, const std::string& public_key_path) {
-    // Anahtarları yüklemeyi dene
-    // Dosyadan yüklemede hata olsa bile, new ile oluşturulan anahtarın resetlemesi gerekebilir.
-    // Bu yüzden try-catch blokları ile daha kontrollü hale getiriyoruz.
-
+void CryptoManager::generate_or_load_identity_keys(const std::string& private_key_filename, const std::string& public_key_filename) {
     bool loaded_successfully = false;
-    try {
-        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> temp_private_key(load_private_key_from_pem(private_key_path), EVP_PKEY_free);
-        std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> temp_public_key(load_public_key_from_pem(public_key_path), EVP_PKEY_free);
-        
-        if (temp_private_key && temp_public_key) {
-            my_ed25519_private_key = std::move(temp_private_key);
-            my_ed25519_public_key = std::move(temp_public_key);
-            LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Identity keys loaded from files.");
-            loaded_successfully = true;
-        } else {
-            LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Key files found but invalid. Generating new ones.");
+    std::string private_key_pem_content;
+    std::string public_key_pem_content;
+
+    // Anahtar dosyalarının varlığını kontrol et ve içeriklerini oku
+    std::filesystem::path priv_path(private_key_filename);
+    std::filesystem::path pub_path(public_key_filename);
+
+    if (std::filesystem::exists(priv_path) && std::filesystem::exists(pub_path)) {
+        try {
+            std::ifstream priv_file(priv_path);
+            if (priv_file.is_open()) {
+                private_key_pem_content.assign((std::istreambuf_iterator<char>(priv_file)), std::istreambuf_iterator<char>());
+                priv_file.close();
+            } else {
+                LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Private key file '" << private_key_filename << "' exists but could not be opened. Generating new keys.");
+            }
+
+            std::ifstream pub_file(pub_path);
+            if (pub_file.is_open()) {
+                public_key_pem_content.assign((std::istreambuf_iterator<char>(pub_file)), std::istreambuf_iterator<char>());
+                pub_file.close();
+            } else {
+                LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Public key file '" << public_key_filename << "' exists but could not be opened. Generating new keys.");
+            }
+
+            // PEM içeriğinden anahtarları yüklemeyi dene
+            if (!private_key_pem_content.empty() && !public_key_pem_content.empty()) {
+                // Önceki OpenSSL hatalarını temizle
+                ERR_clear_error();
+                
+                std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> temp_private_key(load_private_key_from_pem(private_key_pem_content), EVP_PKEY_free);
+                std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> temp_public_key(load_public_key_from_pem(public_key_pem_content), EVP_PKEY_free);
+                
+                if (temp_private_key && temp_public_key) {
+                    my_ed25519_private_key = std::move(temp_private_key);
+                    my_ed25519_public_key = std::move(temp_public_key);
+                    LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Identity keys loaded from files.");
+                    loaded_successfully = true;
+                } else {
+                    // Yükleme başarısız olursa ancak istisna fırlatılmazsa, OpenSSL hata kuyruğunu kontrol et
+                    unsigned long err_code = ERR_get_error();
+                    if (err_code != 0) {
+                        char err_buf[256];
+                        ERR_error_string_n(err_code, err_buf, sizeof(err_buf));
+                        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
+                        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to load keys from PEM content. OpenSSL Error: " << err_buf << ". Generating new keys.");
+                    } else {
+                        LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Key files found but invalid PEM content. Generating new keys.");
+                    }
+                }
+            } else {
+                LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Key files are empty. Generating new keys.");
+            }
+
+        } catch (const std::exception& e) {
+            LOG_ERROR_CERR(LogLevel::WARNING, "CryptoManager: Error reading or loading existing key files: " << e.what() << ". Generating new keys.");
         }
-    } catch (const std::runtime_error& e) {
-        LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Could not load identity keys from files: " << e.what() << ". Generating new ones.");
+    } else {
+        LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Identity key files not found. Generating new ones.");
     }
 
     if (loaded_successfully) {
@@ -64,6 +107,7 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
     // Yüklenemezse veya geçersizse yeni anahtarlar oluştur
     my_ed25519_private_key.reset(generate_ed25519_keypair().release());
     if (!my_ed25519_private_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to generate Ed25519 keypair.");
         throw std::runtime_error("Failed to generate Ed25519 keypair.");
     }
@@ -73,12 +117,14 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
     size_t pub_key_len = 0;
     if (EVP_PKEY_get_raw_public_key(my_ed25519_private_key.get(), NULL, &pub_key_len) <= 0) {
         unsigned long err_code = ERR_get_error();
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to get Ed25519 public key length. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to get Ed25519 public key length.");
     }
     std::vector<unsigned char> raw_pub_key(pub_key_len);
     if (EVP_PKEY_get_raw_public_key(my_ed25519_private_key.get(), raw_pub_key.data(), &pub_key_len) <= 0) {
         unsigned long err_code = ERR_get_error();
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to get Ed25519 raw public key. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to get Ed25519 raw public key.");
     }
@@ -86,27 +132,31 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
     EVP_PKEY *pubkey_obj = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, raw_pub_key.data(), pub_key_len);
     if (!pubkey_obj) {
         unsigned long err_code = ERR_get_error();
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to create public key from raw bytes. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to create public key from raw bytes.");
     }
     my_ed25519_public_key.reset(pubkey_obj);
     
     LOG_DEFAULT(LogLevel::INFO, "CryptoManager: New Ed25519 identity keypair generated.");
-    // Anahtarları dosyalara kaydet
-    std::ofstream priv_file(private_key_path);
-    if (priv_file.is_open()) {
-        priv_file << pkey_to_pem(my_ed25519_private_key.get(), true);
-        LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Private key saved to " << private_key_path);
+    
+    // Yeni anahtarları dosyalara kaydet
+    std::ofstream priv_file_out(priv_path);
+    if (priv_file_out.is_open()) {
+        priv_file_out << pkey_to_pem(my_ed25519_private_key.get(), true);
+        LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Private key saved to " << private_key_filename);
     } else {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to save private key to " << private_key_path);
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to save private key to " << private_key_filename);
     }
 
-    std::ofstream pub_file(public_key_path);
-    if (pub_file.is_open()) {
-        pub_file << pkey_to_pem(my_ed25519_public_key.get(), false);
-        LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Public key saved to " << public_key_path);
+    std::ofstream pub_file_out(pub_path);
+    if (pub_file_out.is_open()) {
+        pub_file_out << pkey_to_pem(my_ed25519_public_key.get(), false);
+        LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Public key saved to " << public_key_filename);
     } else {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to save public key to " << public_key_path);
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to save public key to " << public_key_filename);
     }
 }
 
@@ -138,6 +188,7 @@ std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> CryptoManager::generate_ed25
 
 std::string CryptoManager::get_my_private_key_pem() const {
     if (!my_ed25519_private_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: get_my_private_key_pem called but private key is not initialized.");
         throw std::runtime_error("Private key not initialized.");
     }
@@ -146,6 +197,7 @@ std::string CryptoManager::get_my_private_key_pem() const {
 
 std::string CryptoManager::get_my_public_key_pem() const {
     if (!my_ed25519_public_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: get_my_public_key_pem called but public key is not initialized.");
         throw std::runtime_error("Public key not initialized.");
     }
@@ -169,6 +221,7 @@ std::string CryptoManager::get_peer_public_key_pem(const std::string& peer_id) c
 std::string CryptoManager::ed25519_sign(const std::string& message, const std::string& private_key_pem) const {
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> private_key(load_private_key_from_pem(private_key_pem), EVP_PKEY_free);
     if (!private_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_sign: Failed to load private key from PEM.");
         throw std::runtime_error("Failed to load private key for signing.");
     }
@@ -177,6 +230,7 @@ std::string CryptoManager::ed25519_sign(const std::string& message, const std::s
 
 std::vector<unsigned char> CryptoManager::ed25519_sign(const std::vector<unsigned char>& message, EVP_PKEY* private_key) const {
     if (!private_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_sign: private_key is NULL.");
         throw std::runtime_error("Private key is NULL for signing.");
     }
@@ -201,6 +255,7 @@ std::vector<unsigned char> CryptoManager::ed25519_sign(const std::vector<unsigne
 bool CryptoManager::ed25519_verify(const std::string& message, const std::string& signature_base64, const std::string& public_key_pem) const {
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> public_key(load_public_key_from_pem(public_key_pem), EVP_PKEY_free);
     if (!public_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_verify: Failed to load public key from PEM.");
         return false;
     }
@@ -209,6 +264,7 @@ bool CryptoManager::ed25519_verify(const std::string& message, const std::string
 
 bool CryptoManager::ed25519_verify(const std::vector<unsigned char>& message, const std::vector<unsigned char>& signature, EVP_PKEY* public_key) const {
     if (!public_key) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_verify: public_key is NULL.");
         return false;
     }
@@ -219,6 +275,7 @@ bool CryptoManager::ed25519_verify(const std::vector<unsigned char>& message, co
 
     if (EVP_DigestVerifyInit(ctx.get(), NULL, NULL, NULL, public_key) <= 0) {
         unsigned long err_code = ERR_get_error();
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: EVP_DigestVerifyInit failed. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         return false;
     }
@@ -236,6 +293,7 @@ AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::string& plaintext,
 
 AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::vector<unsigned char>& plaintext, const std::vector<unsigned char>& key, const std::vector<unsigned char>& aad) const {
     if (key.size() != 32) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: AES key size must be 32 bytes.");
         throw std::invalid_argument("AES key size must be 32 bytes.");
     }
@@ -293,10 +351,12 @@ std::string CryptoManager::aes256_gcm_decrypt(const AESGCMCiphertext& ct, const 
 
 std::vector<unsigned char> CryptoManager::aes256_gcm_decrypt(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& tag, const std::vector<unsigned char>& iv, const std::vector<unsigned char>& key, const std::vector<unsigned char>& aad) const {
     if (key.size() != 32) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: AES key size must be 32 bytes for decryption.");
         throw std::invalid_argument("AES key size must be 32 bytes for decryption.");
     }
     if (iv.size() != 12) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: IV size must be 12 bytes for GCM decryption.");
         throw std::invalid_argument("IV size must be 12 bytes for GCM decryption.");
     }
@@ -349,6 +409,7 @@ std::vector<unsigned char> CryptoManager::generate_random_bytes_vec(size_t lengt
 
 std::vector<unsigned char> CryptoManager::derive_x25519_shared_secret(EVP_PKEY* my_privkey, EVP_PKEY* peer_pubkey) const {
     if (!my_privkey || !peer_pubkey) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: derive_x25519_shared_secret: NULL key provided.");
         throw std::invalid_argument("NULL key provided for ECDH shared secret derivation.");
     }
@@ -377,6 +438,7 @@ std::vector<unsigned char> CryptoManager::hkdf_sha256(const std::vector<unsigned
     if (PKCS5_PBKDF2_HMAC((const char*)ikm.data(), ikm.size(),
                           salt.empty() ? NULL : salt.data(), salt.size(),
                           1, EVP_sha256(), out_len, out_key.data()) <= 0) {
+        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: PKCS5_PBKDF2_HMAC (as HKDF placeholder) failed.");
         throw std::runtime_error("HKDF derivation failed.");
     }
