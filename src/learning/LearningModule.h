@@ -82,7 +82,7 @@ public:
     void load_q_table();
 
     // Sparse Q-Table'ı güncellemek için metot (şimdilik placeholder)
-    void update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward);
+    void update_q_values(const std::vector<float>& current_state_embedding, CerebrumLux::AIAction action, float reward, const std::vector<float>& next_state_embedding);
 
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
 

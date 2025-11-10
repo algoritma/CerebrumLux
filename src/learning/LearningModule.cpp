@@ -245,7 +245,9 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             reward = static_cast<float>(insight.urgency) * 0.1f;
             if (action == CerebrumLux::AIAction::RefactorCode) reward += 0.2f;
 
-            update_q_values(insight_capsule.embedding, action, reward);
+            // DÜZELTİLDİ: update_q_values çağrısı 4 argüman alacak şekilde güncellendi.
+            // next_state_embedding olarak şimdilik current_state_embedding'i kullanıyoruz.
+            update_q_values(insight_capsule.embedding, action, reward, insight_capsule.embedding);
         } else {
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] Sparse Q-Table güncellenemedi: Embedding boş veya yanlış boyut. ID: " << insight.id);
         }
@@ -479,30 +481,43 @@ void LearningModule::processCodeSuggestionFeedback(const std::string& capsuleId,
     }
 }
 
-void LearningModule::update_q_values(const std::vector<float>& state_embedding, CerebrumLux::AIAction action, float reward) {
-    std::stringstream ss;
-    ss << std::string("EMB:");
-    for (float val : state_embedding) {
-        ss << std::fixed << std::setprecision(5) << val << "|";
+void LearningModule::update_q_values(const std::vector<float>& current_state_embedding, CerebrumLux::AIAction action, float reward, const std::vector<float>& next_state_embedding) {
+    std::stringstream ss_current;
+    ss_current << std::string("EMB:");
+    for (float val : current_state_embedding) {
+        ss_current << std::fixed << std::setprecision(5) << val << "|";
     }
-    EmbeddingStateKey state_key = ss.str();
+    EmbeddingStateKey current_state_key = ss_current.str();
 
-    float current_q_value = q_table.q_values[state_key][action];
+    std::stringstream ss_next;
+    ss_next << std::string("EMB:");
+    for (float val : next_state_embedding) {
+        ss_next << std::fixed << std::setprecision(5) << val << "|";
+    }
+    EmbeddingStateKey next_state_key = ss_next.str();
+
+    float current_q_value = q_table.q_values[current_state_key][action];
     float learning_rate_rl = 0.1f;
     float discount_factor = 0.9f;
 
     float max_next_q = 0.0f;
-    if (q_table.q_values.count(state_key)) {
-        for (const auto& action_pair : q_table.q_values[state_key]) {
-            if (action_pair.second > max_next_q) {
-                max_next_q = action_pair.second;
+    if (q_table.q_values.count(next_state_key)) {
+        if (!q_table.q_values[next_state_key].empty()) {
+            for (const auto& action_pair : q_table.q_values[next_state_key]) {
+                if (action_pair.second > max_next_q) {
+                    max_next_q = action_pair.second;
+                }
             }
+        } else {
+            LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] next_state_key mevcut ancak hiçbir eylem değeri yok. Max next Q = 0.0f. State: " << next_state_key.substr(0, std::min((size_t)50, next_state_key.length())));
         }
+    } else {
+        LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] next_state_key Q-table'da bulunamadı (yeni durum olabilir). Max next Q = 0.0f. State: " << next_state_key.substr(0, std::min((size_t)50, next_state_key.length())));
     }
 
-    q_table.q_values[state_key][action] = current_q_value + learning_rate_rl * (reward + discount_factor * max_next_q - current_q_value);
+    q_table.q_values[current_state_key][action] = current_q_value + learning_rate_rl * (reward + discount_factor * max_next_q - current_q_value);
 
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. State: " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[state_key][action]);
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. Current State: " << static_cast<std::string>(current_state_key).substr(0, std::min((size_t)50, static_cast<std::string>(current_state_key).length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[current_state_key][action] << ", Next State (kısmi): " << static_cast<std::string>(next_state_key).substr(0, std::min((size_t)50, static_cast<std::string>(next_state_key).length())) << "...");
 }
 
 void LearningModule::save_q_table() const {

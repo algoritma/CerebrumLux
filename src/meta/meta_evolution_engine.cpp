@@ -137,12 +137,16 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
     }
 
     // YENİ EKLENDİ: Adım 5: RL Ajanı için Q-Table Güncelleme ve Eylem Seçimi (Ön Geliştirme)
-    // Bu kısım, daha sonra PredictionEngine veya GoalManager ile entegre edilecek.
+    // Bu kısım, daha sonra PredictionEngine veya ayrı bir DecisionModule ile entegre edilecek.
     try {
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: RL Q-Table güncelleme adımı başlatılıyor.");
 
-        // current_state_embedding olarak current_sequence'in cryptofig_embedding'ini kullanıyoruz.
-        // DÜZELTİLDİ: latent_cryptofig_vector için doğru boyut olan LATENT_DIM ile kontrol yapılıyor.
+        // current_state_embedding'i alıyoruz.
+        // Not: next_state_embedding'i hesaplamak için bir sonraki "gerçek" durumu bilmemiz gerekir.
+        // Simülasyon bağlamında, bu ya bir sonraki cycle'da gelecek olan current_sequence olur (bir döngü gecikmeli öğrenme)
+        // ya da burada bir "simüle edilmiş" next_state_embedding oluşturulur.
+        // Şimdilik, basitleştirilmiş bir yaklaşım olarak, next_state_embedding'i current_state_embedding'in bir kopyası olarak alacağız.
+        // İyileştirme olarak, gerçek bir sonraki sinyal setini işleyip next_state_embedding'i hesaplayabiliriz.
         std::vector<float> current_state_embedding = current_sequence.latent_cryptofig_vector; 
         if (current_state_embedding.empty() || current_state_embedding.size() != CerebrumLux::CryptofigAutoencoder::LATENT_DIM) {        
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MetaEvolutionEngine: Current sequence embedding boş veya boyutu uyuşmuyor. RL güncelleme atlanıyor.");
@@ -155,7 +159,12 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
             // SparseQTable'daki Q-değerlerine ve bir exploration/exploitation stratejisine göre seçilecektir.
             // 'current_reward' ise GoalManager, AIInsightsEngine gibi diğer modüllerden türetilecektir.
 
-            learning_module.update_q_values(current_state_embedding, chosen_action, current_reward);
+            // next_state_embedding'i şimdilik current_state_embedding'in bir kopyası olarak alıyoruz.
+            // Gerçek bir sonraki durumu simüle etmek veya beklemek, daha karmaşık bir RL kontrol döngüsü gerektirir.
+            std::vector<float> next_state_embedding = current_state_embedding;
+
+            // DÜZELTİLDİ: next_state_embedding parametresi eklendi.
+            learning_module.update_q_values(current_state_embedding, chosen_action, current_reward, next_state_embedding);
             LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: RL Q-Table güncelleme tamamlandı.");
         }
 
