@@ -1,4 +1,3 @@
-// src/crypto/CryptoManager.h
 #ifndef CRYPTO_MANAGER_H
 #define CRYPTO_MANAGER_H
 
@@ -91,8 +90,9 @@ public:
                                            const std::vector<unsigned char>& info,
                                            size_t out_len) const;
 
-    // Byte array'leri string'e, string'leri byte array'e dönüştürme yardımcıları (public yapıldı)
-    std::string vec_to_str(const std::vector<unsigned char>& vec) const;
+    // DÜZELTİLDİ: vec_to_str overload'ları doğru sırada deklarasyon edildi.
+    std::string vec_to_str(const std::vector<unsigned char>& vec) const; // unsigned char vektörü için overload
+    std::string vec_to_str(const std::vector<float>& vec) const;         // float vektörü için overload
     std::vector<unsigned char> str_to_vec(const std::string& str) const;
 
 private:

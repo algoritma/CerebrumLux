@@ -73,7 +73,10 @@ public:
 
     KnowledgeBase& getKnowledgeBase();
     const KnowledgeBase& getKnowledgeBase() const; // Const versiyonu eklendi
-    
+
+    // DÜZELTİLDİ: cryptoManager'a erişim için public getter eklendi.
+    CerebrumLux::Crypto::CryptoManager& get_crypto_manager() const { return cryptoManager; }
+
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
 

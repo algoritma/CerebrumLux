@@ -26,10 +26,7 @@ CryptoManager::CryptoManager() :
     try {
         generate_or_load_identity_keys("my_ed25519_private.pem", "my_ed25519_public.pem");
     } catch (const std::exception& e) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Anahtar olusturma/yukleme sirasinda kritik hata: " << e.what());
-        // Bu noktada uygulamanın devam etmesini istemeyebiliriz, veya daha iyi bir kurtarma mekanizması olabilir.
-        // Şimdilik sadece logluyoruz ve uygulama diğer hatalarla karşılaşsa bile GUI'yi açmaya çalışıyoruz.
     }
 }
 
@@ -83,7 +80,6 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
                     if (err_code != 0) {
                         char err_buf[256];
                         ERR_error_string_n(err_code, err_buf, sizeof(err_buf));
-                        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
                         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to load keys from PEM content. OpenSSL Error: " << err_buf << ". Generating new keys.");
                     } else {
                         LOG_DEFAULT(LogLevel::WARNING, "CryptoManager: Key files found but invalid PEM content. Generating new keys.");
@@ -107,7 +103,6 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
     // Yüklenemezse veya geçersizse yeni anahtarlar oluştur
     my_ed25519_private_key.reset(generate_ed25519_keypair().release());
     if (!my_ed25519_private_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to generate Ed25519 keypair.");
         throw std::runtime_error("Failed to generate Ed25519 keypair.");
     }
@@ -117,14 +112,12 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
     size_t pub_key_len = 0;
     if (EVP_PKEY_get_raw_public_key(my_ed25519_private_key.get(), NULL, &pub_key_len) <= 0) {
         unsigned long err_code = ERR_get_error();
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to get Ed25519 public key length. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to get Ed25519 public key length.");
     }
     std::vector<unsigned char> raw_pub_key(pub_key_len);
     if (EVP_PKEY_get_raw_public_key(my_ed25519_private_key.get(), raw_pub_key.data(), &pub_key_len) <= 0) {
         unsigned long err_code = ERR_get_error();
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to get Ed25519 raw public key. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to get Ed25519 raw public key.");
     }
@@ -132,7 +125,6 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
     EVP_PKEY *pubkey_obj = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, raw_pub_key.data(), pub_key_len);
     if (!pubkey_obj) {
         unsigned long err_code = ERR_get_error();
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to create public key from raw bytes. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         throw std::runtime_error("Failed to create public key from raw bytes.");
     }
@@ -146,7 +138,6 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
         priv_file_out << pkey_to_pem(my_ed25519_private_key.get(), true);
         LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Private key saved to " << private_key_filename);
     } else {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to save private key to " << private_key_filename);
     }
 
@@ -155,7 +146,6 @@ void CryptoManager::generate_or_load_identity_keys(const std::string& private_ke
         pub_file_out << pkey_to_pem(my_ed25519_public_key.get(), false);
         LOG_DEFAULT(LogLevel::INFO, "CryptoManager: Public key saved to " << public_key_filename);
     } else {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: Failed to save public key to " << public_key_filename);
     }
 }
@@ -188,7 +178,6 @@ std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> CryptoManager::generate_ed25
 
 std::string CryptoManager::get_my_private_key_pem() const {
     if (!my_ed25519_private_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: get_my_private_key_pem called but private key is not initialized.");
         throw std::runtime_error("Private key not initialized.");
     }
@@ -197,7 +186,6 @@ std::string CryptoManager::get_my_private_key_pem() const {
 
 std::string CryptoManager::get_my_public_key_pem() const {
     if (!my_ed25519_public_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: get_my_public_key_pem called but public key is not initialized.");
         throw std::runtime_error("Public key not initialized.");
     }
@@ -221,16 +209,15 @@ std::string CryptoManager::get_peer_public_key_pem(const std::string& peer_id) c
 std::string CryptoManager::ed25519_sign(const std::string& message, const std::string& private_key_pem) const {
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> private_key(load_private_key_from_pem(private_key_pem), EVP_PKEY_free);
     if (!private_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_sign: Failed to load private key from PEM.");
         throw std::runtime_error("Failed to load private key for signing.");
     }
+    // DÜZELTİLDİ: std::vector<unsigned char> alan vec_to_str overload'u çağrıldı.
     return base64_encode(vec_to_str(ed25519_sign(str_to_vec(message), private_key.get())));
 }
 
 std::vector<unsigned char> CryptoManager::ed25519_sign(const std::vector<unsigned char>& message, EVP_PKEY* private_key) const {
     if (!private_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_sign: private_key is NULL.");
         throw std::runtime_error("Private key is NULL for signing.");
     }
@@ -255,7 +242,6 @@ std::vector<unsigned char> CryptoManager::ed25519_sign(const std::vector<unsigne
 bool CryptoManager::ed25519_verify(const std::string& message, const std::string& signature_base64, const std::string& public_key_pem) const {
     std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> public_key(load_public_key_from_pem(public_key_pem), EVP_PKEY_free);
     if (!public_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_verify: Failed to load public key from PEM.");
         return false;
     }
@@ -264,7 +250,6 @@ bool CryptoManager::ed25519_verify(const std::string& message, const std::string
 
 bool CryptoManager::ed25519_verify(const std::vector<unsigned char>& message, const std::vector<unsigned char>& signature, EVP_PKEY* public_key) const {
     if (!public_key) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: ed25519_verify: public_key is NULL.");
         return false;
     }
@@ -275,7 +260,6 @@ bool CryptoManager::ed25519_verify(const std::vector<unsigned char>& message, co
 
     if (EVP_DigestVerifyInit(ctx.get(), NULL, NULL, NULL, public_key) <= 0) {
         unsigned long err_code = ERR_get_error();
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: EVP_DigestVerifyInit failed. OpenSSL Error: " << ERR_error_string(err_code, NULL));
         return false;
     }
@@ -293,7 +277,6 @@ AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::string& plaintext,
 
 AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::vector<unsigned char>& plaintext, const std::vector<unsigned char>& key, const std::vector<unsigned char>& aad) const {
     if (key.size() != 32) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: AES key size must be 32 bytes.");
         throw std::invalid_argument("AES key size must be 32 bytes.");
     }
@@ -328,6 +311,7 @@ AESGCMCiphertext CryptoManager::aes256_gcm_encrypt(const std::vector<unsigned ch
     OPENSSL_CHECK(EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data()));
 
     LOG_DEFAULT(LogLevel::DEBUG, "CryptoManager: AES-256-GCM şifreleme başarılı.");
+    // DÜZELTİLDİ: std::vector<unsigned char> alan vec_to_str overload'u çağrıldı.
     return {base64_encode(vec_to_str(ciphertext)), base64_encode(vec_to_str(tag)), base64_encode(vec_to_str(iv))};
 }
 
@@ -346,17 +330,16 @@ std::string CryptoManager::aes256_gcm_decrypt(const AESGCMCiphertext& ct, const 
         decoded_aad
     );
 
+    // DÜZELTİLDİ: std::vector<unsigned char> alan vec_to_str overload'u çağrıldı.
     return vec_to_str(decrypted_data);
 }
 
 std::vector<unsigned char> CryptoManager::aes256_gcm_decrypt(const std::vector<unsigned char>& ciphertext, const std::vector<unsigned char>& tag, const std::vector<unsigned char>& iv, const std::vector<unsigned char>& key, const std::vector<unsigned char>& aad) const {
     if (key.size() != 32) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: AES key size must be 32 bytes for decryption.");
         throw std::invalid_argument("AES key size must be 32 bytes for decryption.");
     }
     if (iv.size() != 12) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: IV size must be 12 bytes for GCM decryption.");
         throw std::invalid_argument("IV size must be 12 bytes for GCM decryption.");
     }
@@ -398,6 +381,7 @@ std::vector<unsigned char> CryptoManager::aes256_gcm_decrypt(const std::vector<u
 std::string CryptoManager::generate_random_bytes_str(size_t length) const {
     std::vector<unsigned char> bytes(length);
     OPENSSL_CHECK(RAND_bytes(bytes.data(), bytes.size()));
+    // DÜZELTİLDİ: std::vector<unsigned char> alan vec_to_str overload'u çağrıldı.
     return vec_to_str(bytes);
 }
 
@@ -409,7 +393,6 @@ std::vector<unsigned char> CryptoManager::generate_random_bytes_vec(size_t lengt
 
 std::vector<unsigned char> CryptoManager::derive_x25519_shared_secret(EVP_PKEY* my_privkey, EVP_PKEY* peer_pubkey) const {
     if (!my_privkey || !peer_pubkey) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: derive_x25519_shared_secret: NULL key provided.");
         throw std::invalid_argument("NULL key provided for ECDH shared secret derivation.");
     }
@@ -438,7 +421,6 @@ std::vector<unsigned char> CryptoManager::hkdf_sha256(const std::vector<unsigned
     if (PKCS5_PBKDF2_HMAC((const char*)ikm.data(), ikm.size(),
                           salt.empty() ? NULL : salt.data(), salt.size(),
                           1, EVP_sha256(), out_len, out_key.data()) <= 0) {
-        // DÜZELTİLDİ: LogLevel::CRITICAL yerine LogLevel::ERR_CRITICAL kullanıldı.
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "CryptoManager: PKCS5_PBKDF2_HMAC (as HKDF placeholder) failed.");
         throw std::runtime_error("HKDF derivation failed.");
     }
@@ -446,8 +428,18 @@ std::vector<unsigned char> CryptoManager::hkdf_sha256(const std::vector<unsigned
     return out_key;
 }
 
+// DÜZELTİLDİ: std::vector<unsigned char> için vec_to_str overload'u geri eklendi.
 std::string CryptoManager::vec_to_str(const std::vector<unsigned char>& vec) const {
     return std::string(reinterpret_cast<const char*>(vec.data()), vec.size());
+}
+
+// YENİ EKLENDİ: std::vector<float> için vec_to_str overload'u
+std::string CryptoManager::vec_to_str(const std::vector<float>& vec) const {
+    std::ostringstream oss;
+    for (float val : vec) {
+        oss << std::fixed << std::setprecision(5) << val << "|";
+    }
+    return oss.str();
 }
 
 std::vector<unsigned char> CryptoManager::str_to_vec(const std::string& str) const {
