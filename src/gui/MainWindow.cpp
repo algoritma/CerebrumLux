@@ -12,6 +12,7 @@
 #include "../gui/panels/SimulationPanel.h"
 #include "../gui/panels/CapsuleTransferPanel.h"
 #include "../gui/panels/KnowledgeBasePanel.h"
+#include "../gui/panels/QTablePanel.h" // YENİ: QTablePanel için başlık
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
 #include "../communication/natural_language_processor.h" // generate_text_embedding için
@@ -55,7 +56,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel oluşturuldu. Adresi: " << capsuleTransferPanel << ", isVisible(): " << capsuleTransferPanel->isVisible());
     knowledgeBasePanel = new CerebrumLux::KnowledgeBasePanel(learningModule, this);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBasePanel oluşturuldu. Adresi: " << knowledgeBasePanel << ", isVisible(): " << knowledgeBasePanel->isVisible());
-
+    qTablePanel = new CerebrumLux::QTablePanel(learningModule, this); // YENİ: QTablePanel oluşturuldu
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel oluşturuldu. Adresi: " << qTablePanel << ", isVisible(): " << qTablePanel->isVisible());
 
     tabWidget->addTab(logPanel, "Log");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Log tab'ı eklendi. Aktif widget: " << tabWidget->currentWidget());
@@ -67,7 +69,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Capsule Transfer tab'ı eklendi.");
     tabWidget->addTab(knowledgeBasePanel, "KnowledgeBase");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBase tab'ı eklendi. Tab sayısı: " << tabWidget->count());
-
+    tabWidget->addTab(qTablePanel, "Q-Table"); // YENİ: Q-Table sekmesi eklendi
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Q-Table tab'ı eklendi. Tab sayısı: " << tabWidget->count());
 
     setWindowTitle("Cerebrum Lux");
     resize(1024, 768);
@@ -97,6 +100,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     guiUpdateTimer->start(1000);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms).");
 
+    // YENİ: QTablePanel'i düzenli olarak güncellemek için
+    connect(guiUpdateTimer, &QTimer::timeout, qTablePanel, &CerebrumLux::QTablePanel::updateQTableContent);
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
+
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Kurucu çıkışı. isVisible(): " << isVisible() << ", geometry: " << geometry().width() << "x" << geometry().height());
 }
 
@@ -114,6 +121,7 @@ LogPanel* MainWindow::getLogPanel() const {
 GraphPanel* MainWindow::getGraphPanel() const { return graphPanel; }
 SimulationPanel* MainWindow::getSimulationPanel() const { return simulationPanel; }
 CapsuleTransferPanel* MainWindow::getCapsuleTransferPanel() const { return capsuleTransferPanel; }
+QTablePanel* MainWindow::getQTablePanel() const { return qTablePanel; } // YENİ: QTablePanel getter implementasyonu
 KnowledgeBasePanel* MainWindow::getKnowledgeBasePanel() const { return knowledgeBasePanel; }
 
 void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data) {
