@@ -30,6 +30,9 @@ void KnowledgeBasePanel::setupUi() {
 
     mainLayout->addWidget(new QLabel("KnowledgeBase İçeriği:", this));
 
+    // Yeni bir Splitter oluşturarak ana içeriği (kapsül listesi/detay) ve ilgili kapsülleri ayırabiliriz.
+    QSplitter *mainSplitter = new QSplitter(Qt::Horizontal, this);
+ 
     // 🔍 Arama kutusu
     QHBoxLayout *searchLayout = new QHBoxLayout();
     searchLineEdit = new QLineEdit(this);
@@ -76,15 +79,30 @@ void KnowledgeBasePanel::setupUi() {
     mainLayout->addLayout(filterLayout);
 
     // 🔗 Splitter: Liste + Detay
-    QSplitter *splitter = new QSplitter(Qt::Vertical, this); // Dikey splitter daha kullanışlı olabilir
+    QSplitter *detailSplitter = new QSplitter(Qt::Vertical, this); // Dikey splitter
     capsuleListWidget = new QListWidget(this);
     capsuleListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     connect(capsuleListWidget, &QListWidget::currentItemChanged, this, &CerebrumLux::KnowledgeBasePanel::onSelectedCapsuleChanged);
-    splitter->addWidget(capsuleListWidget);
+    detailSplitter->addWidget(capsuleListWidget);
 
     capsuleDetailDisplay = new QTextEdit(this);
     capsuleDetailDisplay->setReadOnly(true);
-    splitter->addWidget(capsuleDetailDisplay);
+    detailSplitter->addWidget(capsuleDetailDisplay);
+
+    mainSplitter->addWidget(detailSplitter); // Ana splitter'ın sol tarafına kapsül listesi ve detay
+
+    // YENİ UI elemanları: İlgili Kapsüller için
+    QVBoxLayout *relatedLayout = new QVBoxLayout();
+    relatedLayout->addWidget(new QLabel("İlgili Kapsüller:", this));
+    relatedCapsuleListWidget = new QListWidget(this);
+    relatedLayout->addWidget(relatedCapsuleListWidget);
+    
+    QWidget *relatedWidget = new QWidget(this);
+    relatedWidget->setLayout(relatedLayout);
+    mainSplitter->addWidget(relatedWidget); // Ana splitter'ın sağ tarafına ilgili kapsüller
+
+    mainSplitter->setSizes({width() / 2, width() / 2}); // Başlangıçta eşit genişlik
+    mainLayout->addWidget(mainSplitter);
 
     // 👍👎 Geri bildirim butonları
     QHBoxLayout *feedbackLayout = new QHBoxLayout();
@@ -98,7 +116,6 @@ void KnowledgeBasePanel::setupUi() {
     connect(rejectSuggestionButton, &QPushButton::clicked, this, &CerebrumLux::KnowledgeBasePanel::onRejectSuggestionClicked);
     updateSuggestionFeedbackButtons(""); // Başlangıçta butonları pasif yap
 
-    mainLayout->addWidget(splitter);
     mainLayout->addStretch(1);
     setLayout(mainLayout);
 }
@@ -143,6 +160,11 @@ void KnowledgeBasePanel::updateKnowledgeBaseContent() {
     topicFilterComboBox->blockSignals(false); // Sinyalleri tekrar etkinleştir
 
     // Mevcut filtrelerle listeyi yeniden doldur
+    // ÖNEMLİ: updateKnowledgeBaseContent() içinde çağrılan filterAndDisplayCapsules() metoduna
+    // boş current_capsule_embedding parametresi göndermeliyiz, çünkü burada seçili bir kapsül yok.
+    // Seçili kapsül değiştiğinde, onSelectedCapsuleChanged() metodunun filterAndDisplayCapsules()'ı çağırması gerekecek.
+    // Şimdilik, sadece mevcut filtreleme metodu çağrılıyor ve embedding ile ilgili kısım daha sonra eklenecek.
+
     filterAndDisplayCapsules(searchLineEdit->text(),
     topicFilterComboBox->currentText(),
     startDateEdit->date(), endDateEdit->date(),
@@ -159,6 +181,7 @@ void KnowledgeBasePanel::updateKnowledgeBaseContent() {
             }
         }
         if (itemToSelect) {
+            // Seçilen kapsül geri yüklendiğinde detayları ve ilgili kapsülleri de güncelle
             capsuleListWidget->setCurrentItem(itemToSelect);
             LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Secim geri yuklendi. ID: " << selectedCapsuleId.toStdString());
         } else {
@@ -176,6 +199,7 @@ void KnowledgeBasePanel::onSelectedCapsuleChanged(QListWidgetItem* current, QLis
     Q_UNUSED(previous);
     if (!current) {
         capsuleDetailDisplay->clear();
+        relatedCapsuleListWidget->clear(); // YENİ: Seçim yoksa ilgili kapsülleri de temizle
         updateSuggestionFeedbackButtons(""); // ✅ Seçim yoksa butonları pasif yap
         return;
     }
@@ -185,9 +209,12 @@ void KnowledgeBasePanel::onSelectedCapsuleChanged(QListWidgetItem* current, QLis
     if (it != displayedCapsuleDetails.end()) {
         displayCapsuleDetails(it->second);
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: Kapsül detayları gösterildi. ID: " << selectedCapsuleId.toStdString());
+        // YENİ: İlgili kapsülleri de güncelle
+        updateRelatedCapsules(selectedCapsuleId.toStdString(), it->second.embedding);
     } else {
         updateSuggestionFeedbackButtons("");
         capsuleDetailDisplay->setText("Detaylar bulunamadı.");
+        relatedCapsuleListWidget->clear();
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBasePanel: Seçilen kapsül ID'si dahili listeye uymuyor: " << selectedCapsuleId.toStdString());
     }
 }
@@ -313,7 +340,8 @@ void KnowledgeBasePanel::filterAndDisplayCapsules(const QString& filterText,
         data.fullContent = QString::fromStdString(capsule.content);
         data.cryptofigBlob = QString::fromStdString(capsule.cryptofig_blob_base64);
         data.confidence = capsule.confidence;
-        data.code_file_path = QString::fromStdString(capsule.code_file_path); 
+        data.code_file_path = QString::fromStdString(capsule.code_file_path);
+        data.embedding = capsule.embedding; // YENİ: Embedding'i de kaydet
         displayedCapsuleDetails[capsuleId] = data; // Data objesi mapa eklendi
 
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: Kapsül QListWidget'a eklendi. ID: " << capsuleId.toStdString()); // Log seviyesi Trace'e düşürüldü
@@ -335,10 +363,50 @@ void KnowledgeBasePanel::displayCapsuleDetails(const KnowledgeCapsuleDisplayData
     if (!data.code_file_path.isEmpty()) { 
         details += "<b>Dosya Yolu:</b> " + data.code_file_path + "<br>";
     }
+    // YENİ EKLENDİ: Embedding vektörünü göster
+    details += "<b>Embedding (İlk 10 Eleman):</b> [";
+    for (int i = 0; i < std::min((int)data.embedding.size(), 10); ++i) {
+        details += QString::number(data.embedding[i], 'f', 4) + (i == std::min((int)data.embedding.size(), 10) - 1 ? "" : ", ");
+    }
+    details += "]...<br>";
     details += "<br><b>Tam İçerik:</b><br><pre>" + data.fullContent + "</pre>"; // Moved out of if block
 
     capsuleDetailDisplay->setHtml(details);
     updateSuggestionFeedbackButtons(data.id);
+}
+
+void KnowledgeBasePanel::updateRelatedCapsules(const std::string& current_capsule_id, const std::vector<float>& current_capsule_embedding) {
+    relatedCapsuleListWidget->clear();
+    currentRelatedCapsules.clear();
+
+    if (current_capsule_embedding.empty()) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBasePanel: current_capsule_embedding boş, ilgili kapsüller listelenemedi. ID: " << current_capsule_id);
+        return;
+    }
+
+    // Seçilen kapsülün embedding'ini kullanarak ilgili kapsülleri ara
+    std::vector<CerebrumLux::Capsule> related_caps = learningModule.getKnowledgeBase().semantic_search(current_capsule_embedding, 5); // En yakın 5 kapsülü ara
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: ID: " << current_capsule_id << " icin semantik arama yapildi. Bulunan ilgili kapsül sayisi: " << related_caps.size());
+
+    for (const auto& rel_capsule : related_caps) {
+        if (rel_capsule.id == current_capsule_id) { // Kendisini listeden çıkar
+            continue;
+        }
+        QString itemText = QString("ID: %1 | Konu: %2 | Özet: %3")
+                            .arg(QString::fromStdString(rel_capsule.id))
+                            .arg(QString::fromStdString(rel_capsule.topic))
+                            .arg(QString::fromStdString(rel_capsule.plain_text_summary).left(50) + "...");
+        
+        QListWidgetItem *item = new QListWidgetItem(itemText);
+        item->setData(Qt::UserRole, QString::fromStdString(rel_capsule.id));
+        relatedCapsuleListWidget->addItem(item);
+        currentRelatedCapsules.push_back(rel_capsule); // İlgili kapsülleri sakla
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "KnowledgeBasePanel: İlgili kapsül listesine eklendi. ID: " << rel_capsule.id);
+    }
+    if (related_caps.empty()) {
+        relatedCapsuleListWidget->addItem("İlgili kapsül bulunamadı.");
+    }
 }
 
 void KnowledgeBasePanel::updateSuggestionFeedbackButtons(const QString& selectedId) {

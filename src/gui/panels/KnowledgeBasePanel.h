@@ -29,6 +29,7 @@ struct KnowledgeCapsuleDisplayData {
     QString summary;
     QString fullContent;
     QString cryptofigBlob;
+    std::vector<float> embedding; // YENİ EKLENDİ: Kapsülün embedding vektörü
     float confidence;
     QString code_file_path; 
 };
@@ -63,6 +64,7 @@ private slots:
 private:
     LearningModule& learningModule;
 
+    // Mevcut UI elemanları
     QListWidget *capsuleListWidget;
     QTextEdit *capsuleDetailDisplay;
     QLineEdit *searchLineEdit;
@@ -72,14 +74,19 @@ private:
     QDateEdit *startDateEdit;
     QDateEdit *endDateEdit;
 
+    // YENİ UI elemanları: İlgili Kapsüller için
+    QListWidget *relatedCapsuleListWidget; // İlgili kapsülleri listele
+
     // Geri bildirim butonları
     QPushButton *acceptSuggestionButton;
     QPushButton *rejectSuggestionButton;
 
     std::vector<Capsule> currentDisplayedCapsules;
     std::map<QString, KnowledgeCapsuleDisplayData> displayedCapsuleDetails;
+    std::vector<CerebrumLux::Capsule> currentRelatedCapsules; // Seçilen kapsülün ilgili kapsülleri
 
     void setupUi();
+    void updateRelatedCapsules(const std::string& current_capsule_id, const std::vector<float>& current_capsule_embedding); // YENİ: İlgili kapsülleri güncelleyen metod
     void displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data);
     // ✅ DEĞİŞTİRİLDİ: specialFilter parametresi eklendi ve varsayılan değeri var
     void filterAndDisplayCapsules(const QString& filterText = QString(),
