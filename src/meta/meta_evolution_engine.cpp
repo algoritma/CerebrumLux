@@ -142,9 +142,9 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: RL Q-Table güncelleme adımı başlatılıyor.");
 
         // current_state_embedding olarak current_sequence'in cryptofig_embedding'ini kullanıyoruz.
-        // DÜZELTİLDİ: DynamicSequence'deki doğru üye olan latent_cryptofig_vector kullanıldı.
-        std::vector<float> current_state_embedding = current_sequence.latent_cryptofig_vector;
-        if (current_state_embedding.empty() || current_state_embedding.size() != CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+        // DÜZELTİLDİ: latent_cryptofig_vector için doğru boyut olan LATENT_DIM ile kontrol yapılıyor.
+        std::vector<float> current_state_embedding = current_sequence.latent_cryptofig_vector; 
+        if (current_state_embedding.empty() || current_state_embedding.size() != CerebrumLux::CryptofigAutoencoder::LATENT_DIM) {        
             LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MetaEvolutionEngine: Current sequence embedding boş veya boyutu uyuşmuyor. RL güncelleme atlanıyor.");
         } else {
             // Şimdilik basitleştirilmiş bir eylem seçimi ve reward

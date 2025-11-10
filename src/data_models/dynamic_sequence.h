@@ -31,7 +31,12 @@ struct DynamicSequence {
         : id(""), timestamp_utc(std::chrono::system_clock::now()),
           current_application_context(""), current_cpu_usage(0), current_ram_usage(0),
           event_count(0), current_network_active(false), network_activity_level(0), network_protocol("")
-    {}
+    {
+        // DÜZELTİLDİ: Constructor'da statistical_features_vector ve latent_cryptofig_vector'ı boyutlandır ve sıfırla.
+        // Bu, ilk döngüde bile boş olmalarını engeller.
+        statistical_features_vector.assign(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+        latent_cryptofig_vector.assign(CerebrumLux::CryptofigAutoencoder::LATENT_DIM, 0.0f);
+    }
 
     // Signal buffer'dan bu seansı güncelle
     void update_from_signals(const std::deque<CerebrumLux::AtomicSignal>& signal_buffer, long long current_time_us, unsigned short app_hash, CerebrumLux::CryptofigAutoencoder& cryptofig_autoencoder_ref);
