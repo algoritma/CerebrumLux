@@ -102,6 +102,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
 
     // YENİ: QTablePanel'i düzenli olarak güncellemek için
     connect(guiUpdateTimer, &QTimer::timeout, qTablePanel, &CerebrumLux::QTablePanel::updateQTableContent);
+    // DÜZELTİLDİ: KnowledgeBasePanel'i de düzenli olarak güncellemek için
+    connect(guiUpdateTimer, &QTimer::timeout, knowledgeBasePanel, &CerebrumLux::KnowledgeBasePanel::updateKnowledgeBaseContent);
+
+    // DÜZELTİLDİ: İlk güncelleme çağrısını burada yapıyoruz
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
 
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Kurucu çıkışı. isVisible(): " << isVisible() << ", geometry: " << geometry().width() << "x" << geometry().height());
