@@ -70,17 +70,19 @@ void CerebrumLux::GraphPanel::updateData(const QString& seriesName, const QMap<q
             QValueAxis *axisX_ptr = qobject_cast<QValueAxis*>(this->chart->axes(Qt::Horizontal).at(0));
             QValueAxis *axisY_ptr = qobject_cast<QValueAxis*>(this->chart->axes(Qt::Vertical).at(0));
             if (axisX_ptr && axisY_ptr) {
-                qreal timeSpan = maxX - minX;
-                if (data.isEmpty()) { // Veri yoksa varsayılan aralık
-                    minX = 0;
-                    maxX = 10000;
-                } else if (timeSpan < 10000 && minX != std::numeric_limits<qreal>::max()) { // Minimum 10 saniyelik aralık
-                    minX = maxX - 10000;
-                    if (minX < 0) minX = 0;
+                // DÜZELTİLDİ: Eksen aralığı yönetimi. Veri varsa dinamik, yoksa varsayılan.
+                if (data.isEmpty()) { 
+                    axisX_ptr->setRange(0, 10000); // Varsayılan 10 saniye
+                } else {
+                    axisX_ptr->setRange(minX, maxX); // Tüm mevcut verinin aralığını göster
                 }
                 
-                axisX_ptr->setRange(minX, maxX);
-                axisY_ptr->setRange(0, 1);
+                // YENİ: Dinamik Y ekseni aralığı. Confidence 0-1 arasında olmalı.
+                // Eğer max_confidence 0 ise veya min_confidence çok yüksekse varsayılan 0-1 aralığını koru.
+                axisY_ptr->setRange(std::max(0.0, minY - 0.05), std::min(1.0, maxY + 0.05)); // Biraz margin ekle
+                if (minY == std::numeric_limits<qreal>::max() || maxY == std::numeric_limits<qreal>::lowest()) {
+                    axisY_ptr->setRange(0, 1); // Veri yoksa veya geçersizse varsayılan
+                }
             }
         }
     }

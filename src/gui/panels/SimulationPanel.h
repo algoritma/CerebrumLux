@@ -7,6 +7,7 @@
 #include <QTableView>       // QTableView için
 #include <QStandardItemModel> // QStandardItemModel için
 #include <QVector>          // QVector için
+#include <QLabel>           // YENİ EKLENDİ: QLabel sınıfı için gerekli başlık
 #include <QTextEdit>        // YENİ: Chat geçmişi için
 
 #include "../../core/logger.h" // LOG_DEFAULT makrosu için
@@ -48,6 +49,7 @@ private:
     QPushButton *sendCommandButton;
     QPushButton *startSimulationButton;
     QPushButton *stopSimulationButton;
+    QLabel      *simulationStatusLabel; // YENİ: Simülasyon durumunu göstermek için
     QTableView *simulationHistoryTable;
     QStandardItemModel *simulationHistoryModel;
 

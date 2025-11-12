@@ -201,19 +201,38 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] InsightType CodeDevelopmentSuggestion değil (" << static_cast<int>(insight.type) << "). Varsayılan topic ('AI Insight') kullanılıyor.");
         }
 
-        if (insight.context == "Sistem Genel Performans Metriği") { 
-            size_t pos = insight.observation.find(":");
-            if (pos != std::string::npos && pos + 1 < insight.observation.length()) {
+        if (insight.context == "Sistem Genel Performans Metriği") {
+            // YENİ DÜZELTME: insight.observation string'inden confidence değerini doğru şekilde parse et
+            // Örneğin: "AI sisteminin anlık güven seviyesi: 0.85" -> 0.85
+            // YENİ LOG: Sistem Genel Performans Metriği bağlamı için gözlemi logla
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] 'Sistem Genel Performans Metriği' bağlamı algılandı. Gözlem: " << insight.observation);
+            
+            // "AI sisteminin anlık güven seviyesi: 0.85" formatından sayıyı çekmek için
+            // Son ":" karakterinden sonraki kısmı alalım
+            size_t last_colon_pos = insight.observation.rfind(":");
+            if (last_colon_pos != std::string::npos && last_colon_pos + 1 < insight.observation.length()) {
+                std::string confidence_str = insight.observation.substr(last_colon_pos + 1);
                 try {
-                    insight_capsule.confidence = std::stof(insight.observation.substr(pos + 1));
+                    insight_capsule.confidence = std::stof(confidence_str); // DÜZELTİLDİ: 'pos' yerine 'confidence_str' kullanıldı.
+                    // Boşlukları temizleyelim ve float'a çevirelim
+                    confidence_str.erase(0, confidence_str.find_first_not_of(" \t\n\r\f\v"));
+                    insight_capsule.confidence = std::stof(confidence_str);
+
+                    // YENİ LOG: Çıkarılan confidence değerini logla
+                    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Gözlemden çıkarılan confidence değeri: " << insight_capsule.confidence);
                     if (insight_capsule.topic != "CodeDevelopment") {
                         insight_capsule.topic = "GraphData";
                         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Grafik verisi için içgörü güveni çıkarıldı ve topic 'GraphData' olarak ayarlandı: " << insight_capsule.confidence);
+                        // YENİ LOG: GraphData için topic ayarlandıktan sonraki confidence'ı logla
+                        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] 'GraphData' topic'li kapsül için son confidence: " << insight_capsule.confidence);
                     } else {
                         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] Grafik verisi içgörüsü, zaten 'CodeDevelopment' topic'ine sahip olduğu için topic değişmedi.");
                     }
                 } catch (const std::exception& e) {
-                    LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] İçgörüden güven değeri çıkarılırken hata: " << e.what());
+                    // Hata durumunda varsayılan bir değer ata veya orijinal urgencyle hesapla
+                    LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "[LearningModule] İçgörüden güven değeri çıkarılırken hata: " << e.what() << ". Varsayılan confidence (0.5) kullanılıyor.");
+                    insight_capsule.confidence = 0.5f; // Hata durumunda varsayılan güven değeri
+                    // Ayrıca urgency'den de bir değer atanabilir.
                 }
             }
         }

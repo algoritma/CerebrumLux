@@ -34,7 +34,10 @@ CerebrumLux::SimulationPanel::SimulationPanel(QWidget *parent)
     this->startSimulationButton = new QPushButton("Simülasyonu Başlat", this);
     controlLayout->addWidget(this->startSimulationButton);
     this->stopSimulationButton = new QPushButton("Simülasyonu Durdur", this);
+    this->stopSimulationButton->setEnabled(false); // Başlangıçta durdurma düğmesi pasif
     controlLayout->addWidget(this->stopSimulationButton);
+    simulationStatusLabel = new QLabel("Durum: Durduruldu", this); // YENİ: Durum etiketi
+    controlLayout->addWidget(simulationStatusLabel);
     mainLayout->addLayout(controlLayout);
 
     connect(this->startSimulationButton, &QPushButton::clicked, this, &CerebrumLux::SimulationPanel::onStartSimulationClicked);
@@ -148,12 +151,18 @@ void CerebrumLux::SimulationPanel::onCommandLineEditReturnPressed() {
 // onStartSimulationClicked slotu
 void CerebrumLux::SimulationPanel::onStartSimulationClicked() {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Start Simulation button clicked.");
+    startSimulationButton->setEnabled(false); // Başlat düğmesini devre dışı bırak
+    stopSimulationButton->setEnabled(true);   // Durdur düğmesini etkinleştir
+    simulationStatusLabel->setText("Durum: Çalışıyor"); // Durumu güncelle
     emit startSimulationTriggered();
 }
 
 // onStopSimulationClicked slotu
 void CerebrumLux::SimulationPanel::onStopSimulationClicked() {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "SimulationPanel: Stop Simulation button clicked.");
+    startSimulationButton->setEnabled(true);  // Başlat düğmesini etkinleştir
+    stopSimulationButton->setEnabled(false); // Durdur düğmesini devre dışı bırak
+    simulationStatusLabel->setText("Durum: Durduruldu"); // Durumu güncelle
     emit stopSimulationTriggered();
 }
 

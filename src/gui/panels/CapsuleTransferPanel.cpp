@@ -66,12 +66,41 @@ void CapsuleTransferPanel::setupUi() {
 }
 
 void CapsuleTransferPanel::displayIngestReport(const IngestReport& report) {
-    QString status = "İşlem Sonucu: " + QString::number(static_cast<int>(report.result)) + "\n";
-    status += "Mesaj: " + QString::fromStdString(report.message) + "\n";
-    status += "Kaynak Eş ID: " + QString::fromStdString(report.source_peer_id) + "\n";
-    status += "Orijinal Kapsül ID: " + QString::fromStdString(report.original_capsule.id) + "\n";
-    status += "    İşlenmiş İçerik (ilk 500 karakter): " + QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)500, report.processed_capsule.content.length()))) + "...\n";
-    reportMessageDisplay->setText(status);
+    QString htmlReport;
+    QString result_str;
+    QString color;
+
+    switch (report.result) {
+        case IngestResult::Success:
+            result_str = "BAŞARILI";
+            color = "#28a745"; // Yeşil
+            break;
+        case IngestResult::InvalidSignature:
+        case IngestResult::DecryptionFailed:
+        case IngestResult::SchemaMismatch:
+        case IngestResult::SteganographyDetected:
+        case IngestResult::SandboxFailed:
+        case IngestResult::CorroborationFailed:
+        case IngestResult::UnknownError:
+            result_str = "HATA";
+            color = "#dc3545"; // Kırmızı
+            break;
+        case IngestResult::SanitizationNeeded:
+            result_str = "UYARI (Temizleme Yapıldı)";
+            color = "#ffc107"; // Sarı
+            break;
+        case IngestResult::Busy:
+            result_str = "UYARI (Meşgul)";
+            color = "#ffc107"; // Sarı
+            break;
+    }
+
+    htmlReport += QString("<p style=\"margin-bottom:0;\"><b><font color=\"%1\">İşlem Sonucu: %2</font></b></p>").arg(color).arg(result_str);
+    htmlReport += QString("<p style=\"margin-left:10px;\"><b>Mesaj:</b> %1</p>").arg(QString::fromStdString(report.message));
+    htmlReport += QString("<p style=\"margin-left:10px;\"><b>Kaynak Eş ID:</b> %1</p>").arg(QString::fromStdString(report.source_peer_id));
+    htmlReport += QString("<p style=\"margin-left:10px;\"><b>Orijinal Kapsül ID:</b> %1</p>").arg(QString::fromStdString(report.original_capsule.id));
+    htmlReport += QString("<p style=\"margin-left:10px;\"><b>İşlenmiş İçerik (ilk 500 karakter):</b> %1...</p>").arg(QString::fromStdString(report.processed_capsule.content.substr(0, std::min((size_t)500, report.processed_capsule.content.length()))));
+    reportMessageDisplay->setHtml(htmlReport);
 
     LogLevel level = (report.result == IngestResult::Success) ? LogLevel::INFO : LogLevel::ERR_CRITICAL;
     LOG_DEFAULT(level, "Kapsül Enjeksiyon Raporu: ID=" << report.original_capsule.id << ", Sonuç=" << static_cast<int>(report.result) << ", Mesaj=" << report.message);

@@ -137,23 +137,38 @@ void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationDa
 
 void MainWindow::updateGui() {
     // Statik NLP metodunu kullanarak embedding alıyoruz.
-    std::vector<float> sim_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("StepSimulation");
+    // YENİ: Embedding'leri bir kez hesaplayıp önbelleğe alabiliriz, her updateGui() çağrısında tekrar hesaplamak yerine.
+    static std::vector<float> sim_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("StepSimulation");
     std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().semantic_search(sim_query_embedding, 100);
     QVector<CerebrumLux::SimulationData> sim_data;
     for (const auto& cap : capsules_for_sim) {
         sim_data.append(convertCapsuleToSimulationData(cap));
     }
     if (simulationPanel) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: SimulationPanel güncelleniyor. Veri noktası sayısı: " << sim_data.size());
         simulationPanel->updateSimulationHistory(sim_data);
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: simulationPanel null. Simülasyon verisi güncellenemedi.");
     }
 
 
-    auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search(CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("GraphData"), 100);
-    QMap<qreal, qreal> graph_data;
+    // YENİ: GraphData embedding'ini bir kez hesaplayıp önbelleğe alıyoruz.
+    static std::vector<float> graph_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("GraphData");
+    auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search(graph_query_embedding, 100);
+     QMap<qreal, qreal> graph_data;
+    qreal min_confidence = std::numeric_limits<qreal>::max();
+    qreal max_confidence = std::numeric_limits<qreal>::lowest();
     for (const auto& cap : capsules_for_graph) {
-        graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), cap.confidence);
+        /*
+        // YENİ LOG: GraphData kapsüllerinin içeriğini kontrol et
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: GraphData Kapsül (ID: " << cap.id
+                    << ", Topic: " << cap.topic << ", Confidence: " << cap.confidence
+                    << ", Timestamp (ms): " << std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count()
+                    << ", Summary: " << cap.plain_text_summary.substr(0, std::min((size_t)50, cap.plain_text_summary.length())) << "...)");
+        */
+        graph_data.insert(std::chrono::duration_cast<std::chrono::milliseconds>(cap.timestamp_utc.time_since_epoch()).count(), static_cast<qreal>(cap.confidence));
+        min_confidence = std::min(min_confidence, static_cast<qreal>(cap.confidence));
+        max_confidence = std::max(max_confidence, static_cast<qreal>(cap.confidence));
     }
     if (graphPanel) {
         graphPanel->updateData("AI Confidence", graph_data);
@@ -163,6 +178,12 @@ void MainWindow::updateGui() {
     }
     
     updateKnowledgeBasePanel();
+    // YENİ: Sadece QTable sekmesi açıksa QTablePanel'i güncelleyelim.
+    // Bu, önceki yanıp sönme sorununu çözmek için yapılmıştı.
+    if (qTablePanel && tabWidget->currentWidget() == qTablePanel) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: QTablePanel aktif, güncelleniyor.");
+        qTablePanel->updateQTableContent();
+    }
 
     LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: GUI güncellendi."); // TRACE seviyesindeki genel log korunuyor
 }
