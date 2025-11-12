@@ -87,7 +87,7 @@ Capsule KnowledgeBase::convert_cryptofig_vector_to_capsule(const SwarmVectorDB::
 // --- KnowledgeBase Implementasyonu ---
 
 KnowledgeBase::KnowledgeBase() 
-    : db_path_("default_lmdb_path"), m_swarm_db(db_path_)
+    : db_path_("../data/CerebrumLux_lmdb_db"), m_swarm_db(db_path_)
 {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Varsayilan kurucu baslatildi. LMDB yolu: " << db_path_);
     if (!m_swarm_db.open()) {

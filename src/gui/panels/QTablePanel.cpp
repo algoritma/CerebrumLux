@@ -3,6 +3,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMap> // QMap<QString, float> için
+#include <QMessageBox> // YENİ EKLENDİ: QMessageBox için
 #include <algorithm> // std::min için
 #include <utility> // std::pair, std::make_pair için
 #include <map> // std::map iteratörleri için
@@ -11,14 +12,35 @@ namespace CerebrumLux {
 
 QTablePanel::QTablePanel(LearningModule& learningModuleRef, QWidget *parent)
     : QWidget(parent),
-      learningModule(learningModuleRef)
+      learningModule(learningModuleRef),
+      splitter(nullptr), stateListWidget(nullptr), qValueDetailDisplay(nullptr),
+      searchLineEdit(nullptr), clearSearchButton(nullptr)
 {
     setupUi();
+
+    qTableWorker = new QTableWorker(learningModule, nullptr); // Worker'ın parent'ı yok.
+    qTableWorker->moveToThread(&workerThread);
+    connect(&workerThread, &QThread::finished, qTableWorker, &QObject::deleteLater);
+    connect(qTableWorker, &QTableWorker::qTableContentFetched, this, &QTablePanel::handleQTableContentFetched);
+    connect(qTableWorker, &QTableWorker::workerError, this, &QTablePanel::handleWorkerError);
+
+    connect(this, &QTablePanel::requestFetchQTableContent,
+            qTableWorker, &QTableWorker::fetchQTableContent,
+            Qt::QueuedConnection);
+
+    workerThread.start();
     LOG_DEFAULT(LogLevel::INFO, "QTablePanel: Initialized.");
-    updateQTableContent(); // Başlangıçta içeriği yükle
+    applyFiltersAndFetchData();
 }
 
 QTablePanel::~QTablePanel() {
+    workerThread.quit();
+    workerThread.wait(1000);
+    if (workerThread.isRunning()) {
+        workerThread.terminate();
+        workerThread.wait(500);
+    }
+    delete qTableWorker;
     LOG_DEFAULT(LogLevel::INFO, "QTablePanel: Destructor called.");
 }
 
@@ -59,22 +81,49 @@ void QTablePanel::setupUi() {
 
 void QTablePanel::updateQTableContent() {
     LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: Q-Table içeriği güncelleniyor.");
-    
-    QString selectedStateKey;
-    if (stateListWidget->currentItem()) {
-        selectedStateKey = stateListWidget->currentItem()->data(Qt::UserRole).toString();
+    applyFiltersAndFetchData();
+}
+
+void QTablePanel::handleQTableContentFetched(const std::vector<CerebrumLux::SwarmVectorDB::EmbeddingStateKey>& all_q_state_keys,
+                                             const std::map<QString, QTableDisplayData>& displayed_q_table_details,
+                                             const QString& restoreSelectionStateKey) {
+    LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: Worker'dan Q-Table verileri alindi. Toplam durum: " << all_q_state_keys.size());
+
+    currentQStateKeys = all_q_state_keys;
+    displayedQTableDetails = displayed_q_table_details;
+
+    //stateListWidget->clear();
+    // DÜZELTİLDİ: DEBUG AMAÇLI HER ZAMAN TEMİZLEME.
+    // Liste boş görünüyorsa, öğelerin görüntülenip görüntülenmediğini test etmek için her seferinde temizliyoruz.
+    // Bu kodu ileride tekrar akıllı temizleme mantığına geri almanız gerekebilir.
+        stateListWidget->clear();
+
+    for (const auto& pair : displayed_q_table_details) {
+        QString stateKey = pair.first;
+        const QTableDisplayData& data = pair.second;
+
+        QString itemText = QString("Durum Anahtarı: %1 | Eylem Sayısı: %2")
+                            .arg(stateKey.left(50) + "...")
+                            .arg(data.actionQValues.size());
+ 
+        // YENİ EKLENDİ: itemText içeriğini logla
+        LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: Eklenen liste öğesi metni: '" << itemText.toStdString() << "'");
+        LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: stateKey'in ilk 50 karakteri: '" << stateKey.left(50).toStdString() << "'");
+        LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: data.actionQValues.size(): " << data.actionQValues.size());
+
+        // DÜZELTİLDİ: Qt::MatchUserRole hatası giderildi.
+        // Öğenin user role verisini kontrol etmek için manuel bir döngüye ihtiyaç var.
+            QListWidgetItem *item = new QListWidgetItem(itemText);
+            item->setData(Qt::UserRole, stateKey);
+            stateListWidget->addItem(item);
     }
 
-    currentQStateKeys = learningModule.getKnowledgeBase().get_swarm_db().get_all_keys_for_dbi(learningModule.getKnowledgeBase().get_swarm_db().q_values_dbi());
-    
-    filterAndDisplayStates(searchLineEdit->text()); // Mevcut filtreyle listeyi güncelle
-
     // Seçimi geri yükle
-    if (!selectedStateKey.isEmpty()) {
+    if (!restoreSelectionStateKey.isEmpty()) {
         QListWidgetItem *itemToSelect = nullptr;
         for (int i = 0; i < stateListWidget->count(); ++i) {
             QListWidgetItem *item = stateListWidget->item(i);
-            if (item->data(Qt::UserRole).toString() == selectedStateKey) {
+            if (item->data(Qt::UserRole).toString() == restoreSelectionStateKey) {
                 itemToSelect = item;
                 break;
             }
@@ -87,7 +136,12 @@ void QTablePanel::updateQTableContent() {
     } else {
         qValueDetailDisplay->clear();
     }
-    LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: Q-Table içeriği güncellendi. Toplam durum: " << currentQStateKeys.size());
+    LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: Q-Table içeriği GUI'de güncellendi. Toplam listelenen durum: " << stateListWidget->count());
+}
+
+void QTablePanel::handleWorkerError(const QString& error_message) {
+    LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "QTablePanel: Worker hatası: " << error_message.toStdString());
+    QMessageBox::critical(this, "Hata", "Q-Table verisi çekme sırasında bir hata oluştu: " + error_message);
 }
 
 void QTablePanel::onSelectedStateChanged(QListWidgetItem* current, QListWidgetItem* previous) {
@@ -109,12 +163,12 @@ void QTablePanel::onSelectedStateChanged(QListWidgetItem* current, QListWidgetIt
 }
 
 void QTablePanel::onSearchTextChanged(const QString& text) {
-    filterAndDisplayStates(text);
+    applyFiltersAndFetchData();
 }
 
 void QTablePanel::onClearSearchClicked() {
     searchLineEdit->clear();
-    filterAndDisplayStates();
+    applyFiltersAndFetchData();
 }
 
 void QTablePanel::displayQValueDetails(const QTableDisplayData& data) {
@@ -123,10 +177,9 @@ void QTablePanel::displayQValueDetails(const QTableDisplayData& data) {
     details += "<b>Durum Anahtarı (Kısmi):</b> " + data.stateKey.left(100) + "...<br><br>";
     details += "<b>Eylem Q-Değerleri:</b><br>";
 
-    // DÜZELTİLDİ: std::map iteratörlerinin first ve second üyeleri kullanıldı.
     QList<std::pair<QString, float>> sortedQValues;
     for (auto it = data.actionQValues.begin(); it != data.actionQValues.end(); ++it) {
-        sortedQValues.append(std::make_pair(it->first, it->second)); // DÜZELTİLDİ: it->first ve it->second kullanıldı.
+        sortedQValues.append(std::make_pair(it->first, it->second));
     }
     std::sort(sortedQValues.begin(), sortedQValues.end(), [](const std::pair<QString, float>& a, const std::pair<QString, float>& b) {
         return a.second > b.second; // Azalan sırada sırala
@@ -139,47 +192,11 @@ void QTablePanel::displayQValueDetails(const QTableDisplayData& data) {
     qValueDetailDisplay->setHtml(details);
 }
 
-void QTablePanel::filterAndDisplayStates(const QString& filterText) {
-    stateListWidget->clear();
-    displayedQTableDetails.clear();
+void QTablePanel::applyFiltersAndFetchData() {
+    QString selectedStateKey;
+    if (stateListWidget->currentItem()) { selectedStateKey = stateListWidget->currentItem()->data(Qt::UserRole).toString(); }
 
-    LOG_DEFAULT(LogLevel::TRACE, "QTablePanel: Durum anahtarı filtreleme baslatildi. Toplam anahtar: " << currentQStateKeys.size() << ", Filtre Metni: '" << filterText.toStdString() << "'");
-
-    for (const auto& state_key_std_str : currentQStateKeys) {
-        QString stateKey = QString::fromStdString(state_key_std_str);
-
-        bool matchesSearch = (filterText.isEmpty() || stateKey.contains(filterText, Qt::CaseInsensitive));
-        if (!matchesSearch) {
-            continue;
-        }
-
-        // Q-Table'dan ilgili durumun eylem-Q değerlerini çek
-        auto action_map_json_str_opt = learningModule.getKnowledgeBase().get_swarm_db().get_q_value_json(state_key_std_str);
-
-        if (action_map_json_str_opt) {
-            try {
-                nlohmann::json action_map_json = nlohmann::json::parse(*action_map_json_str_opt);
-                
-                QTableDisplayData data;
-                data.stateKey = stateKey;
-                for (nlohmann::json::const_iterator action_it = action_map_json.begin(); action_it != action_map_json.end(); ++action_it) {
-                    data.actionQValues[QString::fromStdString(action_it.key())] = action_it.value().get<float>();
-                }
-                displayedQTableDetails[stateKey] = data;
-
-                QString itemText = QString("Durum Anahtarı: %1 | Eylem Sayısı: %2")
-                                    .arg(stateKey.left(50) + "...") // Kısmi görünüm
-                                    .arg(data.actionQValues.size());
-                
-                QListWidgetItem *item = new QListWidgetItem(itemText);
-                item->setData(Qt::UserRole, stateKey);
-                stateListWidget->addItem(item);
-            } catch (const nlohmann::json::exception& e) {
-                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "QTablePanel: JSON ayrıştırma hatası (filterAndDisplayStates): " << e.what() << ". StateKey (kısmi): " << stateKey.toStdString().substr(0, 50) << "...");
-            }
-        }
-    }
-    LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: filterAndDisplayStates tamamlandi. Toplam listelenen durum: " << stateListWidget->count());
+    emit requestFetchQTableContent(searchLineEdit->text(), selectedStateKey);
 }
 
 } // namespace CerebrumLux

@@ -21,6 +21,7 @@ public:
     void add_item(const std::vector<float>& features, hnswlib::labeltype label);
     std::vector<hnswlib::labeltype> search_knn(const std::vector<float>& query, int k);
     size_t get_current_elements() const;
+    int get_dim() const { return dim_; } // YENİ: Dimension getter
 
 private:
     int dim_;

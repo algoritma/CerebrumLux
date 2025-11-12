@@ -98,12 +98,13 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     guiUpdateTimer = new QTimer(this);
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
     guiUpdateTimer->start(1000);
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms).");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms). [Tüm panelleri etkiler]");
 
-    // YENİ: QTablePanel'i düzenli olarak güncellemek için
-    connect(guiUpdateTimer, &QTimer::timeout, qTablePanel, &CerebrumLux::QTablePanel::updateQTableContent);
-    // DÜZELTİLDİ: KnowledgeBasePanel'i de düzenli olarak güncellemek için
-    connect(guiUpdateTimer, &QTimer::timeout, knowledgeBasePanel, &CerebrumLux::KnowledgeBasePanel::updateKnowledgeBaseContent);
+    // DÜZELTİLDİ: KnowledgeBasePanel ve QTablePanel güncellemelerini ayrı zamanlayıcılara taşıyabiliriz
+    // veya updateGui() içinde daha kontrollü çağırabiliriz. Şimdilik bu bağlantıları kaldırıyoruz.
+    // qTablePanel ve knowledgeBasePanel, updateGui() içinde gerektiğinde çağrılacak.
+    // connect(guiUpdateTimer, &QTimer::timeout, qTablePanel, &CerebrumLux::QTablePanel::updateQTableContent); // KALDIRILDI
+    // connect(guiUpdateTimer, &QTimer::timeout, knowledgeBasePanel, &CerebrumLux::KnowledgeBasePanel::updateKnowledgeBaseContent); // KALDIRILDI
 
     // DÜZELTİLDİ: İlk güncelleme çağrısını burada yapıyoruz
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");

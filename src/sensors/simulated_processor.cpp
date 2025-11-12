@@ -11,7 +11,7 @@ namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
 CerebrumLux::SimulatedAtomicSignalProcessor::SimulatedAtomicSignalProcessor()
     : is_capturing(false),
-      generator(CerebrumLux::SafeRNG::get_instance().get_generator()),
+      generator(CerebrumLux::SafeRNG::getInstance().get_generator()),
       distrib_app_id(0, 4), // 5 farklı uygulama simülasyonu
       keyboard_chars({'a', 'b', 'c', 'd', 'e', ' ', '\n', '\t'}),
       distrib_keyboard_char(0, keyboard_chars.size() - 1),
@@ -57,7 +57,7 @@ CerebrumLux::AtomicSignal CerebrumLux::SimulatedAtomicSignalProcessor::create_ke
     signal.type = CerebrumLux::SensorType::Keyboard;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
     signal.value = std::string(1, ch);
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.7f, 1.0f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.7f, 1.0f);
 
     if (std::isalnum(static_cast<unsigned char>(ch))) {
         signal.key_type = CerebrumLux::KeyType::Alphanumeric;
@@ -161,10 +161,10 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_mouse_event()
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Mouse;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.6f, 0.9f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.6f, 0.9f);
 
-    signal.mouse_x = CerebrumLux::SafeRNG::get_instance().get_int(0, 1920);
-    signal.mouse_y = CerebrumLux::SafeRNG::get_instance().get_int(0, 1080);
+    signal.mouse_x = CerebrumLux::SafeRNG::getInstance().get_int(0, 1920);
+    signal.mouse_y = CerebrumLux::SafeRNG::getInstance().get_int(0, 1080);
     signal.mouse_delta_x = distrib_mouse_delta(generator);
     signal.mouse_delta_y = distrib_mouse_delta(generator);
     
@@ -183,7 +183,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_display_event
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Display;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.8f, 1.0f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.8f, 1.0f);
     
     int status = distrib_display_status(generator);
     if (status == 0) {
@@ -203,7 +203,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_battery_event
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Battery;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.7f, 1.0f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.7f, 1.0f);
     
     signal.system_event_type = "BatteryLevel";
     signal.network_activity_level = distrib_battery_level(generator);
@@ -216,9 +216,9 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_network_event
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Network;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.5f, 0.9f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.5f, 0.9f);
 
-    signal.current_network_active = (CerebrumLux::SafeRNG::get_instance().get_int(0, 1) == 1);
+    signal.current_network_active = (CerebrumLux::SafeRNG::getInstance().get_int(0, 1) == 1);
     signal.network_activity_level = distrib_network_activity(generator);
     signal.network_protocol = network_protocols[distrib_network_protocol(generator)];
     signal.value = signal.network_protocol + ":" + std::to_string(signal.network_activity_level);
@@ -230,7 +230,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_microphone_ev
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Microphone;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.3f, 0.8f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.3f, 0.8f);
     
     signal.value = "Simulated Audio Clip Hash: " + generate_random_string(16);
     return signal;
@@ -241,7 +241,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_camera_event(
     signal.id = generate_random_string(8);
     signal.type = CerebrumLux::SensorType::Camera;
     signal.timestamp_us = CerebrumLux::get_current_timestamp_us();
-    signal.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.3f, 0.8f);
+    signal.confidence = CerebrumLux::SafeRNG::getInstance().get_float(0.3f, 0.8f);
     
     signal.value = "Simulated Image Hash: " + generate_random_string(16);
     return signal;
@@ -252,12 +252,12 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_system_event(
     signal.id = generate_random_string(8);
     signal.type = SensorType::SystemEvent;
     signal.timestamp_us = get_current_timestamp_us();
-    signal.confidence = SafeRNG::get_instance().get_float(0.8f, 1.0f);
+    signal.confidence = SafeRNG::getInstance().get_float(0.8f, 1.0f);
 
     std::uniform_int_distribution<int> event_dist(0, 2);
     switch (event_dist(generator)) {
-        case 0: signal.system_event_type = "OS_STATUS_UPDATE"; signal.system_event_data = "CPU: " + std::to_string(SafeRNG::get_instance().get_int(10, 90)) + "%, RAM: " + std::to_string(SafeRNG::get_instance().get_int(20, 80)) + "%"; break;
-        case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(CerebrumLux::SafeRNG::get_instance().get_int(5, 20)) + "%"; break;
+        case 0: signal.system_event_type = "OS_STATUS_UPDATE"; signal.system_event_data = "CPU: " + std::to_string(SafeRNG::getInstance().get_int(10, 90)) + "%, RAM: " + std::to_string(SafeRNG::getInstance().get_int(20, 80)) + "%"; break;
+        case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(CerebrumLux::SafeRNG::getInstance().get_int(5, 20)) + "%"; break;
         case 2: signal.system_event_type = "APPLICATION_CRASH"; signal.system_event_data = "App 'X' crashed."; break;
     }
     signal.value = signal.system_event_type;
@@ -270,7 +270,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_internal_ai_e
     signal.id = generate_random_string(8);
     signal.type = SensorType::InternalAI;
     signal.timestamp_us = get_current_timestamp_us();
-    signal.confidence = SafeRNG::get_instance().get_float(0.4f, 1.0f);
+    signal.confidence = SafeRNG::getInstance().get_float(0.4f, 1.0f);
 
     std::uniform_int_distribution<int> event_dist(0, 2);
     switch (event_dist(generator)) {
@@ -288,7 +288,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_application_c
     signal.id = generate_random_string(8);
     signal.type = SensorType::SystemEvent; 
     signal.timestamp_us = get_current_timestamp_us();
-    signal.confidence = SafeRNG::get_instance().get_float(0.8f, 1.0f);
+    signal.confidence = SafeRNG::getInstance().get_float(0.8f, 1.0f);
 
     std::vector<std::string> apps = {"VSCode", "Chrome", "Photoshop", "Unity3D", "Spotify"};
     std::uniform_int_distribution<int> app_dist(0, apps.size() - 1);
@@ -304,9 +304,9 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_eye_tracker_e
     signal.id = generate_random_string(8);
     signal.type = SensorType::EyeTracker;
     signal.timestamp_us = get_current_timestamp_us();
-    signal.confidence = SafeRNG::get_instance().get_float(0.6f, 1.0f);
-    signal.mouse_x = SafeRNG::get_instance().get_int(0, 1920);
-    signal.mouse_y = SafeRNG::get_instance().get_int(0, 1080);
+    signal.confidence = SafeRNG::getInstance().get_float(0.6f, 1.0f);
+    signal.mouse_x = SafeRNG::getInstance().get_int(0, 1920);
+    signal.mouse_y = SafeRNG::getInstance().get_int(0, 1080);
     signal.value = "Gaze X:" + std::to_string(signal.mouse_x) + ", Y:" + std::to_string(signal.mouse_y);
     return signal;
 }
@@ -316,12 +316,12 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_bio_sensor_ev
     signal.id = generate_random_string(8);
     signal.type = SensorType::BioSensor;
     signal.timestamp_us = get_current_timestamp_us();
-    signal.confidence = SafeRNG::get_instance().get_float(0.5f, 1.0f);
+    signal.confidence = SafeRNG::getInstance().get_float(0.5f, 1.0f);
     std::uniform_int_distribution<int> bio_type_dist(0, 1);
     if (bio_type_dist(generator) == 0) {
-        signal.value = "HeartRate:" + std::to_string(SafeRNG::get_instance().get_int(60, 120));
+        signal.value = "HeartRate:" + std::to_string(SafeRNG::getInstance().get_int(60, 120));
     } else {
-        signal.value = "SkinConductance:" + std::to_string(SafeRNG::get_instance().get_float(0.1f, 5.0f));
+        signal.value = "SkinConductance:" + std::to_string(SafeRNG::getInstance().get_float(0.1f, 5.0f));
     }
     return signal;
 }
@@ -331,7 +331,7 @@ std::string CerebrumLux::SimulatedAtomicSignalProcessor::generate_random_string(
     std::string s = "";
     s.reserve(length);
     for (size_t i = 0; i < length; ++i) {
-        s += CHARS[CerebrumLux::SafeRNG::get_instance().get_int(0, CHARS.length() - 1)];
+        s += CHARS[CerebrumLux::SafeRNG::getInstance().get_int(0, CHARS.length() - 1)];
     }
     return s;
 }

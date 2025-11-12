@@ -100,8 +100,7 @@ private:
     void setupUi();
     void updateRelatedCapsules(const std::string& current_capsule_id, const std::vector<float>& current_capsule_embedding);
     void displayCapsuleDetails(const KnowledgeCapsuleDisplayData& data);
-    void applyFiltersAndFetchData(); // YENİ EKLENDİ: Tekrar tanımlama hatası olmaması için sadece deklarasyon.
-    // DÜZELTİLDİ: filterAndDisplayCapsules metodu artık doğrudan worker'a sinyal emit ediyor.
+    void applyFiltersAndFetchData();
     void filterAndDisplayCapsules(const QString& filterText = QString(),
                                   const QString& topicFilter = QString(),
                                   const QDate& startDate = QDate(),

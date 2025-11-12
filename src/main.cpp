@@ -1,5 +1,3 @@
-
-
 #ifdef _WIN32
 #include <Windows.h>
 #endif
@@ -13,8 +11,6 @@
 #include <iomanip>
 #include <sstream>
 
-
-
 #include "gui/MainWindow.h"
 #include "gui/engine_integration.h"
 #include "gui/panels/LogPanel.h"
@@ -24,8 +20,8 @@
 
 #include "sensors/atomic_signal.h"
 #include "core/enums.h"
-#include "core/utils.h"
-#include "core/logger.h"
+#include "core/utils.h" // YENİ EKLENDİ: SafeRNG için (getInstance, shutdown metodları için)
+#include "core/logger.h" // YENİ EKLENDİ: Logger için (getInstance, shutdown metodları için)
 #include "sensors/simulated_processor.h" // SimulatedAtomicSignalProcessor için
 #include "data_models/sequence_manager.h"
 #include "brain/intent_analyzer.h"
@@ -45,15 +41,9 @@
 #include "learning/Capsule.h"
 
 
-void customQtMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
-{
-    std::string source_file = context.file ? context.file : "unknown";
- 
-}
-
-
 int main(int argc, char *argv[])
 {
+    // Erken teşhis log dosyası (QApplication başlatılmadan önceki hataları yakalamak için)
     std::ofstream early_diagnostic_log("cerebrum_lux_early_diagnostic.log", std::ios_base::app);
     if (early_diagnostic_log.is_open()) {
         early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] main function entered." << std::endl;
@@ -66,8 +56,7 @@ int main(int argc, char *argv[])
 
     qRegisterMetaType<CerebrumLux::IngestResult>("CerebrumLux::IngestResult");
     qRegisterMetaType<CerebrumLux::IngestReport>("CerebrumLux::IngestReport");
-    // qRegisterMetaType<std::vector<CerebrumLux::WebSearchResult>>("std::vector<CerebrumLux::WebSearchResult>"); // Artık web_search_result.h içinde
-
+    
     // Logger başlat ve yapılandır
     CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::DEBUG, "cerebrum_lux_gui_log.txt", "MAIN_APP");
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Application starting up. Standard streams (cout/cerr) will output to console.");
@@ -75,8 +64,6 @@ int main(int argc, char *argv[])
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] QApplication initialized. Logger ready (buffered)." << std::endl;
     early_diagnostic_log.flush();
-
-    qInstallMessageHandler(customQtMessageHandler);
 
     // --- AI motoru bileşenleri ---
     CerebrumLux::SequenceManager sequenceManager;
@@ -106,7 +93,9 @@ int main(int argc, char *argv[])
     early_diagnostic_log.flush();
 
     CerebrumLux::KnowledgeBase kb;
-    CerebrumLux::NaturalLanguageProcessor nlp(goal_manager, kb); // YENİ: kb referansı eklendi
+    //CerebrumLux::KnowledgeBase kb("data/CerebrumLux_lmdb_db"); // Veritabanı dosyalarını projenin kök dizinindeki 'data' klasörüne kaydet
+
+    CerebrumLux::NaturalLanguageProcessor nlp(goal_manager, kb);
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] NaturalLanguageProcessor init complete." << std::endl;
     early_diagnostic_log.flush();
 
@@ -121,46 +110,11 @@ int main(int argc, char *argv[])
     early_diagnostic_log.flush();
 
     // --- Learning Module ---
-    //CerebrumLux::KnowledgeBase kb; // ORİJİNAL KONUM: Bu satır taşındı.
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase created. Will load after GUI shows." << std::endl;
     early_diagnostic_log.flush();
-    // kb.import_from_json("knowledge.json"); // Moved to MainWindow for async loading
-    CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app); // YENİ: &app parent olarak eklendi
+    //CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app);
+    CerebrumLux::LearningModule learning_module(kb, cryptoManager, nullptr); // YENİ DÜZELTME: Parent'ı nullptr yaparak manuel yıkımı sağlayın
 
-    /*
-    // YENİ KOD: Örnek "StepSimulation" kapsülleri ekle (KnowledgeBase'i beslemek için)
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase'e örnek 'StepSimulation' kapsülleri ekleniyor.");
-    for (int i = 0; i < 5; ++i) { // 5 adet örnek kapsül
-        CerebrumLux::Capsule sim_capsule;
-        sim_capsule.id = "StepSimulation_" + std::to_string(CerebrumLux::get_current_timestamp_us()) + "_" + std::to_string(i);
-        sim_capsule.topic = "StepSimulation";
-        sim_capsule.source = "SimulatedEngine";
-        sim_capsule.confidence = CerebrumLux::SafeRNG::get_instance().get_float(0.5f, 1.0f); // Rastgele güven değeri
-        sim_capsule.plain_text_summary = "Simulasyon adimi " + std::to_string(i) + " tamamlandi. Simule edilen etki...";
-        sim_capsule.content = sim_capsule.plain_text_summary;
-
-        // Geçmişe yönelik zaman damgaları ekleyelim (grafikte görülebilmesi için)
-        auto now_tp = std::chrono::system_clock::now();
-        sim_capsule.timestamp_utc = now_tp - std::chrono::minutes(i * 5); // Her kapsül 5 dakika arayla
-
-        // Rastgele bir kriptofig vektörü oluştur
-        sim_capsule.embedding.resize(CerebrumLux::CryptofigAutoencoder::INPUT_DIM); // 'embedding' alanı kullanıldı
-        for (size_t j = 0; j < CerebrumLux::CryptofigAutoencoder::INPUT_DIM; ++j) { // 'embedding' alanı dolduruldu
-            sim_capsule.embedding[j] = CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f);
-        }
-        
-        // Gömme vektörünü de dolduralım
-        // Cryptofig_blob_base64 alanını da dolduralım (JSON serileştirme için gerekli olabilir)
-        // Gerçek bir base64 dönüşümü yerine, şimdilik basit bir placeholder string kullanabiliriz
-        sim_capsule.cryptofig_blob_base64 = "simulated_cryptofig_base64_" + std::to_string(i);
-
-        kb.add_capsule(sim_capsule);
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: 'StepSimulation' kapsülü eklendi: " << sim_capsule.id);
-    }
-    kb.export_to_json("knowledge.json");
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Örnek 'StepSimulation' kapsülleri KnowledgeBase'e eklendi ve kaydedildi.");
-    */
-   
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Learning Module initialized." << std::endl;
     early_diagnostic_log.flush();
 
@@ -176,7 +130,7 @@ int main(int argc, char *argv[])
     CerebrumLux::MetaEvolutionEngine meta_engine(
         analyzer,
         learner,
-        predictor, // prediction_engine yerine predictor kullanıldı
+        predictor,
         goal_manager,
         cryptofig_processor,
         insights_engine,
@@ -186,7 +140,6 @@ int main(int argc, char *argv[])
     early_diagnostic_log.flush();
 
     // --- GUI entegrasyonu ---
-    //    CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb);
     CerebrumLux::EngineIntegration integration(meta_engine, sequenceManager, learning_module, kb, nlp, goal_manager, responder);
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] EngineIntegration initialized." << std::endl;
     early_diagnostic_log.flush();
@@ -201,30 +154,25 @@ int main(int argc, char *argv[])
     // Asenkron FastText model ve KnowledgeBase yüklemesini tetikle
     QTimer::singleShot(100, [&]() { // GUI açıldıktan kısa bir süre sonra
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Asenkron KnowledgeBase ve FastText model yüklemesi başlatılıyor.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller yukleniyor...");
         kb.import_from_json("knowledge.json");
-        CerebrumLux::NaturalLanguageProcessor::load_fasttext_models(); // FastText yüklemesi artık burada tetikleniyor
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller yuklendi.");
+        CerebrumLux::NaturalLanguageProcessor::load_fasttext_models();
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase ve FastText model yükleme işlemleri başlatıldı (asenkron).");
-        // KB yüklendikten sonra KnowledgeBasePanel'i güncelleyelim.
         if (window.getKnowledgeBasePanel()) {
             window.getKnowledgeBasePanel()->updateKnowledgeBaseContent();
         } else {
-            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: KnowledgeBasePanel NULL. KB içeriği güncellenemedi.");
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::WARNING, "MAIN_APP: KnowledgeBasePanel null. KB içeriği güncellenemedi.");
         }
     });
     
-    // LogPanel'in kendisi Logger'a bağlanacağı için, burada set_log_panel_text_edit gibi ekstra bir işlem yapmaya gerek yok.
-    // LogPanel constructor'ı içindeki `connect` çağrısı yeterlidir.
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "GUI LogPanel will connect to Logger signals for display."); // Yeni log
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "GUI LogPanel will connect to Logger signals for display.");
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] GUI LogPanel setup for Logger signals." << std::endl;
     early_diagnostic_log.flush();
 
-    // --- LearningModule::ingest_envelope Test Senaryoları bloğu hala yorum satırında ---
-    /* (Bu blok, ayrı bir test executable'ına taşındı) */
-
-    // --- Engine döngüsü QTimer bloğu ---
-    QTimer* engineTimer = new QTimer(&app); // Heap üzerinde oluşturuldu ve parent olarak app verildi.
+    QTimer* engineTimer = new QTimer(&app);
     QObject::connect(engineTimer, &QTimer::timeout, [&](){
-        try { // meta_engine.run_meta_evolution_cycle() çağrısını try-catch bloğu ile sarmalıyoruz
+        try {
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: Meta-evolution cycle başlatılıyor.");
             meta_engine.run_meta_evolution_cycle(sequenceManager.get_current_sequence_ref());
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: Meta-evolution cycle tamamlandı.");
@@ -234,22 +182,14 @@ int main(int argc, char *argv[])
             LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: Meta-evolution cycle sirasinda bilinmeyen bir hata olustu.");
         }
     });
-    engineTimer->start(1000); // 1 saniye döngü
+    engineTimer->start(1000);
 
-
-    // --- Yeni Eklenti: Simülasyon Sinyal Üretimi ---
     CerebrumLux::SimulatedAtomicSignalProcessor simulated_sensor_processor;
-    QTimer* signalCaptureTimer = new QTimer(&app); // Heap üzerinde oluşturuldu ve parent olarak app verildi.
+    QTimer* signalCaptureTimer = new QTimer(&app);
     QObject::connect(signalCaptureTimer, &QTimer::timeout, [&]() {
         try {
             CerebrumLux::AtomicSignal signal = simulated_sensor_processor.capture_next_signal();
-            // signal.id'yi burada bir counter ile güncelleyebiliriz veya simulated_sensor_processor içinde yönetebiliriz.
-            // Örneğin: signal.id = "sim_signal_" + std::to_string(CerebrumLux::get_current_timestamp_us()); 
-            
-            // Loglama ekliyoruz
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: Simüle sinyal yakalandı. Type: " << CerebrumLux::sensor_type_to_string(signal.type) << ", Value: " << signal.value);
-            
-            // SequenceManager'a sinyali ekle
             sequenceManager.add_signal(signal, cryptofig_processor);
             
         } catch (const std::exception& e) {
@@ -258,7 +198,7 @@ int main(int argc, char *argv[])
             LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: Sinyal yakalama sirasinda bilinmeyen bir hata olustu.");
         }
     });
-    signalCaptureTimer->start(500); // Her 500 ms'de bir simüle sinyal yakala
+    signalCaptureTimer->start(500);
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Entering QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
@@ -267,16 +207,13 @@ int main(int argc, char *argv[])
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Exiting QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
-
-    //kb.export_to_json("knowledge.json");
-    // KALDIRILDI: Artık otomatik olarak JSON'a aktarmıyoruz. KnowledgeBase destructor'i LMDB'yi kapatır.
-
-    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Application exited with code: " << result << std::endl;
-    early_diagnostic_log.close();
     
-    // Heap üzerinde oluşturulan timer'lar app'e parent olarak verildiği için otomatik silinecektir.
-    // delete engineTimer;
-    // delete signalCaptureTimer;
+    // DÜZELTİLDİ: Singleton'ların shutdown metodları çağrıldı.
+    // YENİ DÜZELTME: LearningModule'ün Q-Table'ını Logger kapatılmadan önce kaydet.
+    // Eğer LearningModule'ün yıkıcısı çağrılmıyorsa, burada manuel olarak kaydedilir.
+    learning_module.save_q_table(); 
+    CerebrumLux::Logger::getInstance().shutdown();
+    CerebrumLux::SafeRNG::getInstance().shutdown(); // get_instance yerine getInstance kullanıldı
 
     return result;
 }

@@ -26,6 +26,14 @@ Logger::~Logger() {
     }
 }
 
+// YENİ EKLENDİ: shutdown metodu
+void Logger::shutdown() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (log_file_.is_open()) {
+        log_file_.close();
+    }
+}
+
 // LogLevel'ı string'e dönüştürür
 std::string Logger::level_to_string(LogLevel level) const {
     switch (level) {

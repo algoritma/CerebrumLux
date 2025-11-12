@@ -66,7 +66,7 @@ void SequenceManager::update_current_sequence(CryptofigProcessor& cryptofig_proc
     current_sequence.statistical_features_vector.clear();
     // Örnek: Rastgele veya dummy verilerle dolduralım şimdilik
     for (int i = 0; i < CryptofigAutoencoder::INPUT_DIM; ++i) {
-        current_sequence.statistical_features_vector.push_back(SafeRNG::get_instance().get_float(0.0f, 1.0f));
+        current_sequence.statistical_features_vector.push_back(SafeRNG::getInstance().get_float(0.0f, 1.0f));
     }
     LOG_DEFAULT(LogLevel::DEBUG, "SequenceManager::update_current_sequence: statistical_features_vector boyutu: " << current_sequence.statistical_features_vector.size());
 

@@ -26,6 +26,9 @@ public:
     // Logger'ı başlatır. Sadece bir kez çağrılmalı.
     void init(LogLevel level, const std::string& log_file_path = "", const std::string& log_source = "SYSTEM");
 
+    // Logger'ı güvenli bir şekilde kapatır ve kaynakları serbest bırakır.
+    void shutdown();
+
     // Mesajı loglar
     void log(LogLevel level, const std::string& message, const char* file, int line);
     void log_error_to_cerr(LogLevel level, const std::string& message, const char* file, int line);

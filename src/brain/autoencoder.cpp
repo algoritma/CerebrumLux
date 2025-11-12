@@ -30,10 +30,10 @@ void CryptofigAutoencoder::initialize_weights() { // Unified initialization meth
     decoder_bias.resize(INPUT_DIM);
 
     // Use the declared member variables, not _1 suffixed ones
-    for (size_t i = 0; i < encoder_weights.size(); ++i) encoder_weights[i] = dist(SafeRNG::get_instance().get_generator());
-    for (size_t i = 0; i < encoder_bias.size(); ++i) encoder_bias[i] = dist(SafeRNG::get_instance().get_generator());
-    for (size_t i = 0; i < decoder_weights.size(); ++i) decoder_weights[i] = dist(SafeRNG::get_instance().get_generator());
-    for (size_t i = 0; i < decoder_bias.size(); ++i) decoder_bias[i] = dist(SafeRNG::get_instance().get_generator());
+    for (size_t i = 0; i < encoder_weights.size(); ++i) encoder_weights[i] = dist(SafeRNG::getInstance().get_generator());
+    for (size_t i = 0; i < encoder_bias.size(); ++i) encoder_bias[i] = dist(SafeRNG::getInstance().get_generator());
+    for (size_t i = 0; i < decoder_weights.size(); ++i) decoder_weights[i] = dist(SafeRNG::getInstance().get_generator());
+    for (size_t i = 0; i < decoder_bias.size(); ++i) decoder_bias[i] = dist(SafeRNG::getInstance().get_generator());
 
     LOG_DEFAULT(LogLevel::INFO, "CryptofigAutoencoder: Agirliklar rastgele baslatildi.");
 }

@@ -3,13 +3,20 @@
 
 #include <QString>
 #include <QVector> // QVector için
+#include <map>
 
-namespace CerebrumLux { // SimulationData struct'ı bu namespace içine alınacak
+namespace CerebrumLux {
 
 struct SimulationData {
     QString id;
     double value;
     long long timestamp; // Unix epoch saniye olarak
+};
+
+// Q-Table detaylarını görüntülemek için yardımcı bir yapı
+struct QTableDisplayData {
+    QString stateKey;
+    std::map<QString, float> actionQValues; // Eylem adı -> Q-Value
 };
 
 } // namespace CerebrumLux

@@ -145,7 +145,7 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
 
         // Epsilon-greedy stratejisi
         float epsilon = 0.2f; // Keşif oranı (örneğin %20)
-        if (CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f) < epsilon) {
+        if (CerebrumLux::SafeRNG::getInstance().get_float(0.0f, 1.0f) < epsilon) {
             // Exploration: Rastgele bir eylem seç
             std::vector<CerebrumLux::AIAction> possible_actions = {
                 CerebrumLux::AIAction::RespondToUser,
@@ -163,7 +163,7 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
                 CerebrumLux::AIAction::SuggestResearch,
                 CerebrumLux::AIAction::MaximizeLearning
             };
-            int random_index = static_cast<int>(CerebrumLux::SafeRNG::get_instance().get_float(0.0f, static_cast<float>(possible_actions.size() - 1)));
+            int random_index = static_cast<int>(CerebrumLux::SafeRNG::getInstance().get_float(0.0f, static_cast<float>(possible_actions.size() - 1)));
             chosen_action = possible_actions[random_index];
             LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Rastgele eylem seçildi (Exploration): " << CerebrumLux::action_to_string(chosen_action));
         } else {

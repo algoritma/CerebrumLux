@@ -18,7 +18,7 @@ AIAction SuggestionEngine::suggest_action(UserIntent current_intent, AbstractSta
     StateKey current_state = {current_intent, current_abstract_state};
 
     // Keşfetme (explore) veya sömürme (exploit)
-    bool explore = (static_cast<float>(SafeRNG::get_instance().get_generator()()) / SafeRNG::get_instance().get_generator().max()) < exploration_rate;
+    bool explore = (static_cast<float>(SafeRNG::getInstance().get_generator()()) / SafeRNG::getInstance().get_generator().max()) < exploration_rate;
 
     AIAction chosen_action = choose_action(current_state, explore);
 
@@ -53,7 +53,7 @@ AIAction SuggestionEngine::choose_action(const StateKey& state, bool explore) co
             AIAction::MonitorPerformance, AIAction::CalibrateSensors, AIAction::ExecutePlan
         };
         std::uniform_int_distribution<size_t> dist(0, available_actions.size() - 1);
-        return available_actions[dist(SafeRNG::get_instance().get_generator())];
+        return available_actions[dist(SafeRNG::getInstance().get_generator())];
     } else {
         // En iyi eylemi seç (exploit)
         if (q_table.count(state) == 0) {

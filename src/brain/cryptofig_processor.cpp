@@ -19,7 +19,7 @@ std::vector<float> CryptofigProcessor::process_atomic_signal(const AtomicSignal&
     // Bu metod şu an için kullanılmıyor, ancak gelecekte tekil sinyalleri işlemek için eklenebilir.
     // Şimdilik dummy bir vektör döndürüyoruz.
     LOG_DEFAULT(LogLevel::DEBUG, "CryptofigProcessor::process_atomic_signal: Dummy implementasyon çağrıldı.");
-    return {SafeRNG::get_instance().get_float(0.0f, 1.0f), SafeRNG::get_instance().get_float(0.0f, 1.0f), SafeRNG::get_instance().get_float(0.0f, 1.0f)};
+    return {SafeRNG::getInstance().get_float(0.0f, 1.0f), SafeRNG::getInstance().get_float(0.0f, 1.0f), SafeRNG::getInstance().get_float(0.0f, 1.0f)};
 }
 
 void CryptofigProcessor::process_sequence(DynamicSequence& sequence, float autoencoder_learning_rate) {

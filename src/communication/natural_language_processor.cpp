@@ -76,11 +76,10 @@ void NaturalLanguageProcessor::load_fasttext_models() {
                 app_dir = std::filesystem::current_path();
             }
 #endif
+            LOG_DEFAULT(LogLevel::DEBUG, "NLP: FastText modelleri için temel dizin aranıyor: " << app_dir.parent_path() / "data" / "fasttext_models"); // YENİ LOG: Temel FastText dizin yolunu gör
 
-            std::filesystem::path assets_dir = app_dir.parent_path() / "assets";
-            if (!std::filesystem::exists(assets_dir)) {
-                assets_dir = app_dir.parent_path().parent_path() / "assets";
-            }
+            //FastText modelleri için sabit kalıcı yol
+            std::filesystem::path fasttext_models_dir = app_dir.parent_path() / "data" / "fasttext_models";
 
             static const std::map<Language, std::string> model_files = {
                 {Language::EN, "cc.en.300.bin"},
@@ -93,21 +92,29 @@ void NaturalLanguageProcessor::load_fasttext_models() {
 
             for (const auto& pair : model_files) {
                 Language lang = pair.first;
-                std::filesystem::path model_path = assets_dir / pair.second;
+                std::filesystem::path model_path = fasttext_models_dir / pair.second; // Yeni yolu kullan
                 std::string absolute_path_str = std::filesystem::weakly_canonical(model_path).string();
 
                 LOG_DEFAULT(LogLevel::TRACE, "NLP: FastText modeli yüklemeye çalışılıyor: " << absolute_path_str);
-                if (std::filesystem::exists(model_path)) {
+                LOG_DEFAULT(LogLevel::DEBUG, "NLP: Kontrol edilen FastText model yolu: " << absolute_path_str << " (exists: " << std::filesystem::exists(model_path) << ", size > 0: " << (std::filesystem::exists(model_path) ? (std::filesystem::file_size(model_path) > 0 ? "Evet" : "Hayır") : "Bilinmiyor") << ")"); // YENİ LOG: Detaylı dosya kontrolü
+
+                if (std::filesystem::exists(model_path) && std::filesystem::file_size(model_path) > 0) { // YENİ: Dosya boyutu kontrolü
                     try {
                         auto model = std::make_unique<fasttext::FastText>();
+                        LOG_DEFAULT(LogLevel::DEBUG, "NLP: FastText modeli yuklemeye baslaniyor (loadModel): " << absolute_path_str); // YENİ LOG: loadModel çağrısı öncesi
+
                         model->loadModel(absolute_path_str);
                         s_fastTextModels[lang] = std::move(model);
                         LOG_DEFAULT(LogLevel::INFO, "NLP: FastText modeli başarıyla yüklendi: " << absolute_path_str);
+                        LOG_DEFAULT(LogLevel::DEBUG, "NLP: Yüklenen model boyutu: " << s_fastTextModels[lang]->getDimension()); // YENİ LOG: Yüklenen modelin boyutunu onayla
+
                         any_model_loaded = true;
                     } catch (const std::exception& e) {
                         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli yüklenirken hata oluştu (" << absolute_path_str << "): " << e.what());
                     }
-                } else {
+                } else { // YENİ: Model dosyası bulunamadığında daha detaylı log
+                    LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli bulunamadi veya boş: " << absolute_path_str << " (Dosya var mi: " << std::filesystem::exists(model_path) << ", Boyut > 0 mi: " << (std::filesystem::exists(model_path) ? (std::filesystem::file_size(model_path) > 0 ? "Evet" : "Hayır") : "Bilinmiyor") << ").");
+
                     LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli bulunamadı: " << absolute_path_str);
                 }
             }
@@ -170,7 +177,7 @@ NaturalLanguageProcessor::NaturalLanguageProcessor(CerebrumLux::GoalManager& goa
     for (auto intent_pair : this->intent_keyword_map) {
         this->intent_cryptofig_weights[intent_pair.first].assign(CerebrumLux::CryptofigAutoencoder::LATENT_DIM, 0.0f);
         for (size_t i = 0; i < CerebrumLux::CryptofigAutoencoder::LATENT_DIM; ++i) {
-            this->intent_cryptofig_weights[intent_pair.first][i] = static_cast<float>(CerebrumLux::SafeRNG::get_instance().get_generator()()) / CerebrumLux::SafeRNG::get_instance().get_generator().max();
+            this->intent_cryptofig_weights[intent_pair.first][i] = static_cast<float>(CerebrumLux::SafeRNG::getInstance().get_generator()()) / CerebrumLux::SafeRNG::getInstance().get_generator().max();
         }
     }
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NaturalLanguageProcessor: Initialized.");
@@ -584,7 +591,7 @@ std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::
     }
 
     for (int i = 0; i < embedding_dim; ++i) {
-        embedding[i] = SafeRNG::get_instance().get_float(-1.0f, 1.0f);
+        embedding[i] = SafeRNG::getInstance().get_float(-1.0f, 1.0f);
     }
     LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için anlamsal placeholder embedding olusturuldu.");
     return embedding;

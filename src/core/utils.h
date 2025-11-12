@@ -16,7 +16,8 @@ namespace CerebrumLux {
 // === SafeRNG Implementasyonu (Singleton) ===
 class SafeRNG {
 public:
-    static SafeRNG& get_instance(); // Singleton örneğini döndürür
+    //static SafeRNG& get_instance(); // Singleton örneğini döndürür
+    static SafeRNG& getInstance(); // Singleton örneğini döndürür (get_instance yerine getInstance)
 
     // Rastgele sayı üretim metotları
     int get_int(int min, int max);
@@ -25,6 +26,9 @@ public:
 
     // std::mt19937 generator'a erişim için public metot (GERİ EKLENDİ)
     std::mt19937& get_generator(); 
+
+    // SafeRNG'yi güvenli bir şekilde kapatır ve kaynakları serbest bırakır.
+    void shutdown();
 
 private:
     SafeRNG(); // Kurucu private

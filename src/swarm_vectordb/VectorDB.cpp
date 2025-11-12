@@ -208,40 +208,6 @@ bool SwarmVectorDB::open() {
     }
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
 
-    // YENİ: Q-Table DBI'larını aç
-    rc = mdb_dbi_open(txn, "q_values_db", MDB_CREATE, &q_values_dbi_);
-    if (rc != MDB_SUCCESS) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarısız: " << mdb_strerror(rc));
-        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
-        return false;
-    }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarılı.");
-
-    rc = mdb_dbi_open(txn, "q_metadata_db", MDB_CREATE, &q_metadata_dbi_);
-    if (rc != MDB_SUCCESS) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarısız: " << mdb_strerror(rc));
-        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
-        return false;
-    }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
-
-    // YENİ: Q-Table DBI'larını aç
-    rc = mdb_dbi_open(txn, "q_values_db", MDB_CREATE, &q_values_dbi_);
-    if (rc != MDB_SUCCESS) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarısız: " << mdb_strerror(rc));
-        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
-        return false;
-    }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_values_db' başarılı.");
-
-    rc = mdb_dbi_open(txn, "q_metadata_db", MDB_CREATE, &q_metadata_dbi_);
-    if (rc != MDB_SUCCESS) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarısız: " << mdb_strerror(rc));
-        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
-        return false;
-    }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
-
     rc = mdb_txn_commit(txn);
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_commit başarısız: " << mdb_strerror(rc) << ", Yol: " << db_path_);
@@ -261,8 +227,9 @@ bool SwarmVectorDB::open() {
         MDB_val key, data;
         std::string next_label_key_str = "next_hnsw_label"; // Fixed key for next_hnsw_label_
         key.mv_size = next_label_key_str.size();
-        key.mv_data = (void*)next_label_key_str.data(); // Pointer to string data
-        rc = mdb_get(read_label_txn, hnsw_next_label_dbi_, &key, &data);
+        key.mv_data = (void*)next_label_key_str.c_str(); // Pointer to string data
+
+        rc = mdb_get(read_label_txn, hnsw_next_label_dbi_, &key, &data); // Check data.mv_size as well
         if (rc == MDB_SUCCESS && data.mv_size > 0) { // Check data.mv_size as well
             next_hnsw_label_ = static_cast<hnswlib::labeltype>(std::stoul(std::string(static_cast<char*>(data.mv_data), data.mv_size)));
             LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): Kaydedilmis next_hnsw_label: " << next_hnsw_label_);
@@ -383,9 +350,11 @@ bool SwarmVectorDB::open() {
             MDB_val next_label_key, next_label_data;
             std::string next_label_key_str_save = "next_hnsw_label";
             next_label_key.mv_size = next_label_key_str_save.length(); // Use length() for string size
-            next_label_key.mv_data = (void*)next_label_key_str_save.c_str(); // Use c_str() for null-terminated string
-            next_label_data.mv_size = sizeof(hnswlib::labeltype); // THIS WAS THE BUG. It should be the string size.
-            next_label_data.mv_data = &next_hnsw_label_; // And this should be pointer to string data.
+            std::string next_hnsw_label_str_save = std::to_string(next_hnsw_label_); // Convert label to string
+            next_label_key.mv_size = next_label_key_str_save.length();
+            next_label_key.mv_data = (void*)next_label_key_str_save.c_str();
+            next_label_data.mv_size = next_hnsw_label_str_save.length(); // Size of the string
+            next_label_data.mv_data = (void*)next_hnsw_label_str_save.c_str(); // Pointer to the string data
             rc = mdb_put(write_txn, hnsw_next_label_dbi_, &next_label_key, &next_label_data, 0);
             if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): next_hnsw_label_ put başarısız: " << mdb_strerror(rc));
 
@@ -421,7 +390,7 @@ void SwarmVectorDB::close() {
             // next_hnsw_label_ kaydet
             MDB_val next_label_key, next_label_data;
             const std::string next_label_key_str_close = "next_hnsw_label";
-            const std::string next_hnsw_label_str_close = std::to_string(next_hnsw_label_);
+            std::string next_hnsw_label_str_close = std::to_string(next_hnsw_label_); // Convert label to string
             next_label_key.mv_size = next_label_key_str_close.length();
             next_label_key.mv_data = (void*)next_label_key_str_close.c_str();
             next_label_data.mv_size = next_hnsw_label_str_close.length();
@@ -478,15 +447,7 @@ void SwarmVectorDB::close() {
             mdb_dbi_close(env_, hnsw_next_label_dbi_);
             hnsw_next_label_dbi_ = 0;
         }
-        // YENİ: Q-Table DBI'larını kapat
-        if (q_values_dbi_ != 0) {
-            mdb_dbi_close(env_, q_values_dbi_);
-            q_values_dbi_ = 0;
-        }
-        if (q_metadata_dbi_ != 0) {
-            mdb_dbi_close(env_, q_metadata_dbi_);
-            q_metadata_dbi_ = 0;
-        }
+
         // YENİ: Q-Table DBI'larını kapat
         if (q_values_dbi_ != 0) {
             mdb_dbi_close(env_, q_values_dbi_);
@@ -540,7 +501,7 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     const uint8_t* embedding_data_ptr = reinterpret_cast<const uint8_t*>(cv.embedding.data());
     serialized_data.insert(serialized_data.end(), embedding_data_ptr, embedding_data_ptr + (cv.embedding.size() * sizeof(float)));
    
-    if (cv.embedding.size() * sizeof(float) != 128 * sizeof(float)) { // Ensure fixed embedding size
+    if (hnsw_index_ && cv.embedding.size() != hnsw_index_->get_dim()) { // Use get_dim from HNSWIndex for consistency
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): Embedding boyutu 128 float degil! ID: " << cv.id);
         mdb_txn_abort(txn);
         return false;

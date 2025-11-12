@@ -9,7 +9,7 @@
 namespace CerebrumLux { // TÜM İMPLEMENTASYON BU NAMESPACE İÇİNDE OLACAK
 
 // === SafeRNG Implementasyonu ===
-SafeRNG& SafeRNG::get_instance() {
+SafeRNG& SafeRNG::getInstance() {
     static SafeRNG instance;
     return instance;
 }
@@ -22,6 +22,11 @@ SafeRNG::SafeRNG() : generator(std::chrono::system_clock::now().time_since_epoch
 // std::mt19937 generator'a erişim için public metot implementasyonu (GERİ EKLENDİ)
 std::mt19937& SafeRNG::get_generator() {
     return generator;
+}
+
+// YENİ EKLENDİ: shutdown metodu
+void SafeRNG::shutdown() {
+    // mt19937 için özel bir kapatma işlemi gerekmiyor. İleride kaynak eklenirse buraya eklenebilir.
 }
 
 int SafeRNG::get_int(int min, int max) {
@@ -69,7 +74,7 @@ long long get_current_timestamp_us() {
 // ✅ YENİ: Benzersiz ID üretme fonksiyonu
 std::string generate_unique_id() {
     // Unix epoch'tan itibaren mikrosaniye cinsinden zaman damgası + küçük bir rastgele sayı
-    return std::to_string(get_current_timestamp_us()) + "_" + std::to_string(SafeRNG::get_instance().get_int(1000, 9999));
+    return std::to_string(get_current_timestamp_us()) + "_" + std::to_string(SafeRNG::getInstance().get_int(1000, 9999));
 }
 
 // === Hash Fonksiyonları ===

@@ -73,10 +73,13 @@ public:
 
     KnowledgeBase& getKnowledgeBase();
     const KnowledgeBase& getKnowledgeBase() const; // Const versiyonu eklendi
+    
+    // YENİ EKLENDİ: SparseQTable'a erişim için getter
+    const CerebrumLux::SwarmVectorDB::SparseQTable& getQTable() const { return q_table; }
 
     // DÜZELTİLDİ: cryptoManager'a erişim için public getter eklendi.
     CerebrumLux::Crypto::CryptoManager& get_crypto_manager() const { return cryptoManager; }
-
+    
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
 
@@ -84,7 +87,7 @@ public:
     void save_q_table() const;
     void load_q_table();
 
-    // Sparse Q-Table'ı güncellemek için metot (şimdilik placeholder)
+    // Sparse Q-Table'ı güncellemek için metot
     void update_q_values(const std::vector<float>& current_state_embedding, CerebrumLux::AIAction action, float reward, const std::vector<float>& next_state_embedding);
 
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
@@ -99,7 +102,7 @@ signals:
 
 private slots:
     // WebFetcher'dan gelen yapılandırılmış arama sonuçlarını işlemek için slot
-    void onStructuredWebContentFetched(const QString& url, const std::vector<CerebrumLux::WebSearchResult>& searchResults); // İmza güncellendi
+    void onStructuredWebContentFetched(const QString& url, const std::vector<CerebrumLux::WebSearchResult>& searchResults);
     // WebFetcher'dan gelen hata sinyali için slot
     void onWebFetchError(const QString& url, const QString& error_message); 
 
@@ -108,11 +111,11 @@ private:
     CerebrumLux::Crypto::CryptoManager& cryptoManager;
     std::unique_ptr<UnicodeSanitizer> unicodeSanitizer;
     std::unique_ptr<StegoDetector> stegoDetector;
-    std::unique_ptr<WebFetcher> webFetcher; // WebFetcher nesnesi unique_ptr ile yönetilir
+    std::unique_ptr<WebFetcher> webFetcher;
 
-    QObject* parentApp; // QApplication'a bağlanmak için (m_parentApp yerine parentApp)
-    bool webFetchInProgress = false; // Web çekme işleminin devam edip etmediğini gösterir
-    QString currentWebFetchQuery; // Şu anki web çekme sorgusunu tutar
+    QObject* parentApp;
+    bool webFetchInProgress = false;
+    QString currentWebFetchQuery;
     CerebrumLux::SwarmVectorDB::SparseQTable q_table; // Sparse Q-Table üyesi eklendi
 
     bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
@@ -123,7 +126,7 @@ private:
     bool sandbox_analysis(const Capsule& capsule) const;
     bool corroboration_check(const Capsule& capsule) const;
     void audit_log_append(const IngestReport& report) const;
-    CerebrumLux::IngestReport createIngestReport(CerebrumLux::IngestResult result, const std::string& message) const; // Gizli yardımcı metot
+    CerebrumLux::IngestReport createIngestReport(CerebrumLux::IngestResult result, const std::string& message) const;
 };
 
 } // namespace CerebrumLux

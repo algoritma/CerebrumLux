@@ -44,7 +44,7 @@ void DynamicSequence::update_from_signals(const std::deque<CerebrumLux::AtomicSi
     if (signal_buffer.empty()) {
         // Eğer buffer boşsa, istatistiksel özellikleri rastgele değerlerle doldur
         for (size_t i = 0; i < this->statistical_features_vector.size(); ++i) {
-            this->statistical_features_vector[i] = CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f);
+            this->statistical_features_vector[i] = CerebrumLux::SafeRNG::getInstance().get_float(0.0f, 1.0f);
         }
         LOG_DEFAULT(LogLevel::TRACE, "DynamicSequence: Boş sinyal buffer'ı için rastgele istatistiksel özellikler üretildi.");
     } else {

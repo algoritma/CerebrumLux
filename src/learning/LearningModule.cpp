@@ -40,8 +40,12 @@ LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoMan
 }
 
 LearningModule::~LearningModule() {
+    LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Destructor CALLED. Attempting to save Q-Table."); // YENİ LOG: Yıkıcının çağrıldığını onayla
+
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Destructor called.");
     save_q_table(); // Q-table'ı kapanışta LMDB'ye kaydet
+
+    LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Destructor finished saving Q-Table."); // YENİ LOG: Yıkıcının bitişini onayla
 }
 
 void LearningModule::learnFromText(const std::string& text,
@@ -118,7 +122,7 @@ void LearningModule::onStructuredWebContentFetched(const QString& url, const std
 
         web_capsule.embedding.resize(CryptofigAutoencoder::INPUT_DIM);
         for (size_t i = 0; i < CryptofigAutoencoder::INPUT_DIM; ++i) {
-            web_capsule.embedding[i] = CerebrumLux::SafeRNG::get_instance().get_float(0.0f, 1.0f);
+            web_capsule.embedding[i] = CerebrumLux::SafeRNG::getInstance().get_float(0.0f, 1.0f);
         }
         web_capsule.cryptofig_blob_base64 = cryptofig_encode(web_capsule.embedding);
 
@@ -369,7 +373,7 @@ std::vector<float> LearningModule::compute_embedding(const std::string& text) co
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: compute_embedding (KnowledgeBase'den) çağrıldı.");
     std::vector<float> embedding(CryptofigAutoencoder::INPUT_DIM);
     for (size_t i = 0; i < CryptofigAutoencoder::INPUT_DIM; ++i) {
-        embedding[i] = SafeRNG::get_instance().get_float(0.0f, 1.0f);
+        embedding[i] = SafeRNG::getInstance().get_float(0.0f, 1.0f);
     }
     embedding[0] = static_cast<float>(text.length()) / 200.0f;
     embedding[1] = static_cast<float>(std::count_if(text.begin(), text.end(), [](char c){ return std::isupper(c); })) / 50.0f;
@@ -521,6 +525,10 @@ void LearningModule::update_q_values(const std::vector<float>& current_state_emb
 }
 
 void LearningModule::save_q_table() const {
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] save_q_table() ENTRY. Current Q-Table size (in memory): " << q_table.q_values.size()); // YENİ LOG: Metoda giriş ve bellek içi boyut
+
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'ye kaydetme işlemi BAŞLADI."); // YENİ: Başlangıç logu
+
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'ye kaydediliyor. Toplam durum: " << q_table.q_values.size());
 
     if (!knowledgeBase.get_swarm_db().is_open()) {
@@ -540,10 +548,14 @@ void LearningModule::save_q_table() const {
             LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table kaydetme başarısız: EmbeddingStateKey (kısmi): " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())));
         }
     }
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'ye kaydetme işlemi BİTTİ."); // YENİ: Bitiş logu
+
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table kaydetme tamamlandı. Toplam kaydedilen durum: " << q_table.q_values.size());
 }
 
 void LearningModule::load_q_table() {
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'den yükleniyor. Başlangıçta q_table boyutu: " << q_table.q_values.size());
+
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'den yükleniyor.");
     q_table.q_values.clear();
 
@@ -554,6 +566,8 @@ void LearningModule::load_q_table() {
         std::optional<std::string> action_map_json_str_opt = knowledgeBase.get_swarm_db().get_q_value_json(state_key);
         if (action_map_json_str_opt) {
             try {
+                LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Q-Table için durum anahtarı JSON yüklendi (kısmi): " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())));
+
                 nlohmann::json action_map_json = nlohmann::json::parse(*action_map_json_str_opt);
                 for (nlohmann::json::const_iterator action_it = action_map_json.begin(); action_it != action_map_json.end(); ++action_it) {
                     q_table.q_values[state_key][CerebrumLux::string_to_action(action_it.key())] = action_it.value().get<float>();
@@ -564,6 +578,8 @@ void LearningModule::load_q_table() {
             }
         }
     }
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'den yüklendi. Son q_table boyutu: " << q_table.q_values.size());
+
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table yükleme tamamlandı. Toplam yüklü durum: " << q_table.q_values.size());
 }
 

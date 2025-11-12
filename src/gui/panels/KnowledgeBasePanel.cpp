@@ -62,6 +62,7 @@ KnowledgeBasePanel::~KnowledgeBasePanel() {
     LOG_DEFAULT(LogLevel::INFO, "KnowledgeBasePanel: Destructor called.");
 }
 
+
 void KnowledgeBasePanel::setupUi() {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);

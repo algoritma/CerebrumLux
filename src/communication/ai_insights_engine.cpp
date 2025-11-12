@@ -84,7 +84,7 @@ AIInsightsEngine::AIInsightsEngine(IntentAnalyzer& analyzer_ref, IntentLearner& 
 void AIInsightsEngine::updateSimulatedCodeMetrics(std::chrono::system_clock::time_point now) {
     // Kod Karmaşıklığı Simülasyonu
     if (!is_on_cooldown("code_complexity_simulation", std::chrono::seconds(10))) {
-        last_simulated_code_complexity += CerebrumLux::SafeRNG::get_instance().get_gaussian_float(0.0f, 0.40f);
+        last_simulated_code_complexity += CerebrumLux::SafeRNG::getInstance().get_gaussian_float(0.0f, 0.40f);
         last_simulated_code_complexity = std::max(0.0f, std::min(1.0f, last_simulated_code_complexity));
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Simüle Kod Karmaşıklığı Güncellendi: " << last_simulated_code_complexity);
         insight_cooldowns["code_complexity_simulation"] = now;
@@ -92,7 +92,7 @@ void AIInsightsEngine::updateSimulatedCodeMetrics(std::chrono::system_clock::tim
    
     // Kod Okunabilirlik Skoru Simülasyonu
     if (!is_on_cooldown("code_readability_simulation", std::chrono::seconds(10))) {
-        last_simulated_code_readability += CerebrumLux::SafeRNG::get_instance().get_gaussian_float(0.0f, 0.45f);
+        last_simulated_code_readability += CerebrumLux::SafeRNG::getInstance().get_gaussian_float(0.0f, 0.45f);
         last_simulated_code_readability = std::max(0.0f, std::min(1.0f, last_simulated_code_readability));
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Simüle Kod Okunabilirlik Skoru Güncellendi: " << last_simulated_code_readability);
         insight_cooldowns["code_readability_simulation"] = now;
@@ -100,7 +100,7 @@ void AIInsightsEngine::updateSimulatedCodeMetrics(std::chrono::system_clock::tim
 
     // Kod Optimizasyon Potansiyeli Simülasyonu
     if (!is_on_cooldown("code_optimization_potential_simulation", std::chrono::seconds(10))) {
-        last_simulated_optimization_potential += CerebrumLux::SafeRNG::get_instance().get_gaussian_float(0.0f, 0.40f);
+        last_simulated_optimization_potential += CerebrumLux::SafeRNG::getInstance().get_gaussian_float(0.0f, 0.40f);
         last_simulated_optimization_potential = std::max(0.0f, std::min(1.0f, last_simulated_optimization_potential));
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "AIInsightsEngine: Simüle Kod Optimizasyon Potansiyeli Güncellendi: " << last_simulated_optimization_potential);
         insight_cooldowns["code_optimization_potential_simulation"] = now;
@@ -655,7 +655,7 @@ AIInsight AIInsightsEngine::generate_application_context_insight(const DynamicSe
 AIInsight AIInsightsEngine::generate_unusual_behavior_insight(const DynamicSequence& current_sequence) {
     auto now = std::chrono::system_clock::now();
     if (is_on_cooldown("unusual_behavior_insight", std::chrono::seconds(25))) return {};
-    if (CerebrumLux::SafeRNG::get_instance().get_int(0, 100) < 10) {
+    if (CerebrumLux::SafeRNG::getInstance().get_int(0, 100) < 10) {
         this->insight_cooldowns["unusual_behavior_insight"] = now;
         return {"UnusualBehavior_" + std::to_string(current_sequence.timestamp_utc.time_since_epoch().count()),
                 "Sistemde alışılmadık bir davranış tespit edildi. Daha detaylı analiz gerekiyor.",
