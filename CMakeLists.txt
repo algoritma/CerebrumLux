@@ -149,6 +149,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         "${PROJECT_SRC_DIR}/gui/panels/KnowledgeBaseWorker.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/QTablePanel.cpp" # QTablePanel implementasyonu
         "${PROJECT_SRC_DIR}/gui/panels/QTableWorker.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/ChatPanel.cpp"  # QTablePanel implementasyonu
     )
     target_link_options(CerebrumLuxGUI PRIVATE -Wl,--subsystem,windows)
 else()
@@ -167,6 +168,7 @@ else()
         "${PROJECT_SRC_DIR}/gui/panels/KnowledgeBaseWorker.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/QTablePanel.cpp" # QTablePanel implementasyonu
         "${PROJECT_SRC_DIR}/gui/panels/QTableWorker.cpp"
+        "${PROJECT_SRC_DIR}/gui/panels/ChatPanel.cpp"  # QTablePanel implementasyonu
     )
 endif()
 
