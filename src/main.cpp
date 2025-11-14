@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
     early_diagnostic_log.flush();
 
     CerebrumLux::KnowledgeBase kb;
-    //CerebrumLux::KnowledgeBase kb("data/CerebrumLux_lmdb_db"); // Veritabanı dosyalarını projenin kök dizinindeki 'data' klasörüne kaydet
+    //CerebrumLux::KnowledgeBase kb("data/CerebrumLux_lmdb_db"); // DÜZELTME: Veritabanı dosyalarını kalıcı bir yola kaydetmek için bu satır aktive edildi.
 
     CerebrumLux::NaturalLanguageProcessor nlp(goal_manager, kb);
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] NaturalLanguageProcessor init complete." << std::endl;

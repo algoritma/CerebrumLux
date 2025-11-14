@@ -72,6 +72,7 @@ public:
     MDB_dbi get_dbi() const { return dbi_; }
     MDB_dbi q_values_dbi() const { return q_values_dbi_; } // YENİ: q_values_dbi_ için getter
 
+
 private:
     std::string db_path_;
     MDB_env* env_; // LMDB ortamı
@@ -81,6 +82,7 @@ private:
     MDB_dbi id_to_hnsw_label_map_dbi_;    // CryptofigVector ID -> HNSW label haritası için DBI
     MDB_dbi hnsw_next_label_dbi_;         // Bir sonraki hnswlib label değerini saklamak için DBI
     MDB_dbi q_values_dbi_;                // SparseQTable'ın Q-değerlerini (EmbeddingStateKey -> ActionMap JSON) saklamak için DBI
+
     MDB_dbi q_metadata_dbi_;              // SparseQTable ile ilgili meta verileri (örn. öğrenme oranları) JSON olarak saklamak için DBI
 
     // HNSW index'i std::unique_ptr ile yönetiyoruz
@@ -89,8 +91,11 @@ private:
     std::map<hnswlib::labeltype, std::string> hnsw_label_to_id_map_; // HNSW etiketlerini CryptofigVector ID'lerine eşler
     std::map<std::string, hnswlib::labeltype> id_to_hnsw_label_map_; // CryptofigVector ID'lerini HNSW etiketlerine eşler
 
+    MDB_dbi capsule_content_dbi_; // Kapsül içeriklerini saklamak için
     std::vector<std::string> get_all_ids_internal(MDB_txn* txn) const; // Yeni internal metot
 
+    void close_internal(); // Mutex kilidi olmadan kapatma mantığını yönetir
+   
     // Kopyalama ve atamayı engelle
     SwarmVectorDB(const SwarmVectorDB&) = delete;
     SwarmVectorDB& operator=(const SwarmVectorDB&) = delete;

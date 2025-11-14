@@ -30,19 +30,16 @@ public:
 
 public slots:
     void updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data);
-    void appendChatMessage(const QString& sender, const CerebrumLux::ChatResponse& chatResponse); // DEĞİŞTİRİLDİ: Chat mesajlarını ve ChatResponse objesini ekler
 
 signals:
     void commandEntered(const QString& command);
     void startSimulationTriggered();
     void stopSimulationTriggered();
-    void chatMessageEntered(const QString& message); // YENİ: Chat: Kullanıcı chat mesajı girdiğinde (bu sinyal yine QString alır)
 
 private slots:
     void onCommandLineEditReturnPressed();
     void onStartSimulationClicked();
     void onStopSimulationClicked();
-    void onChatMessageLineEditReturnPressed(); // YENİ: Chat mesajı girişi için slot
 
 private:
     QLineEdit *commandLineEdit;
@@ -53,10 +50,6 @@ private:
     QTableView *simulationHistoryTable;
     QStandardItemModel *simulationHistoryModel;
 
-    // YENİ: Chat Arayüzü Bileşenleri
-    QTextEdit *chatHistoryDisplay;
-    QLineEdit *chatMessageLineEdit;
-    QPushButton *sendChatMessageButton;
 };
 
 } // namespace CerebrumLux

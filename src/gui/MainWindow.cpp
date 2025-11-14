@@ -13,6 +13,7 @@
 #include "../gui/panels/CapsuleTransferPanel.h"
 #include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/panels/QTablePanel.h" // YENİ: QTablePanel için başlık
+#include "../gui/panels/ChatPanel.h"   // YENİ: ChatPanel için başlık
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
 #include "../communication/natural_language_processor.h" // generate_text_embedding için
@@ -58,6 +59,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBasePanel oluşturuldu. Adresi: " << knowledgeBasePanel << ", isVisible(): " << knowledgeBasePanel->isVisible());
     qTablePanel = new CerebrumLux::QTablePanel(learningModule, this); // YENİ: QTablePanel oluşturuldu
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel oluşturuldu. Adresi: " << qTablePanel << ", isVisible(): " << qTablePanel->isVisible());
+    chatPanel = new CerebrumLux::ChatPanel(this); // YENİ: ChatPanel oluşturuldu
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: ChatPanel oluşturuldu. Adresi: " << chatPanel << ", isVisible(): " << chatPanel->isVisible());
 
     tabWidget->addTab(logPanel, "Log");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Log tab'ı eklendi. Aktif widget: " << tabWidget->currentWidget());
@@ -71,6 +74,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBase tab'ı eklendi. Tab sayısı: " << tabWidget->count());
     tabWidget->addTab(qTablePanel, "Q-Table"); // YENİ: Q-Table sekmesi eklendi
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Q-Table tab'ı eklendi. Tab sayısı: " << tabWidget->count());
+    tabWidget->addTab(chatPanel, "Chat");      // YENİ: Chat sekmesi eklendi
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Chat tab'ı eklendi. Tab sayısı: " << tabWidget->count());
 
     setWindowTitle("Cerebrum Lux");
     resize(1024, 768);
@@ -83,8 +88,8 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(simulationPanel, &CerebrumLux::SimulationPanel::commandEntered, this, &CerebrumLux::MainWindow::onSimulationCommandEntered);
     connect(simulationPanel, &CerebrumLux::SimulationPanel::startSimulationTriggered, this, &CerebrumLux::MainWindow::onStartSimulationTriggered);
     connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered);
-    // YENİ: SimulationPanel'den gelen chat mesajı sinyalini bağla
-    connect(simulationPanel, &CerebrumLux::SimulationPanel::chatMessageEntered, this, &CerebrumLux::MainWindow::onChatMessageReceived);
+    // DÜZELTİLDİ: Chat mesajı sinyali artık ChatPanel'den gelecek
+    connect(chatPanel, &CerebrumLux::ChatPanel::chatMessageEntered, this, &CerebrumLux::MainWindow::onChatMessageReceived);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel connect tamamlandı.");
 
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest);
@@ -99,12 +104,6 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
     guiUpdateTimer->start(1000);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms). [Tüm panelleri etkiler]");
-
-    // DÜZELTİLDİ: KnowledgeBasePanel ve QTablePanel güncellemelerini ayrı zamanlayıcılara taşıyabiliriz
-    // veya updateGui() içinde daha kontrollü çağırabiliriz. Şimdilik bu bağlantıları kaldırıyoruz.
-    // qTablePanel ve knowledgeBasePanel, updateGui() içinde gerektiğinde çağrılacak.
-    // connect(guiUpdateTimer, &QTimer::timeout, qTablePanel, &CerebrumLux::QTablePanel::updateQTableContent); // KALDIRILDI
-    // connect(guiUpdateTimer, &QTimer::timeout, knowledgeBasePanel, &CerebrumLux::KnowledgeBasePanel::updateKnowledgeBaseContent); // KALDIRILDI
 
     // DÜZELTİLDİ: İlk güncelleme çağrısını burada yapıyoruz
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
@@ -266,11 +265,11 @@ void MainWindow::onChatMessageReceived(const QString& message) {
     // Şimdilik sadece text kısmını gönderiyoruz.
 
     // Yanıtı SimulationPanel'e geri gönder
-    if (simulationPanel) {
-        simulationPanel->appendChatMessage("CerebrumLux", nlp_chat_response); // DEĞİŞTİRİLDİ: Doğrudan ChatResponse objesini gönder
+    if (chatPanel) { // DÜZELTİLDİ: Yanıtı chatPanel'e gönder
+        chatPanel->appendChatMessage("CerebrumLux", nlp_chat_response); // Doğrudan ChatResponse objesini gönder
         // İleride, nlp_chat_response.reasoning ve nlp_chat_response.needs_clarification da burada görüntülenebilir.
     } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onChatMessageReceived: simulationPanel null. NLP yanıtı gösterilemedi.");
+        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onChatMessageReceived: chatPanel null. NLP yanıtı gösterilemedi.");
     }
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: NLP yanıtı üretildi (metin): " << nlp_chat_response.text.substr(0, std::min((size_t)50, nlp_chat_response.text.length()))
         << ", Gerekçe: " << nlp_chat_response.reasoning.substr(0, std::min((size_t)50, nlp_chat_response.reasoning.length()))

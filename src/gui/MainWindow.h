@@ -18,6 +18,7 @@
 #include "../gui/panels/CapsuleTransferPanel.h"
 #include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/panels/QTablePanel.h" // YENİ: QTablePanel için başlık
+#include "../gui/panels/ChatPanel.h"
 #include "../communication/natural_language_processor.h" // CerebrumLux::ChatResponse için
 #include "../gui/engine_integration.h"
 #include "../gui/DataTypes.h"
@@ -40,6 +41,7 @@ public:
     CapsuleTransferPanel* getCapsuleTransferPanel() const;
     KnowledgeBasePanel* getKnowledgeBasePanel() const;
     QTablePanel* getQTablePanel() const; // YENİ: QTablePanel için getter
+    ChatPanel* getChatPanel() const;     // YENİ: ChatPanel için getter
 
  
     void updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data);
@@ -65,6 +67,7 @@ private:
     CapsuleTransferPanel *capsuleTransferPanel;
     KnowledgeBasePanel *knowledgeBasePanel;
     QTablePanel *qTablePanel; // YENİ: QTablePanel üyesi
+    ChatPanel *chatPanel;     // YENİ: ChatPanel üyesi
 
     EngineIntegration& engine;
     LearningModule& learningModule;

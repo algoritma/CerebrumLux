@@ -12,66 +12,61 @@ namespace fs = std::filesystem;
 
 
 
-HNSWIndex::HNSWIndex(int dim, size_t max_elements, const std::string& index_path)
-    : dim_(dim), max_elements_(max_elements), index_path_(index_path) {
+HNSWIndex::HNSWIndex(int dim, size_t max_elements)
+    : dim_(dim), max_elements_(max_elements) {
     LOG_DEFAULT(LogLevel::INFO, "HNSWIndex Kurucusu: Baslatiliyor. Boyut: " << dim << ", Max Eleman: " << max_elements);
     
     // Çökmeye neden olan özel L2Space yerine doğrudan hnswlib'in kendi L2Space'i kullanılır.
     space_ = std::make_unique<hnswlib::L2Space>(dim);
 
-    // alg_hnsw_ nesnesi artık kurucuda değil, load_or_create_index içinde oluşturulur.
+    // app_alg_ nesnesi artık kurucuda değil, load_index veya create_new_index içinde oluşturulur.
     // Bu, gereksiz nesne oluşturmayı önler ve mantığı basitleştirir.
-    alg_hnsw_ = nullptr; 
+    app_alg_ = nullptr; 
 }
 
 HNSWIndex::~HNSWIndex() {
     LOG_DEFAULT(LogLevel::INFO, "HNSWIndex Yikicisi: Cagri yapiliyor.");
+    // unique_ptr'lar otomatik olarak temizlenecektir.
     LOG_DEFAULT(LogLevel::INFO, "HNSWIndex Yikicisi: Tamamlandi.");
 }
 
-bool HNSWIndex::load_or_create_index(const std::string& path) {
-    index_path_ = path;
-    LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::load_or_create_index(): Dizin yükleniyor veya oluşturuluyor. Yol: " << index_path_);
+void HNSWIndex::create_new_index() {
+    LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::create_new_index(): Yeni (boş) bir HNSW dizini oluşturuluyor.");
+    space_ = std::make_unique<hnswlib::L2Space>(dim_);
+    app_alg_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(space_.get(), max_elements_);
+}
 
-    // space_ nesnesinin geçerli olduğundan emin ol (kurucuda oluşturulmuş olmalı)
-    if (!space_) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::load_or_create_index(): space_ başlatılmamış. Bu kritik bir hatadır.");
-        return false;
-    }
-
-    if (fs::exists(index_path_)) {
+bool HNSWIndex::load_index(const std::string& path) {
+    LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::load_index(): Dizin diskten yükleniyor. Yol: " << path);
+    if (fs::exists(path)) {
         try {
-            alg_hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(space_.get(), index_path_);
-            LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::load_or_create_index(): Dizin basariyla yüklendi. Eleman sayisi: " << alg_hnsw_->cur_element_count);
-            
-            // Eğer dizin yüklendi ancak boşsa (hiç eleman içermiyorsa),
-            // bu, HNSW kütüphanesinin kapasite ayarlarını düzgün yapmamasına neden olabilir.
-            // Bu durumda, yeni bir dizin oluşturmak daha güvenlidir.
-            if (alg_hnsw_->cur_element_count == 0) {
-                LOG_DEFAULT(LogLevel::WARNING, "HNSWIndex::load_or_create_index(): Yüklenen dizin boş. Yeni bir dizin olusturuluyor.");
-                alg_hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(space_.get(), max_elements_, 16, 200);
-            }
+            // Önce mevcut indeksi temizle
+            app_alg_.reset(nullptr);
+            space_.reset(nullptr);
+
+            LOG_DEFAULT(LogLevel::TRACE, "HNSWIndex::load_index(): Mevcut dizin dosyası bulundu, yükleniyor...");
+            space_ = std::make_unique<hnswlib::L2Space>(dim_);
+            app_alg_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(space_.get(), path);
+            LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::load_index(): Dizin başarıyla yüklendi. Mevcut eleman sayısı: " << app_alg_->cur_element_count);
             return true;
         } catch (const std::exception& e) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::load_or_create_index(): Dizin yüklenirken hata olustu: " << e.what() << ". Yeni dizin olusturuluyor.");
-            alg_hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(space_.get(), max_elements_, 16, 200);
-            return true;
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::load_index(): Dizin yükleme hatası: " << e.what());
+            return false;
         }
     } else {
-        LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::load_or_create_index(): Dizin bulunamadi. Yeni dizin olusturuluyor.");
-        alg_hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(space_.get(), max_elements_, 16, 200);
-        return true;
+        LOG_DEFAULT(LogLevel::WARNING, "HNSWIndex::load_index(): Dizin dosyası bulunamadı: " << path);
+        return false;
     }
 }
 
-bool HNSWIndex::save_index(const std::string& path) const {
+bool HNSWIndex::save_index(const std::string& path) {
     LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::save_index(): Dizin kaydediliyor. Yol: " << path);
-    if (!alg_hnsw_) {
+    if (!app_alg_) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::save_index(): HNSW indeksi başlatılmamış. Kaydetme başarısız.");
         return false;
     }
     try {
-        alg_hnsw_->saveIndex(path);
+        app_alg_->saveIndex(path);
         LOG_DEFAULT(LogLevel::INFO, "HNSWIndex::save_index(): Dizin basariyla kaydedildi.");
         return true;
     } catch (const std::exception& e) {
@@ -81,7 +76,7 @@ bool HNSWIndex::save_index(const std::string& path) const {
 }
 
 void HNSWIndex::add_item(const std::vector<float>& features, hnswlib::labeltype label) {
-    if (!alg_hnsw_) {
+    if (!app_alg_) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::add_item(): HNSW indeksi başlatılmamış. Eleman eklenemedi.");
         return;
     }
@@ -89,13 +84,13 @@ void HNSWIndex::add_item(const std::vector<float>& features, hnswlib::labeltype 
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::add_item(): Vektör boyutu yanlis. Beklenen: " << dim_ << ", Gelen: " << features.size());
         return;
     }
-    alg_hnsw_->addPoint(features.data(), label);
-    LOG_DEFAULT(LogLevel::TRACE, "HNSWIndex::add_item(): Eleman eklendi. Etiket: " << label << ", Index eleman sayisi: " << alg_hnsw_->cur_element_count);
+    app_alg_->addPoint(features.data(), label);
+    LOG_DEFAULT(LogLevel::TRACE, "HNSWIndex::add_item(): Eleman eklendi. Etiket: " << label << ", Index eleman sayisi: " << app_alg_->cur_element_count);
 }
 
-std::vector<hnswlib::labeltype> HNSWIndex::search_knn(const std::vector<float>& query, int k) {
+std::vector<hnswlib::labeltype> HNSWIndex::search_knn(const std::vector<float>& query, int k) const {
     std::vector<hnswlib::labeltype> result_labels;
-    if (!alg_hnsw_) {
+    if (!app_alg_) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::search_knn(): HNSW indeksi başlatılmamış. Arama yapilamadi.");
         return result_labels;
     }
@@ -104,7 +99,7 @@ std::vector<hnswlib::labeltype> HNSWIndex::search_knn(const std::vector<float>& 
         return result_labels;
     }
 
-    std::priority_queue<std::pair<float, hnswlib::labeltype>> result_pq = alg_hnsw_->searchKnn(query.data(), k);
+    std::priority_queue<std::pair<float, hnswlib::labeltype>> result_pq = app_alg_->searchKnn(query.data(), k);
 
     while (!result_pq.empty()) {
         result_labels.push_back(result_pq.top().second);
@@ -116,10 +111,19 @@ std::vector<hnswlib::labeltype> HNSWIndex::search_knn(const std::vector<float>& 
 }
 
 size_t HNSWIndex::get_current_elements() const {
-    if (!alg_hnsw_) {
+    if (!app_alg_) {
         return 0;
     }
-    return alg_hnsw_->cur_element_count;
+    return app_alg_->cur_element_count;
+}
+
+void HNSWIndex::mark_deleted(hnswlib::labeltype label) {
+    if (!app_alg_) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "HNSWIndex::mark_deleted(): HNSW indeksi başlatılmamış.");
+        return;
+    }
+    app_alg_->markDelete(label);
+    LOG_DEFAULT(LogLevel::TRACE, "HNSWIndex::mark_deleted(): Etiket " << label << " silindi olarak işaretlendi.");
 }
 
 } // namespace HNSW

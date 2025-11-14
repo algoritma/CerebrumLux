@@ -72,6 +72,7 @@ SwarmVectorDB::SwarmVectorDB(const std::string& db_path)
     hnsw_label_to_id_map_dbi_ = 0;
     id_to_hnsw_label_map_dbi_ = 0;
     hnsw_next_label_dbi_ = 0;
+    capsule_content_dbi_ = 0; // Yeni eklenen DBI'ı başlat
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB Kurucusu: Başlatıldı. DB Yolu: " << db_path_);
     env_ = nullptr; // env_ ve dbi_ üyelerini açıkça başlat
     dbi_ = 0;
@@ -82,17 +83,120 @@ SwarmVectorDB::~SwarmVectorDB() {
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB Yıkıcısı: Çağrıldı.");
 }
 
+// Private helper function to handle the actual closing logic without locking the mutex.
+// This allows it to be called from both open() and the public close().
+void SwarmVectorDB::close_internal() {
+    if (env_ != nullptr) {
+        LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::close_internal(): Dahili kapatma işlemi başlatılıyor.");
+        // Save HNSW index before closing
+        if (hnsw_index_) {
+            if (!hnsw_index_->save_index(db_path_ + "/hnsw_index.bin")) {
+                 LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): HNSW index kaydedilemedi.");
+            }
+        }
+        
+        // Save maps and next_hnsw_label_ to LMDB
+        MDB_txn* txn;
+        LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::close_internal(): HNSW maps, next_hnsw_label_ ve Q-Table verileri LMDB'ye kaydediliyor.");
+        int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != MDB_SUCCESS) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): mdb_txn_begin başarısız (close save maps): " << mdb_strerror(rc));
+        } else {
+            // Save next_hnsw_label_
+            MDB_val next_label_key, next_label_data;
+            const std::string next_label_key_str_close = "next_hnsw_label";
+            std::string next_hnsw_label_str_close = std::to_string(next_hnsw_label_);
+            next_label_key.mv_size = next_label_key_str_close.length();
+            next_label_key.mv_data = (void*)next_label_key_str_close.c_str();
+            next_label_data.mv_size = next_hnsw_label_str_close.length();
+            next_label_data.mv_data = (void*)next_hnsw_label_str_close.c_str();
+            rc = mdb_put(txn, hnsw_next_label_dbi_, &next_label_key, &next_label_data, 0);
+            if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): next_hnsw_label_ put başarısız: " << mdb_strerror(rc));
+
+            // YENİ DÜZELTME: HNSW ID haritalarını LMDB'ye kaydetme
+            for (const auto& pair : hnsw_label_to_id_map_) {
+                MDB_val key_l, val_id;
+                std::string label_key_string = std::to_string(pair.first);
+                key_l.mv_size = label_key_string.size();
+                key_l.mv_data = (void*)label_key_string.c_str();
+                val_id.mv_size = pair.second.size();
+                val_id.mv_data = (void*)pair.second.c_str();
+                rc = mdb_put(txn, hnsw_label_to_id_map_dbi_, &key_l, &val_id, 0);
+                if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): hnsw_label_to_id_map put başarısız (close): " << mdb_strerror(rc));
+            }
+            for (const auto& pair : id_to_hnsw_label_map_) {
+                MDB_val key_id, val_l;
+                std::string label_val_string = std::to_string(pair.second);
+                key_id.mv_size = pair.first.size();
+                key_id.mv_data = (void*)pair.first.c_str();
+                val_l.mv_size = label_val_string.size();
+                val_l.mv_data = (void*)label_val_string.c_str();
+                rc = mdb_put(txn, id_to_hnsw_label_map_dbi_, &key_id, &val_l, 0);
+                if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): id_to_hnsw_label_map put başarısız (close): " << mdb_strerror(rc));
+            }
+            LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::close_internal(): HNSW maps kaydedildi. Toplam label: " << hnsw_label_to_id_map_.size());
+
+
+            // YENİ DÜZELTME: HNSW ID haritalarını LMDB'ye kaydetme
+            for (const auto& pair : hnsw_label_to_id_map_) {
+                MDB_val key_l, val_id;
+                std::string label_key_string = std::to_string(pair.first);
+                key_l.mv_size = label_key_string.size();
+                key_l.mv_data = (void*)label_key_string.c_str();
+                val_id.mv_size = pair.second.size();
+                val_id.mv_data = (void*)pair.second.c_str();
+                rc = mdb_put(txn, hnsw_label_to_id_map_dbi_, &key_l, &val_id, 0);
+                if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): hnsw_label_to_id_map put başarısız (close): " << mdb_strerror(rc));
+            }
+            for (const auto& pair : id_to_hnsw_label_map_) {
+                MDB_val key_id, val_l;
+                std::string label_val_string = std::to_string(pair.second);
+                key_id.mv_size = pair.first.size();
+                key_id.mv_data = (void*)pair.first.c_str();
+                val_l.mv_size = label_val_string.size();
+                val_l.mv_data = (void*)label_val_string.c_str();
+                rc = mdb_put(txn, id_to_hnsw_label_map_dbi_, &key_id, &val_l, 0);
+                if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): id_to_hnsw_label_map put başarısız (close): " << mdb_strerror(rc));
+            }
+
+            rc = mdb_txn_commit(txn);
+            if (rc != MDB_SUCCESS) {
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): mdb_txn_commit başarısız (close save maps): " << mdb_strerror(rc));
+            } else {
+                LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::close(): HNSW harita verileri ve next_hnsw_label başarıyla kaydedildi.");
+            }
+        }
+
+        // Close all DBI handles
+        if (dbi_ != 0) { mdb_dbi_close(env_, dbi_); dbi_ = 0; }
+        if (hnsw_label_to_id_map_dbi_ != 0) { mdb_dbi_close(env_, hnsw_label_to_id_map_dbi_); hnsw_label_to_id_map_dbi_ = 0; }
+        if (id_to_hnsw_label_map_dbi_ != 0) { mdb_dbi_close(env_, id_to_hnsw_label_map_dbi_); id_to_hnsw_label_map_dbi_ = 0; }
+        if (hnsw_next_label_dbi_ != 0) { mdb_dbi_close(env_, hnsw_next_label_dbi_); hnsw_next_label_dbi_ = 0; }
+        // Q-Table DBI'larını kapat
+        if (q_values_dbi_ != 0) { mdb_dbi_close(env_, q_values_dbi_); q_values_dbi_ = 0; }
+        if (q_metadata_dbi_ != 0) { mdb_dbi_close(env_, q_metadata_dbi_); q_metadata_dbi_ = 0; }
+
+        // Close the environment
+        mdb_env_close(env_);
+        env_ = nullptr;
+        LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::close_internal(): Diğer DBI'lar kapatıldı.");
+        LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB: Veritabanı kapatıldı.");
+    }
+}
+
 bool SwarmVectorDB::open() {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Eğer ortam zaten açıksa, önce kapatıp sonra tekrar açarak temiz bir başlangıç yapalım.
+    // Bu, uygulamanın yeniden başlatılması gibi durumlarda kilitli kalma sorunlarını önler.
     if (env_ != nullptr) {
-        LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::open(): LMDB ortamı zaten açık. Yeniden açmaya gerek yok.");
-        return true;
+        LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::open(): LMDB ortamı zaten açık görünüyor. Güvenlik için kapatılıp yeniden açılacak.");
+        close_internal(); // Kilit olmadan iç kapatma fonksiyonunu çağır
     }
 
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): LMDB ortamı açma işlemi başlatılıyor...");
 
     int rc;
-
+    
     // 1. Veritabanı dizininin var olduğundan emin ol
     try {
         if (!fs::exists(db_path_)) {
@@ -116,13 +220,13 @@ bool SwarmVectorDB::open() {
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_create başarılı.");
 
     // 2. Ortam boyutunu ayarla (örn: 1GB)
-    rc = mdb_env_set_mapsize(env_, 1ULL * 1024ULL * 1024ULL * 1024ULL); // 1 GB (1GB)
+    rc = mdb_env_set_mapsize(env_, 4ULL * 1024ULL * 1024ULL * 1024ULL); // DÜZELTME: Geri 4GB'a döndür, 8GB çok yüksek başlangıç için.
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_env_set_mapsize başarısız: " << mdb_strerror(rc));
         mdb_env_close(env_); env_ = nullptr;
         return false;
     }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_set_mapsize başarılı (1GB).");
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_set_mapsize başarılı (8GB).");
 
     // 3. Maksimum veritabanı sayısını ayarla (CryptofigVector'lar için birincil DB ve potansiyel diğerleri)
     rc = mdb_env_set_maxdbs(env_, 10); // Maksimum 10 DBI
@@ -217,8 +321,17 @@ bool SwarmVectorDB::open() {
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): LMDB ortamı ve tüm DB'ler başarıyla açıldı.");
     
     // next_hnsw_label_ yükle (yeni bir read transaction içinde)
-    MDB_txn* read_label_txn = nullptr; // Initialize to nullptr
-    rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &read_label_txn);
+    MDB_txn* read_label_txn = nullptr; 
+    // Düzeltme: MDB_val'ın mv_data'sı, mdb_get'ten sonra bir sonraki kullanıma kadar geçerlidir.
+    // Kendi kopyasını oluşturmazsak, 'data' değişkeni kapsam dışına çıktığında bozuk veriye işaret edebilir.
+    // next_hnsw_label_ için string dönüştürme ve stoul kullanımı bu riski azaltır.
+    // Ancak, next_hnsw_label bulunamadığında, data.mv_size'ın anlamsız büyük bir değer olması (logda görüldüğü gibi)
+    // 'data' objesinin mdb_get MDB_NOTFOUND durumunda initialize edilmemesinden kaynaklanıyor.
+    // Bu durumda data.mv_size ve data.mv_data kontrol edilmeden kullanılmamalıdır.
+
+    // Hata kontrolü için log ekleyelim
+    LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::open(): next_hnsw_label_ yüklemesi başlatılıyor.");
+    rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &read_label_txn); // YENİ LOG: Hata kontrolü için log ekleyelim
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_begin başarısız (next_hnsw_label okuma): " << mdb_strerror(rc));
         // Kritik bir hata durumunda bile uygulamanın devam etmesi için next_hnsw_label_ 0 olarak ayarlanır
@@ -230,245 +343,173 @@ bool SwarmVectorDB::open() {
         key.mv_data = (void*)next_label_key_str.c_str(); // Pointer to string data
 
         rc = mdb_get(read_label_txn, hnsw_next_label_dbi_, &key, &data); // Check data.mv_size as well
-        if (rc == MDB_SUCCESS && data.mv_size > 0) { // Check data.mv_size as well
-            next_hnsw_label_ = static_cast<hnswlib::labeltype>(std::stoul(std::string(static_cast<char*>(data.mv_data), data.mv_size)));
+        if (rc == MDB_SUCCESS && data.mv_size > 0) { 
+            // Logdaki anlamsız boyutu önlemek için, sadece başarılı durumda data.mv_size kontrolü yap.
+            // string(static_cast<char*>(data.mv_data), data.mv_size) kullanımı güvenli
+            if (data.mv_data == nullptr) { // Edge case: data.mv_size > 0 ama mv_data null
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): next_hnsw_label_ verisi null pointer! ID: " << next_label_key_str);
+                next_hnsw_label_ = 0;
+            } else {
+                next_hnsw_label_ = static_cast<hnswlib::labeltype>(std::stoul(std::string(static_cast<char*>(data.mv_data), data.mv_size)));
             LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): Kaydedilmis next_hnsw_label: " << next_hnsw_label_);
+            }
         } else {
             LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): next_hnsw_label bulunamadi veya ilk kez baslatiliyor (Hata kodu: " << rc << ", Boyut: " << data.mv_size << ").");
             next_hnsw_label_ = 0; // Başlangıç değeri
-        }
+        } 
         mdb_txn_abort(read_label_txn); // Salt okunur işlem, iptal edilebilir.
     }
 
     // HNSW index'i yükle veya oluştur
     if (hnsw_index_) { // unique_ptr null değilse
-        if (!hnsw_index_->load_or_create_index(db_path_ + "/hnsw_index.bin")) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): HNSW index'i yüklenemedi veya olusturulamadi.");
-            // Hata durumunda ne yapılacağına karar ver (LMDB açık kalır ama HNSW işlevsel olmaz)
-            // return false; // HNSW hatası kritikse buradan dönebiliriz. Şimdilik devam ediyoruz.
-        }
+        bool index_loaded = hnsw_index_->load_index(db_path_ + "/hnsw_index.bin");
 
-        // Eğer index yüklendi ve doluysa, hnsw_label_to_id_map ve id_to_hnsw_label_map'i LMDB'den yeniden inşa et
-        if (hnsw_index_->get_current_elements() > 0) {
-            LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): HNSW index zaten dolu, ID haritalari LMDB'den okunuyor.");
-            
+        // Veritabanında veri olup olmadığını kontrol et
+        MDB_txn* check_txn;
+        rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &check_txn); // Hata kontrolü ekleyelim
+        MDB_stat stat;
+        mdb_stat(check_txn, dbi_, &stat);
+        mdb_txn_abort(check_txn);
+        bool is_lmdb_populated = (stat.ms_entries > 0);
+
+        // Eğer index başarıyla yüklendi ve doluysa, haritaları LMDB'den oku.
+        // İndeks boşsa ama LMDB doluysa, yeniden oluşturma gerekir.
+        if (index_loaded && hnsw_index_->get_current_elements() > 0) {
+             LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): HNSW index diskten yüklendi, ID haritalari LMDB'den okunuyor.");
+
             MDB_txn* read_map_txn;
-            rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &read_map_txn);
+            rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &read_map_txn); // Hata kontrolü ekleyelim
             if (rc != MDB_SUCCESS) {
-                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_begin başarısız (harita okuma): " << mdb_strerror(rc) << ").");
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_begin başarısız (harita okuma): " << mdb_strerror(rc));
                 return false;
             }
 
             MDB_cursor* cursor_label_to_id;
             rc = mdb_cursor_open(read_map_txn, hnsw_label_to_id_map_dbi_, &cursor_label_to_id);
-            if (rc != MDB_SUCCESS) { // If it fails, log and continue. We don't abort the entire open.
+            if (rc != MDB_SUCCESS) { // Hata kontrolü
                 LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_cursor_open başarısız (label to id): " << mdb_strerror(rc));
-                mdb_cursor_close(cursor_label_to_id); // Ensure cursor is closed on error
                 mdb_txn_abort(read_map_txn);
                 return false;
             }
 
             MDB_val map_key, map_data;
-            while ((rc = mdb_cursor_get(cursor_label_to_id, &map_key, &map_data, MDB_NEXT)) == MDB_SUCCESS && map_key.mv_size > 0 && map_data.mv_size > 0) {
+            while ((rc = mdb_cursor_get(cursor_label_to_id, &map_key, &map_data, MDB_NEXT)) == MDB_SUCCESS) {
                 hnswlib::labeltype label = static_cast<hnswlib::labeltype>(std::stoul(std::string(static_cast<char*>(map_key.mv_data), map_key.mv_size)));
                 std::string id_str(static_cast<char*>(map_data.mv_data), map_data.mv_size);
                 hnsw_label_to_id_map_[label] = id_str;
-                if (label >= next_hnsw_label_) { // Update next_hnsw_label_ based on loaded labels
-                    next_hnsw_label_ = label + 1;
-                }
             }
             mdb_cursor_close(cursor_label_to_id);
 
             MDB_cursor* cursor_id_to_label;
-            rc = mdb_cursor_open(read_map_txn, id_to_hnsw_label_map_dbi_, &cursor_id_to_label);
-            if (rc != MDB_SUCCESS) { // If it fails, log and continue. We don't abort the entire open.
+            rc = mdb_cursor_open(read_map_txn, id_to_hnsw_label_map_dbi_, &cursor_id_to_label); // Hata kontrolü
+            if (rc != MDB_SUCCESS) {
                 LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_cursor_open başarısız (id to label): " << mdb_strerror(rc));
-                mdb_cursor_close(cursor_id_to_label); // Ensure cursor is closed on error
                 mdb_txn_abort(read_map_txn);
                 return false;
             }
 
-            while ((rc = mdb_cursor_get(cursor_id_to_label, &map_key, &map_data, MDB_NEXT)) == MDB_SUCCESS && map_key.mv_size > 0 && map_data.mv_size > 0) {
+            while ((rc = mdb_cursor_get(cursor_id_to_label, &map_key, &map_data, MDB_NEXT)) == MDB_SUCCESS) {
                 std::string id_str(static_cast<char*>(map_key.mv_data), map_key.mv_size);
                 hnswlib::labeltype label = static_cast<hnswlib::labeltype>(std::stoul(std::string(static_cast<char*>(map_data.mv_data), map_data.mv_size)));
+                id_to_hnsw_label_map_[id_str] = label;
             }
-            mdb_cursor_close(cursor_id_to_label); // Close cursor
-            mdb_txn_abort(read_map_txn); // Abort read-only transaction (can be committed or aborted)
+            mdb_cursor_close(cursor_id_to_label);
+            mdb_txn_abort(read_map_txn);
 
             LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): LMDB'den " << hnsw_label_to_id_map_.size() << " HNSW ID haritasi elemani yüklendi.");
-
-        }
-        // Eğer yeni bir index oluşturulduysa veya yüklendi ancak boşsa, veya haritalar boşsa LMDB'deki mevcut ID'leri HNSW'ye ekle
-        if (hnsw_index_->get_current_elements() == 0) {
-            LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): HNSW index bos, mevcut LMDB ID'leri ekleniyor.");
+        } 
+        // Eğer index yüklenemedi, boş (ama LMDB dolu) veya mevcut değilse, LMDB'deki verilerden yeniden oluştur.
+        else {
+            if (!index_loaded) {
+                LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::open(): HNSW index dosyasi bulunamadi veya bozuk. LMDB'den yeniden olusturulacak.");
+            } else if (is_lmdb_populated && hnsw_index_->get_current_elements() == 0) {
+                LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::open(): HNSW index dosyasi bos ama LMDB'de veri var. Index yeniden olusturulacak.");
+                // Haritaları temizle, çünkü yeniden doldurulacaklar
+                id_to_hnsw_label_map_.clear();
+                hnsw_label_to_id_map_.clear();
+            } else {
+                LOG_DEFAULT(LogLevel::WARNING, "SwarmVectorDB::open(): HNSW index dosyasi bos. LMDB'den yeniden doldurulacak.");
+            }
+            
+            // Yeni (boş) bir HNSW indeksi oluştur
+            hnsw_index_->create_new_index();
 
             MDB_txn* write_txn;
-            rc = mdb_txn_begin(env_, nullptr, 0, &write_txn);
-                        
-            std::vector<std::string> existing_ids = get_all_ids_internal(write_txn); // Deadlock'u önlemek için internal metot çağrıldı.
-
+            rc = mdb_txn_begin(env_, nullptr, 0, &write_txn); // DÜZELTME: Yeniden doldurma için yazma transaction'ı gerekli.
             if (rc != MDB_SUCCESS) {
                 LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_txn_begin başarısız (hnsw populate): " << mdb_strerror(rc));
                 return false;
             }
 
+            std::vector<std::string> existing_ids = get_all_ids_internal(write_txn);
+
             for (const auto& id : existing_ids) {
                 std::unique_ptr<CryptofigVector> cv = get_vector(id, write_txn);
                 if (cv) {
-                    // hnswlib::labeltype label = static_cast<hnswlib::labeltype>(std::hash<std::string>{}(id));
-                    hnswlib::labeltype label = next_hnsw_label_++; 
-                    std::vector<float> emb(cv->embedding.data(), cv->embedding.data() + cv->embedding.size());
-                    hnsw_index_->add_item(emb, label);
+                    if (id_to_hnsw_label_map_.find(id) == id_to_hnsw_label_map_.end()) {
+                        hnswlib::labeltype label = next_hnsw_label_++;
+                        std::vector<float> emb(cv->embedding.data(), cv->embedding.data() + cv->embedding.size());
+                        hnsw_index_->add_item(emb, label);
 
-                    // Haritaları güncelle
-                    hnsw_label_to_id_map_[label] = id;
-                    id_to_hnsw_label_map_[id] = label;
+                        // Bellekteki haritaları güncelle
+                        hnsw_label_to_id_map_[label] = id;
+                        id_to_hnsw_label_map_[id] = label;
 
-                    // Haritaları LMDB'ye kaydet (hnswlib::labeltype'ı string'e çevirerek daha güvenli MDB_val kullanımı)
-                    std::string label_str_key_open = std::to_string(label);
-                    MDB_val label_key_mdb, id_val_mdb;
-                    label_key_mdb.mv_size = label_str_key_open.size();
-                    label_key_mdb.mv_data = (void*)label_str_key_open.data();
-                    id_val_mdb.mv_size = id.size();
-                    id_val_mdb.mv_data = (void*)id.data();
-                    rc = mdb_put(write_txn, hnsw_label_to_id_map_dbi_, &label_key_mdb, &id_val_mdb, 0);
-                    if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): hnsw_label_to_id_map put başarısız (label: " << label_str_key_open << ", ID: " << id << "): " << mdb_strerror(rc));
+                        // YENİ DÜZELTME: HNSW eşleme haritalarını ve next_hnsw_label'ı LMDB'ye kaydet
+                        MDB_val label_key_mdb_store, id_val_mdb_store;
+                        std::string label_str = std::to_string(label);
+                        label_key_mdb_store.mv_size = label_str.length();
+                        label_key_mdb_store.mv_data = (void*)label_str.c_str();
+                        id_val_mdb_store.mv_size = id.length();
+                        id_val_mdb_store.mv_data = (void*)id.c_str();
+                        mdb_put(write_txn, hnsw_label_to_id_map_dbi_, &label_key_mdb_store, &id_val_mdb_store, 0);
 
-                    std::string label_str_val_open = std::to_string(label);
-                    MDB_val id_key_mdb_inner, label_val_mdb;
-                    id_key_mdb_inner.mv_size = id.size();
-                    id_key_mdb_inner.mv_data = (void*)id.data();
-                    label_val_mdb.mv_size = label_str_val_open.size();
-                    label_val_mdb.mv_data = (void*)label_str_val_open.data();
-                    rc = mdb_put(write_txn, id_to_hnsw_label_map_dbi_, &id_key_mdb_inner, &label_val_mdb, 0);
-                    if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): id_to_hnsw_label_map put başarısız (ID: " << id << ", label: " << label_str_val_open << "): " << mdb_strerror(rc));
+                        MDB_val id_key_mdb_store, label_val_mdb_store;
+                        id_key_mdb_store.mv_size = id.length();
+                        id_key_mdb_store.mv_data = (void*)id.c_str();
+                        label_val_mdb_store.mv_size = label_str.length();
+                        label_val_mdb_store.mv_data = (void*)label_str.c_str();
+                        mdb_put(write_txn, id_to_hnsw_label_map_dbi_, &id_key_mdb_store, &label_val_mdb_store, 0);
+                    }
                 }
             }
-            LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): LMDB'den HNSW index'e " << existing_ids.size() << " eleman eklendi.");
+            
+            // next_hnsw_label'ı da kaydet
+            MDB_val next_label_key_save, next_label_data_save;
+            std::string next_label_key_str_final = "next_hnsw_label";
+            std::string next_hnsw_label_str_final = std::to_string(next_hnsw_label_);
+            next_label_key_save.mv_size = next_label_key_str_final.length(); next_label_key_save.mv_data = (void*)next_label_key_str_final.c_str();
+            next_label_data_save.mv_size = next_hnsw_label_str_final.length(); next_label_data_save.mv_data = (void*)next_hnsw_label_str_final.c_str();
+            mdb_put(write_txn, hnsw_next_label_dbi_, &next_label_key_save, &next_label_data_save, 0);
 
-            // next_hnsw_label_ ve haritaların kaydedilmesi
-            MDB_val next_label_key, next_label_data;
-            std::string next_label_key_str_save = "next_hnsw_label";
-            next_label_key.mv_size = next_label_key_str_save.length(); // Use length() for string size
-            std::string next_hnsw_label_str_save = std::to_string(next_hnsw_label_); // Convert label to string
-            next_label_key.mv_size = next_label_key_str_save.length();
-            next_label_key.mv_data = (void*)next_label_key_str_save.c_str();
-            next_label_data.mv_size = next_hnsw_label_str_save.length(); // Size of the string
-            next_label_data.mv_data = (void*)next_hnsw_label_str_save.c_str(); // Pointer to the string data
-            rc = mdb_put(write_txn, hnsw_next_label_dbi_, &next_label_key, &next_label_data, 0);
-            if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): next_hnsw_label_ put başarısız: " << mdb_strerror(rc));
-
-            rc = mdb_txn_commit(write_txn);
+            rc = mdb_txn_commit(write_txn); // Yazma işlemi yapıldı, commit et
             if (rc != MDB_SUCCESS) {
-                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): hnsw map commit başarısız: " << mdb_strerror(rc));
-                mdb_txn_abort(txn); return false;
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): HNSW populate commit başarısız: " << mdb_strerror(rc));
+                return false;
+            }
+
+            LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::open(): LMDB'den HNSW index'e " << existing_ids.size() << " eleman eklendi.");
+            
+            // Yeni doldurulan HNSW indeksini hemen diske kaydet.
+            if (!hnsw_index_->save_index(db_path_ + "/hnsw_index.bin")) { // save_index çağrısı
+                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): Doldurulan yeni HNSW index'i kaydedilemedi."); 
             }
         }
+    } else { // hnsw_index_ null ise
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): HNSWIndex nesnesi başlatılmamış. Kritik hata.");
+            return false;
     }
-    return true;
+    return true; // Başarıyla açıldı
 }
 
 void SwarmVectorDB::close() {
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::close(): Veritabanı kapatma işlemi başlatılıyor.");
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (env_ != nullptr) {
-        // HNSW index'i kapatmadan önce kaydet
-        if (hnsw_index_) {
-            if (!hnsw_index_->save_index(db_path_ + "/hnsw_index.bin")) {
-                 LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): HNSW index kaydedilemedi.");
-            }
-        }
-        
-        // Haritaları ve next_hnsw_label_'ı LMDB'ye kaydet
-        MDB_txn* txn;
-        int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
-        if (rc != MDB_SUCCESS) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): mdb_txn_begin başarısız (close save maps): " << mdb_strerror(rc));
-            // Yine de LMDB'yi kapatmaya devam et
-        } else {
-            // next_hnsw_label_ kaydet
-            // next_hnsw_label_ kaydet
-            MDB_val next_label_key, next_label_data;
-            const std::string next_label_key_str_close = "next_hnsw_label";
-            std::string next_hnsw_label_str_close = std::to_string(next_hnsw_label_); // Convert label to string
-            next_label_key.mv_size = next_label_key_str_close.length();
-            next_label_key.mv_data = (void*)next_label_key_str_close.c_str();
-            next_label_data.mv_size = next_hnsw_label_str_close.length();
-            next_label_data.mv_data = (void*)next_hnsw_label_str_close.c_str();
-            rc = mdb_put(txn, hnsw_next_label_dbi_, &next_label_key, &next_label_data, 0);
-            if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): next_hnsw_label_ put başarısız: " << mdb_strerror(rc));
-
-            // ... (rest of close method for maps and env)
-
-            // Haritaları iterate edip kaydet (mevcut mapleri silip baştan yazmak daha güvenli olabilir)
-            // Kapanışta tüm haritaları yineleyerek kaydetmek, tam tutarlılık sağlamak için önemlidir,
-            // özellikle bazı güncellemeler kaçırılmışsa veya bellek içi haritalar kapanışta doğruluk kaynağı ise.
-            // Her bir ekleme/silme işlemi ayrı ayrı harita girişlerini kaydettiği için,
-            // burada tam bir yeniden yazma yapmak yerine, sadece next_hnsw_label_ kaydediliyordu.
-            // Ancak, olası tutarsızlıkları önlemek için tüm haritaların kaydedilmesi daha sağlam bir yaklaşımdır.
-            for (const auto& pair : hnsw_label_to_id_map_) {
-                MDB_val key_l, val_id; // Temporary MDB_val structures
-                std::string label_key_string = std::to_string(pair.first); // Convert label to string for key
-                key_l.mv_size = label_key_string.size();
-                key_l.mv_data = (void*)label_key_string.data();
-                val_id.mv_size = pair.second.size();
-                val_id.mv_data = (void*)pair.second.data();
-                rc = mdb_put(txn, hnsw_label_to_id_map_dbi_, &key_l, &val_id, 0);
-                if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): hnsw_label_to_id_map put başarısız (close): " << mdb_strerror(rc));
-            }
-            for (const auto& pair : id_to_hnsw_label_map_) {
-                MDB_val key_id, val_l; // Temporary MDB_val structures
-                std::string label_val_string = std::to_string(pair.second); // Convert label to string for value
-                key_id.mv_size = pair.first.size();
-                key_id.mv_data = (void*)pair.first.data();
-                val_l.mv_size = label_val_string.size();
-                val_l.mv_data = (void*)label_val_string.data();
-                rc = mdb_put(txn, id_to_hnsw_label_map_dbi_, &key_id, &val_l, 0);
-                if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): id_to_hnsw_label_map put başarısız (close): " << mdb_strerror(rc));
-            }
-
-            rc = mdb_txn_commit(txn);
-            if (rc != MDB_SUCCESS) {
-                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::close(): mdb_txn_commit başarısız (close save maps): " << mdb_strerror(rc));
-            } else {
-                LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB::close(): HNSW harita verileri ve next_hnsw_label başarıyla kaydedildi.");
-            }
-        }
-
-        if (hnsw_label_to_id_map_dbi_ != 0) {
-            mdb_dbi_close(env_, hnsw_label_to_id_map_dbi_);
-            hnsw_label_to_id_map_dbi_ = 0;
-        }
-        if (id_to_hnsw_label_map_dbi_ != 0) {
-            mdb_dbi_close(env_, id_to_hnsw_label_map_dbi_);
-            id_to_hnsw_label_map_dbi_ = 0;
-        }
-        if (hnsw_next_label_dbi_ != 0) {
-            mdb_dbi_close(env_, hnsw_next_label_dbi_);
-            hnsw_next_label_dbi_ = 0;
-        }
-
-        // YENİ: Q-Table DBI'larını kapat
-        if (q_values_dbi_ != 0) {
-            mdb_dbi_close(env_, q_values_dbi_);
-            q_values_dbi_ = 0;
-        }
-        if (q_metadata_dbi_ != 0) {
-            mdb_dbi_close(env_, q_metadata_dbi_);
-            q_metadata_dbi_ = 0;
-        }
-
-        if (dbi_ != 0) {
-            mdb_dbi_close(env_, dbi_);
-            dbi_ = 0;
-        }
-        mdb_env_close(env_);
-        env_ = nullptr;
-        LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB: Veritabanı kapatıldı.");
-    }
+    std::lock_guard<std::mutex> lock(mutex_); // Kilidi en dışarıda alıyoruz.
+    close_internal();
 }
 
 bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
+
     std::lock_guard<std::mutex> lock(mutex_);
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: Veritabanı açık değil. Vektör depolanamadı.");
@@ -501,7 +542,7 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     const uint8_t* embedding_data_ptr = reinterpret_cast<const uint8_t*>(cv.embedding.data());
     serialized_data.insert(serialized_data.end(), embedding_data_ptr, embedding_data_ptr + (cv.embedding.size() * sizeof(float)));
    
-    if (hnsw_index_ && cv.embedding.size() != hnsw_index_->get_dim()) { // Use get_dim from HNSWIndex for consistency
+    if (hnsw_index_ && cv.embedding.size() != hnsw_index_->get_dim()) { // Use get_dim from HNSWIndex for consistency 
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): Embedding boyutu 128 float degil! ID: " << cv.id);
         mdb_txn_abort(txn);
         return false;
@@ -530,7 +571,7 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     data.mv_data = serialized_data.data();
 
     rc = mdb_put(txn, dbi_, &key, &data, 0);
-    if (rc != MDB_SUCCESS) {
+    if (rc != MDB_SUCCESS) { // Hata kontrolü
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_put başarısız: " << mdb_strerror(rc));
         mdb_txn_abort(txn);
         return false;
@@ -538,7 +579,7 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
 
     // HNSW index'e de ekle (aynı transaction içinde)
     if (hnsw_index_) {
-        if (!id_to_hnsw_label_map_.count(cv.id)) {
+        if (!id_to_hnsw_label_map_.count(cv.id)) { // Hata kontrolü
             hnswlib::labeltype current_label = next_hnsw_label_++;
             std::vector<float> emb(cv.embedding.data(), cv.embedding.data() + cv.embedding.size());
             hnsw_index_->add_item(emb, current_label);
@@ -578,6 +619,7 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     }
 
     rc = mdb_txn_commit(txn);
+
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_txn_commit başarısız: " << mdb_strerror(rc));
         return false;
@@ -587,8 +629,9 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     return true;
 }
 
+
 std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id, MDB_txn* existing_txn) const { // Keep consistent
-    std::lock_guard<std::mutex> lock(mutex_);
+    //std::lock_guard<std::mutex> lock(mutex_);
     if (env_ == nullptr) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: Veritabanı açık değil. Vektör getirilemedi.");
         return nullptr;
@@ -596,6 +639,7 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
 
     MDB_txn* current_txn = existing_txn;
     if (!current_txn) { // Eğer dışarıdan bir transaction sağlanmadıysa, yeni bir read-only transaction başlat
+        LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::get_vector(): Yeni RDONLY transaction başlatılıyor. ID: " << id);
         int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &current_txn);
         if (rc != MDB_SUCCESS) {
             LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_txn_begin başarısız (get_vector - yeni txn): " << mdb_strerror(rc));
@@ -608,6 +652,7 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     key.mv_data = (void*)id.data();
 
     int rc = mdb_get(current_txn, dbi_, &key, &data);
+    LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::get_vector(): mdb_get çağrıldı. ID: " << id << ", RC: " << rc << ", Hata: " << mdb_strerror(rc) << ", Data Size: " << data.mv_size);
     if (rc == MDB_NOTFOUND) {
         LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB: Vektör bulunamadı. ID: " << id);
         if (!existing_txn) { // Kendi başlattığı transaction'ı abort et
@@ -616,7 +661,7 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
         return nullptr;
     } else if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_get başarısız: " << mdb_strerror(rc));
-        if (!existing_txn) mdb_txn_abort(current_txn); // Corrected this, was txn
+        if (!existing_txn) mdb_txn_abort(current_txn);
         return nullptr;
     }
 
@@ -641,7 +686,6 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     // 2. Deserialize cv.cryptofig
     if (remaining_size < cryptofig_len) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: CryptofigVector deserialization hatasi: Cryptofig verisi eksik. ID: " << id);
-        if (!existing_txn) mdb_txn_abort(current_txn); // Added this as well
         if (!existing_txn) mdb_txn_abort(current_txn);
         return nullptr;
     }
@@ -652,7 +696,6 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     // 3. Deserialize cv.embedding
     cv->embedding.resize(128);
     size_t embedding_byte_size = 128 * sizeof(float);
-    // Bu kontrol önceki yamada eklenmişti.
     if (remaining_size < embedding_byte_size) { // KRİTİK EKSİK SINIR KONTROLÜ EKLENDİ
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: CryptofigVector deserialization hatasi: Embedding verisi eksik veya bozuk. ID: " << id);
         if (!existing_txn) mdb_txn_abort(current_txn);
@@ -700,7 +743,7 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
         if (!existing_txn) mdb_txn_abort(current_txn);
         return nullptr;
     }
-    cv->content_hash.assign(reinterpret_cast<const char*>(current_ptr + offset), content_hash_len); // This was previously the end, should be here
+    cv->content_hash.assign(reinterpret_cast<const char*>(current_ptr + offset), content_hash_len);
     offset += content_hash_len; 
     remaining_size -= content_hash_len; // After this, remaining_size should be 0 if all fields are correctly deserialized.
 
@@ -728,7 +771,7 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
 
 
     // Check if there's any remaining data unread, indicates serialization/deserialization mismatch
-    if (remaining_size != 0) { // This check should now be more reliable
+    if (remaining_size != 0) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: CryptofigVector deserialization hatasi: Okunmayan veri kaldi (" << remaining_size << " byte). ID: " << id);
         if (!existing_txn) mdb_txn_abort(current_txn);
         return nullptr;
@@ -772,53 +815,41 @@ bool SwarmVectorDB::delete_vector(const std::string& id) {
         return false;
     }
 
-    rc = mdb_txn_commit(txn);
-    if (rc != MDB_SUCCESS) {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_txn_commit başarısız: " << mdb_strerror(rc));
-        return false;
-    }
-
     // HNSW index'ten de kaldır
     if (hnsw_index_ && id_to_hnsw_label_map_.count(id)) {
         hnswlib::labeltype label_to_remove = id_to_hnsw_label_map_[id];
-        // hnswlib'de doğrudan removePoint API'si yok, yeniden indeksleme gerekebilir veya özel işaretleme.
-        // Şimdilik, sadece haritalardan kaldırıyoruz. Gerçekte hnswlib'in update veya delete mantığı daha karmaşık.
-
-        // Haritaları LMDB'den de sil
-        MDB_txn* map_txn = nullptr; // Initialize to nullptr
-        rc = mdb_txn_begin(env_, nullptr, 0, &map_txn);
-        if (rc != MDB_SUCCESS) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_vector(): mdb_txn_begin başarısız (delete map): " << mdb_strerror(rc) << ").");
-            return false;
-        }
+        // HNSW index'te öğeyi silindi olarak işaretle
+        hnsw_index_->mark_deleted(label_to_remove); // Bu işlem diske yazma gerektirmez, sadece bellekte işaretler.
         
         MDB_val label_key_del, id_key_del;
         std::string label_to_remove_str = std::to_string(label_to_remove);
         label_key_del.mv_size = label_to_remove_str.size();
         label_key_del.mv_data = (void*)label_to_remove_str.data();
-        rc = mdb_del(map_txn, hnsw_label_to_id_map_dbi_, &label_key_del, nullptr);
+        rc = mdb_del(txn, hnsw_label_to_id_map_dbi_, &label_key_del, nullptr);
         if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_vector(): hnsw_label_to_id_map del başarısız (label: " << label_to_remove_str << "): " << mdb_strerror(rc));
 
         std::string id_str_del = id; // Ensure lifetime
         id_key_del.mv_size = id_str_del.size();
         id_key_del.mv_data = (void*)id_str_del.data();
-        rc = mdb_del(map_txn, id_to_hnsw_label_map_dbi_, &id_key_del, nullptr);
+        rc = mdb_del(txn, id_to_hnsw_label_map_dbi_, &id_key_del, nullptr);
         if (rc != MDB_SUCCESS) LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_vector(): id_to_hnsw_label_map del başarısız: " << mdb_strerror(rc));
-
-        rc = mdb_txn_commit(map_txn);
-        if (rc != MDB_SUCCESS) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::delete_vector(): mdb_txn_commit başarısız (delete map): " << mdb_strerror(rc));
-            return false;
-        }
 
         hnsw_label_to_id_map_.erase(label_to_remove);
         id_to_hnsw_label_map_.erase(id);
         LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB: HNSW index haritasindan vektör kaldirildi. ID: " << id << ", Label: " << label_to_remove);
     }
 
+    // Tüm silme işlemleri tamamlandıktan sonra transaction'ı commit et
+    rc = mdb_txn_commit(txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: mdb_txn_commit başarısız (delete): " << mdb_strerror(rc));
+        return false;
+    }
+
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB: Vektör başarıyla silindi. ID: " << id);
     return true;
 }
+
 
 std::vector<std::string> SwarmVectorDB::search_similar_vectors(const std::vector<float>& query_embedding, int top_k) const {
     std::vector<std::string> result_ids;
@@ -845,6 +876,7 @@ std::vector<std::string> SwarmVectorDB::search_similar_vectors(const std::vector
 
     return result_ids;
 }
+
 
 // Private helper to get all IDs without external mutex locking and using an existing transaction
 std::vector<std::string> SwarmVectorDB::get_all_ids_internal(MDB_txn* txn) const {
@@ -876,6 +908,7 @@ std::vector<std::string> SwarmVectorDB::get_all_ids_internal(MDB_txn* txn) const
     return ids;
 }
 
+
 std::vector<std::string> SwarmVectorDB::get_all_ids() const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<std::string> ids;
@@ -895,6 +928,7 @@ std::vector<std::string> SwarmVectorDB::get_all_ids() const {
 
     return ids;
 }
+
 
 // YENİ: SparseQTable kalıcılığı için metotlar
 bool SwarmVectorDB::store_q_value_json(const EmbeddingStateKey& state_key, const std::string& action_map_json_str) {
@@ -1039,6 +1073,7 @@ std::vector<EmbeddingStateKey> SwarmVectorDB::get_all_keys_for_dbi(MDB_dbi dbi) 
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_all_keys_for_dbi(): DBI " << dbi << " için toplam " << keys.size() << " anahtar getirildi.");
     return keys;
 }
+
 
 } // namespace SwarmVectorDB
 } // namespace CerebrumLux

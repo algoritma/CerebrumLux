@@ -174,7 +174,7 @@ void QTablePanel::onClearSearchClicked() {
 void QTablePanel::displayQValueDetails(const QTableDisplayData& data) {
     QString details;
     details += "<h3>Q-Table Detayları</h3>";
-    details += "<b>Durum Anahtarı (Kısmi):</b> " + data.stateKey.left(100) + "...<br><br>";
+    details += "<b>Durum Anahtarı (Kısmi):</b> " + data.stateKey.left(500) + "...<br><br>";
     details += "<b>Eylem Q-Değerleri:</b><br>";
 
     QList<std::pair<QString, float>> sortedQValues;
