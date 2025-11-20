@@ -100,6 +100,9 @@ signals:
     // Web çekme işleminin sonucunu bildiren sinyal
     void webFetchCompleted(const CerebrumLux::IngestReport& report);
 
+    void qTableUpdated();       // Q-Table'da bir Q-değeri güncellendiğinde yayılır
+    void qTableLoadCompleted(); // Q-Table LMDB'den yüklendikten sonra yayılır
+
 private slots:
     // WebFetcher'dan gelen yapılandırılmış arama sonuçlarını işlemek için slot
     void onStructuredWebContentFetched(const QString& url, const std::vector<CerebrumLux::WebSearchResult>& searchResults);

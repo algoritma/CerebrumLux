@@ -96,6 +96,7 @@ cmake .. -G "MinGW Makefiles" `
   -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
   -DOPENSSL_ROOT_DIR="C:/vcpkg/installed/x64-mingw-static" `
   -Dhnswlib_DIR="C:/vcpkg/installed/x64-mingw-static/share/hnswlib" `
+  -DEigen3_DIR="C:/vcpkg/installed/x64-mingw-static/share/eigen3" `
   -DOPENSSL_USE_STATIC_LIBS=TRUE
     ```
 3.  **Projeyi Derleyin:**
@@ -107,7 +108,7 @@ cmake .. -G "MinGW Makefiles" `
 4.  **GUI Uygulaması İçin DLL'leri Dağıtın:**
     `CerebrumLuxGUI.exe`'nin bulunduğu derleme dizinine (`build/Release` veya `build/Debug` gibi) gidin ve aşağıdaki komutu çalıştırın:
     ```bash
-    windeployqt.exe CerebrumLuxGUI.exe
+    &"C:/Qt/6.9.3/mingw_64/bin/windeployqt.exe" "CerebrumLuxGUI.exe" --qmldir ../gui
     ```
     Bu adım, GUI uygulamasının çalışması için gerekli tüm Qt DLL'lerini kopyalayacaktır.
 

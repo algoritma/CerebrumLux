@@ -505,19 +505,17 @@ void LearningModule::processCodeSuggestionFeedback(const std::string& capsuleId,
 }
 
 void LearningModule::update_q_values(const std::vector<float>& current_state_embedding, CerebrumLux::AIAction action, float reward, const std::vector<float>& next_state_embedding) {
-    std::stringstream ss_current;
-    ss_current << std::string("EMB:");
-    for (float val : current_state_embedding) {
-        ss_current << std::fixed << std::setprecision(5) << val << "|";
-    }
-    EmbeddingStateKey current_state_key = ss_current.str();
+    // DÜZELTME BAŞLANGICI: EmbeddingStateKey'i embedding vektörünün SHA-256 hash'i olarak oluştur.
+    // Bu, LMDB'nin MDB_BAD_VALSIZE hatasını çözmelidir.
+    // std::vector<float>'ı önce bir string'e (veya byte dizisine) serileştirmemiz ve sonra hashlememiz gerekir.
+    std::string current_embedding_str(reinterpret_cast<const char*>(current_state_embedding.data()), current_state_embedding.size() * sizeof(float));
+    // sha256_hash fonksiyonu CryptoUtils.h'de doğrudan CerebrumLux::Crypto namespace'i içinde tanımlandı.
+    EmbeddingStateKey current_state_key = CerebrumLux::Crypto::sha256_hash(current_embedding_str);
 
-    std::stringstream ss_next;
-    ss_next << std::string("EMB:");
-    for (float val : next_state_embedding) {
-        ss_next << std::fixed << std::setprecision(5) << val << "|";
-    }
-    EmbeddingStateKey next_state_key = ss_next.str();
+    std::string next_embedding_str(reinterpret_cast<const char*>(next_state_embedding.data()), next_state_embedding.size() * sizeof(float));
+    // sha256_hash fonksiyonu CryptoUtils.h'de doğrudan CerebrumLux::Crypto namespace'i içinde tanımlandı.
+    EmbeddingStateKey next_state_key = CerebrumLux::Crypto::sha256_hash(next_embedding_str);
+    // DÜZELTME BİTİŞİ
 
     float current_q_value = q_table.q_values[current_state_key][action];
     float learning_rate_rl = 0.1f;

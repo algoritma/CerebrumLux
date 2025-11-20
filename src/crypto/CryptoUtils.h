@@ -33,6 +33,9 @@ EVP_PKEY* load_public_key_from_pem(const std::string& pem_key);
 // OpenSSL hafıza temizleme
 void secure_zero_memory(void* v, size_t n);
 
+// YENİ EKLENDİ: SHA-256 hash fonksiyonu
+std::string sha256_hash(const std::string& data);
+
 } // namespace Crypto
 } // namespace CerebrumLux
 
