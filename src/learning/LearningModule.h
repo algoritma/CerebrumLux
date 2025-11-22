@@ -84,6 +84,9 @@ public:
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
     
+    // YENİ: Kullanıcının chat yanıtına verdiği geri bildirimi işler
+    void processUserChatFeedback(bool isPositive);
+
     // Sparse Q-Table kalıcılığı için metotlar
     void save_q_table() const;
     void load_q_table();

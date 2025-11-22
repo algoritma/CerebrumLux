@@ -25,22 +25,37 @@ public:
     virtual ~ChatPanel();
 
 public slots:
-    // Chat mesajlarını ve ChatResponse objesini ekler (SimulationPanel'den taşındı)
-    void appendChatMessage(const QString& sender, const CerebrumLux::ChatResponse& chatResponse); 
+    // Mesaj ekleme fonksiyonunu güncelliyoruz (ChatResponse alacak şekilde)
+    void appendChatMessage(const QString& sender, const CerebrumLux::ChatResponse& response);
+    // Basit metin eklemek için overload (Kullanıcı mesajları için)
+    void appendChatMessage(const QString& sender, const QString& message);
 
 signals:
     // Kullanıcı chat mesajı girdiğinde (MainWindow'a bağlanacak)
     void chatMessageEntered(const QString& message);
+    // YENİ: Öneri tıklandığında ve geri bildirim verildiğinde yayılacak sinyaller
+    void suggestionClicked(const QString& message);
+    void userFeedbackGiven(bool isPositive);
 
 private slots:
-    // Chat mesajı girişi için slot (SimulationPanel'den taşındı)
-    void onChatMessageLineEditReturnPressed();
+    void onSendClicked();
+    void onSuggestionBtnClicked();
+    void onLikeClicked();
+    void onDislikeClicked();
 
 private:
     QTextEdit *chatHistoryDisplay;
     QLineEdit *chatMessageLineEdit;
     QPushButton *sendChatMessageButton;
-
+    
+    // YENİ UI Elemanları
+    QWidget *suggestionContainer;
+    QHBoxLayout *suggestionLayout;
+    QPushButton *btnLike;
+    QPushButton *btnDislike;
+    
+    void clearSuggestions();
+    void addSuggestionButton(const std::string& text);
     void setupUi();
 };
 

@@ -298,7 +298,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     // 3. Arama Stratejisi
     // Öncelikle, temel tanımlayıcı kapsülleri doğrudan ID ile arayalım.
     std::vector<CerebrumLux::Capsule> definitive_results;
-    bool found_by_id = false; 
+    bool found_by_id = false;
 
     // "Cerebrum Lux nedir?" benzeri bir soru için
     if (search_term_for_embedding.find("Cerebrum Lux") != std::string::npos || search_term_for_embedding.find("nedir") != std::string::npos || search_term_for_embedding.find("tanım") != std::string::npos) {
@@ -318,7 +318,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
             found_by_id = true;
         }
     }
- 
+
     // 4. Sonuçları Hazırla
     std::vector<CerebrumLux::Capsule> final_results_for_synthesis;
 
@@ -326,8 +326,8 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
         final_results_for_synthesis = definitive_results;
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Doğrudan tanımlayıcı kapsüller önceliklendirildi.");
     } else {
-        // Doğrudan ID ile bulunamazsa, semantik arama yap
-        std::vector<CerebrumLux::Capsule> semantic_search_results = kb.semantic_search(search_query_embedding, 5);
+        // Doğrudan ID ile bulunamazsa, semantik arama yap (Yanıt + Öneriler için daha fazla sonuç al)
+        std::vector<CerebrumLux::Capsule> semantic_search_results = kb.semantic_search(search_query_embedding, 6);
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den semantik arama yapıldı. Bulunan kapsül sayısı: " << semantic_search_results.size() << " (Sorgu: '" << search_term_for_embedding << "')");
  
         // Semantic arama sonuçlarını da final_results'a ekle, ancak boş veya anlamsız olanları filtrele
@@ -348,7 +348,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     }
 
     // 5. Yanıt Sentezi (Gelişmiş)
-    if (!final_results_for_synthesis.empty()) { 
+    if (!final_results_for_synthesis.empty()) {
         std::stringstream response_stream;
         std::stringstream reasoning_stream;
         std::vector<std::string> cited_capsule_ids;
@@ -356,9 +356,10 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
         response_stream << "Bilgi tabanımda sorunuzla ilgili bazı bilgiler buldum: \n";
         reasoning_stream << "Yanıt, KnowledgeBase'deki ";
 
+        size_t used_capsule_count = 0;
         // En alakalı kapsülleri birleştirerek yanıt oluştur
-        for (size_t i = 0; i < final_results_for_synthesis.size(); ++i) { 
-            const CerebrumLux::Capsule& capsule = final_results_for_synthesis[i]; 
+        for (size_t i = 0; i < final_results_for_synthesis.size(); ++i) {
+            const CerebrumLux::Capsule& capsule = final_results_for_synthesis[i];
             cited_capsule_ids.push_back(capsule.id);
             
             // YENİ LOG: Bulunan her kapsülün ID'sini, konusunu ve içeriğini (özet veya tam) logla.
@@ -370,21 +371,21 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
 
             // Kapsülün içeriğini veya özetini kullanarak daha zengin bir yanıt oluştur
             std::string display_content = capsule.content;
-            if (display_content.empty() || 
-                display_content.find("Is this data relevant to AI Insight?") != std::string::npos || 
-                display_content.find("Bilgi bulunamadı.") != std::string::npos) 
+            if (display_content.empty() ||
+                display_content.find("Is this data relevant to AI Insight?") != std::string::npos ||
+                display_content.find("Bilgi bulunamadı.") != std::string::npos)
             {
                 display_content = capsule.plain_text_summary; // İçerik boşsa özeti kullan
-                if (display_content.empty() || 
-                    display_content.find("Is this data relevant to AI Insight?") != std::string::npos || 
-                    display_content.find("Bilgi bulunamadı.") != std::string::npos) 
+                if (display_content.empty() ||
+                    display_content.find("Is this data relevant to AI Insight?") != std::string::npos ||
+                    display_content.find("Bilgi bulunamadı.") != std::string::npos)
                 {
                     display_content = "İlgili bilgi mevcut değil."; // Hem içerik hem özet boşsa veya anlamsızsa
                 }
             }
             
             // Metni biraz kırp (çok uzunsa) ve sonuna ... ekle
-            std::string content_snippet = display_content.substr(0, std::min((size_t)400, display_content.length())); 
+            std::string content_snippet = display_content.substr(0, std::min((size_t)400, display_content.length()));
             if (display_content.length() > 400) content_snippet += "...";
 
             response_stream << "\n- **" << capsule.topic << "**: " << content_snippet << " [cite:" << capsule.id << "]";
@@ -393,17 +394,34 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
             if (i < final_results_for_synthesis.size() - 1) {
                 reasoning_stream << ", ";
             }
+            used_capsule_count++;
+            
+            // İlk 2 kapsülü yanıt için kullan, gerisini önerilere sakla
+            if (used_capsule_count >= 2) break;
         }
         reasoning_stream << " kapsüllerinin sentezlenmesiyle oluşturuldu.";
 
         generated_text = response_stream.str();
         reasoning_text = reasoning_stream.str();
 
-        if (final_results_for_synthesis.size() > 1) {
+        if (used_capsule_count > 1) {
             generated_text += "\nDaha detaylı bilgi için yukarıdaki referanslara tıklayabilirsiniz.";
         }
+
+        // YENİ: Geriye kalan kapsüllerden öneri soruları oluştur
+        for (size_t i = used_capsule_count; i < final_results_for_synthesis.size(); ++i) {
+            const CerebrumLux::Capsule& cap = final_results_for_synthesis[i];
+            if (!cap.topic.empty() && cap.topic != "AI Insight") { // "AI Insight" başlığı çok genel, onu atla
+                 response_obj.suggested_questions.push_back(cap.topic + " hakkında bilgi ver");
+            }
+        }
+        // Eğer hiç öneri çıkmazsa genel bir tane ekle
+        if (response_obj.suggested_questions.empty()) {
+            response_obj.suggested_questions.push_back("Yeteneklerin neler?");
+        }
+        
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den sentezlenmiş yanıt üretildi. Yanıt uzunluğu: " << generated_text.length());
-    } else { // final_results_for_synthesis boşsa
+    } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de ilgili kapsül bulunamadı. Kural tabanlı yanıta dönülüyor.");
         
         // Adım 2: Kural tabanlı yanıt üretimi ve dinamik prompt kullanımı
@@ -418,7 +436,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     if (current_goal == CerebrumLux::AIGoal::OptimizeProductivity) { contextual_additions += " \nVerimliliğinizi artırmaya odaklanıyorum."; }
     
     // Eğer KnowledgeBase'den yanıt alınamadıysa ve generated_text hala boşsa, fallback yanıtı kullan
-    if (generated_text.empty() || generated_text == "Bilgi tabanımda sorunuzla ilgili bazı bilgiler buldum: \n") { 
+    if (generated_text.empty() || generated_text == "Bilgi tabanımda sorunuzla ilgili bazı bilgiler buldum: \n") {
         generated_text = fallback_response_for_intent(current_intent, current_abstract_state, sequence);
         reasoning_text = "KnowledgeBase'de doğrudan ilgili bilgi bulunamadığı için kural tabanlı fallback yanıt kullanıldı. " + contextual_reasoning;
         clarification_needed = true;

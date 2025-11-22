@@ -20,6 +20,7 @@ namespace CerebrumLux {
 struct ChatResponse {
     std::string text;
     std::string reasoning; // Yanıtın nasıl üretildiğine dair açıklama
+    std::vector<std::string> suggested_questions; // YENİ: Önerilen takip soruları
     bool needs_clarification = false; // Yanıtın belirsiz olup olmadığı ve kullanıcının onayına ihtiyaç duyup duymadığı
 };
 

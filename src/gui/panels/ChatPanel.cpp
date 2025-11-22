@@ -22,19 +22,43 @@ void ChatPanel::setupUi() {
     chatHistoryDisplay->setReadOnly(true);
     chatHistoryDisplay->setMinimumHeight(150);
     mainLayout->addWidget(chatHistoryDisplay);
+    
+    // YENİ: Öneri Butonları Alanı
+    suggestionContainer = new QWidget(this);
+    suggestionLayout = new QHBoxLayout(suggestionContainer);
+    suggestionLayout->setContentsMargins(0, 0, 0, 0);
+    suggestionLayout->addStretch(); // Butonları sola dayamak için
+    mainLayout->addWidget(suggestionContainer);
 
-    QHBoxLayout *chatInputLayout = new QHBoxLayout();
+    // Alt Panel (Input + Send + Feedback)
+    QHBoxLayout *bottomLayout = new QHBoxLayout();
+    
     chatMessageLineEdit = new QLineEdit(this);
-    chatMessageLineEdit->setPlaceholderText("Buraya mesajınızı yazın...");
-    chatInputLayout->addWidget(chatMessageLineEdit);
-
+    chatMessageLineEdit->setPlaceholderText("Mesajınızı yazın...");
+    connect(chatMessageLineEdit, &QLineEdit::returnPressed, this, &CerebrumLux::ChatPanel::onSendClicked);
+    
     sendChatMessageButton = new QPushButton("Gönder", this);
-    chatInputLayout->addWidget(sendChatMessageButton);
+    connect(sendChatMessageButton, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onSendClicked);
+    
+    // YENİ: Feedback Butonları
+    btnLike = new QPushButton("👍", this);
+    btnLike->setToolTip("Bu yanıtı beğendim");
+    btnLike->setFixedWidth(30);
+    connect(btnLike, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onLikeClicked);
 
-    mainLayout->addLayout(chatInputLayout);
+    btnDislike = new QPushButton("👎", this);
+    btnDislike->setToolTip("Bu yanıtı beğenmedim");
+    btnDislike->setFixedWidth(30);
+    connect(btnDislike, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onDislikeClicked);
+    
+    // Başlangıçta feedback butonları pasif olabilir veya aktif kalabilir
+    
+    bottomLayout->addWidget(chatMessageLineEdit);
+    bottomLayout->addWidget(sendChatMessageButton);
+    bottomLayout->addWidget(btnLike);
+    bottomLayout->addWidget(btnDislike);
 
-    connect(chatMessageLineEdit, &QLineEdit::returnPressed, this, &CerebrumLux::ChatPanel::onChatMessageLineEditReturnPressed);
-    connect(sendChatMessageButton, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onChatMessageLineEditReturnPressed);
+    mainLayout->addLayout(bottomLayout);
 
     // Chat geçmişinin otomatik aşağı kayması için
     connect(chatHistoryDisplay->verticalScrollBar(), &QScrollBar::rangeChanged,
@@ -43,33 +67,27 @@ void ChatPanel::setupUi() {
     setLayout(mainLayout);
 }
 
-void ChatPanel::appendChatMessage(const QString& sender, const CerebrumLux::ChatResponse& chatResponse) {
-    // Chat geçmişini HTML olarak oluşturacağız
-    QString messageHtml = chatHistoryDisplay->toHtml();
-    
-    // Zaman damgasını al
-    QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
+void ChatPanel::appendChatMessage(const QString& sender, const QString& message) {
+    chatHistoryDisplay->append(QString("<b>%1:</b> %2").arg(sender, message));
+}
 
-    // Mesajı sender'a göre farklı renklendir ve HTML formatında ekle
-    if (sender == "CerebrumLux") {
-        messageHtml += QString("<p style=\"margin-bottom:0;\"><b><font color=\"#007bff\">%1 %2:</font></b> %3</p>")
-                       .arg(timestamp).arg(sender).arg(QString::fromStdString(chatResponse.text));
-        
-        // Gerekçeyi daha küçük ve soluk renkte ekle (eğer varsa)
-        if (!chatResponse.reasoning.empty()) {
-            messageHtml += QString("<p style=\"margin-left:20px; font-size:0.8em; color:#6c757d; margin-top:0;\"><i>Gerekçe: %1</i></p>")
-                           .arg(QString::fromStdString(chatResponse.reasoning));
-        }
-        // Açıklama gerekliyse bir uyarı ekle
-        if (chatResponse.needs_clarification) {
-            messageHtml += QString("<p style=\"margin-left:20px; font-size:0.8em; color:#ffc107; margin-top:0;\"><i>(Bu yanıt belirsiz olabilir, ek bilgi sağlamak ister misiniz?)</i></p>");
-        }
-    } else { // Kullanıcı mesajı
-        messageHtml += QString("<p style=\"margin-bottom:0;\"><b><font color=\"#28a745\">%1 %2:</font></b> %3</p>")
-                       .arg(timestamp).arg(sender).arg(QString::fromStdString(chatResponse.text));
+void ChatPanel::appendChatMessage(const QString& sender, const CerebrumLux::ChatResponse& response) {
+    // Chat geçmişini HTML olarak oluşturacağız
+    // 1. Metni Göster
+    QString formattedMessage = QString("<b>%1:</b> %2").arg(sender, QString::fromStdString(response.text));
+    
+    // Gerekçe varsa ekle (debug modunda veya isteğe bağlı)
+    if (!response.reasoning.empty()) {
+        formattedMessage += QString("<br><i><small>(Gerekçe: %1)</small></i>").arg(QString::fromStdString(response.reasoning));
     }
 
-    chatHistoryDisplay->setHtml(messageHtml);
+    chatHistoryDisplay->append(formattedMessage);
+    
+    // 2. Önerileri Göster
+    clearSuggestions(); // Öncekileri temizle
+    for (const auto& suggestion : response.suggested_questions) {
+        addSuggestionButton(suggestion);
+    }
 
     // Otomatik olarak en alta kaydır
     QScrollBar *sb = chatHistoryDisplay->verticalScrollBar();
@@ -78,19 +96,63 @@ void ChatPanel::appendChatMessage(const QString& sender, const CerebrumLux::Chat
     }
 }
 
-void ChatPanel::onChatMessageLineEditReturnPressed() {
+void ChatPanel::addSuggestionButton(const std::string& text) {
+    QPushButton* btn = new QPushButton(QString::fromStdString(text), this);
+    btn->setStyleSheet("text-align: left; padding: 5px;");
+    btn->setCursor(Qt::PointingHandCursor);
+    connect(btn, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onSuggestionBtnClicked);
+    
+    // Stretch item'dan önceye ekle (layout'un son elemanı stretch)
+    suggestionLayout->insertWidget(suggestionLayout->count() - 1, btn);
+}
+
+void ChatPanel::clearSuggestions() {
+    QLayoutItem *item;
+    // Sadece butonları sil, stretch item'ı koru (veya tamamen temizleyip stretch'i tekrar ekle)
+    while ((item = suggestionLayout->takeAt(0)) != nullptr) {
+        if (item->widget()) {
+            delete item->widget();
+        }
+        delete item;
+    }
+    suggestionLayout->addStretch(); // Stretch'i geri koy
+}
+
+void ChatPanel::onSuggestionBtnClicked() {
+    QPushButton* btn = qobject_cast<QPushButton*>(sender());
+    if (btn) {
+        QString text = btn->text();
+        // Öneri tıklandığında bunu sanki kullanıcı yazmış gibi işle
+        clearSuggestions();
+        appendChatMessage("User", text);
+        emit chatMessageEntered(text); 
+    }
+}
+
+void ChatPanel::onLikeClicked() {
+    emit userFeedbackGiven(true);
+    // Görsel geri bildirim (isteğe bağlı)
+    chatHistoryDisplay->append("<i><small>Geri bildiriminiz için teşekkürler (+)</small></i>");
+}
+
+void ChatPanel::onDislikeClicked() {
+    emit userFeedbackGiven(false);
+    chatHistoryDisplay->append("<i><small>Geri bildiriminiz için teşekkürler (-)</small></i>");
+}
+
+void ChatPanel::onSendClicked() {
     LOG_DEFAULT(LogLevel::DEBUG, "ChatPanel: onChatMessageLineEditReturnPressed slot triggered.");
-    QString message = chatMessageLineEdit->text();
+    QString message = chatMessageLineEdit->text().trimmed();
     if (!message.isEmpty()) {
-        // Kullanıcı mesajı için bir ChatResponse objesi oluştur
-        CerebrumLux::ChatResponse userChatResponse;
-        userChatResponse.text = message.toStdString();
-        appendChatMessage("User", userChatResponse); // Yeni imzaya uygun çağrı
+        // Kullanıcı yeni bir şey yazdığında eski önerileri temizle
+        clearSuggestions();
+        appendChatMessage("User", message);
         emit chatMessageEntered(message);
         chatMessageLineEdit->clear();
     } else {
         LOG_DEFAULT(LogLevel::WARNING, "ChatPanel: Boş chat mesajı girildi.");
     }
 }
+
 
 } // namespace CerebrumLux

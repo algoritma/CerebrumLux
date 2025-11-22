@@ -615,4 +615,21 @@ void LearningModule::onAutoSaveTimerTimeout() {
     save_q_table();
 }
 
+// YENİ: Kullanıcı geri bildirimini işle
+void LearningModule::processUserChatFeedback(bool isPositive) {
+    // Şimdilik basit bir mantık: Son Q-Table güncellemesini (son durumu) etkile.
+    // Gerçek bir RLHF için "hangi eyleme" geri bildirim verildiğini bilmek gerekir.
+    // Burada, LearningModule içinde son işlenen eylemi tutmadığımız için,
+    // genel bir "öğrenme pekiştirmesi" logluyoruz.
+    // İleride: SequenceManager'dan son eylemi çekip Q-değerini güncelleyeceğiz.
+    
+    float feedback_score = isPositive ? 1.0f : -1.0f;
+    LOG_DEFAULT(LogLevel::INFO, "LearningModule: Kullanıcı geri bildirimi alındı: " << (isPositive ? "POZİTİF" : "NEGATİF"));
+    
+    // Buraya Q-Table güncelleme mantığı eklenecek. 
+    // Örn: Son state-action çiftini bul ve reward += feedback_score uygula.
+    // Şimdilik sadece logluyoruz çünkü "son action"ı stateful olarak takip etmemiz gerek.
+    // Ancak bu fonksiyonun varlığı, GUI entegrasyonu için yeterli.
+}
+
 } // namespace CerebrumLux

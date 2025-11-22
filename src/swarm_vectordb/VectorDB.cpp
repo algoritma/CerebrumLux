@@ -220,13 +220,13 @@ bool SwarmVectorDB::open() {
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_create başarılı.");
 
     // 2. Ortam boyutunu ayarla (örn: 4GB)
-    rc = mdb_env_set_mapsize(env_, 8ULL * 1024ULL * 1024ULL * 1024ULL); // 8GB
+    rc = mdb_env_set_mapsize(env_, 4ULL * 1024ULL * 1024ULL * 1024ULL); // 4GB
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_env_set_mapsize başarısız: " << mdb_strerror(rc));
         mdb_env_close(env_); env_ = nullptr;
         return false;
     }
-    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_set_mapsize başarılı (8GB).");
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_set_mapsize başarılı (4GB).");
 
     // 3. Maksimum veritabanı sayısını ayarla (CryptofigVector'lar için birincil DB ve potansiyel diğerleri)
     rc = mdb_env_set_maxdbs(env_, 10); // Maksimum 10 DBI

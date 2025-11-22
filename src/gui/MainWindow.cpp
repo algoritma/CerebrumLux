@@ -90,6 +90,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered);
     // DÜZELTİLDİ: Chat mesajı sinyali artık ChatPanel'den gelecek
     connect(chatPanel, &CerebrumLux::ChatPanel::chatMessageEntered, this, &CerebrumLux::MainWindow::onChatMessageReceived);
+    
+    // YENİ: Kullanıcı geri bildirimi sinyalini LearningModule'e bağla
+    connect(chatPanel, &CerebrumLux::ChatPanel::userFeedbackGiven, &learningModule, &CerebrumLux::LearningModule::processUserChatFeedback);
+    
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel connect tamamlandı.");
 
     connect(capsuleTransferPanel, &CerebrumLux::CapsuleTransferPanel::ingestCapsuleRequest, this, &CerebrumLux::MainWindow::onIngestCapsuleRequest);
