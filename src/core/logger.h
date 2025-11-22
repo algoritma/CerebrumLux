@@ -66,12 +66,7 @@ private:
 };
 
 } // namespace CerebrumLux
- // Global namespace'de aşırı yükleme
-inline std::stringstream& operator<<(std::stringstream& ss, const QString& qs) {
-    ss << qs.toStdString(); // QString'i std::string'e dönüştürerek yaz
-    return ss;
-}
-namespace CerebrumLux { // Logger sınıfı bu namespace içinde devam edecek
+namespace CerebrumLux {
 
 // Kolay loglama için makrolar
 #define LOG(level, message) CerebrumLux::Logger::getInstance().log(level, (std::stringstream() << message).str(), __FILE__, __LINE__)

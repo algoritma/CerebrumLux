@@ -32,6 +32,7 @@ std::map<Language, std::unique_ptr<fasttext::FastText>> NaturalLanguageProcessor
 #include <future>
 #include <atomic>
 static std::atomic<bool> s_isFastTextLoading{false};
+std::atomic<bool> NaturalLanguageProcessor::s_isModelReady{false}; // Başlangıçta hazır değil
 
 // YENİ: Dil string'ini enum'a çeviren yardımcı fonksiyon
 Language string_to_lang(const std::string& lang_str) {
@@ -105,6 +106,7 @@ void NaturalLanguageProcessor::load_fasttext_models() {
 
                         model->loadModel(absolute_path_str);
                         s_fastTextModels[lang] = std::move(model);
+                        s_isModelReady.store(true); // Model artık hazır
                         LOG_DEFAULT(LogLevel::INFO, "NLP: FastText modeli başarıyla yüklendi: " << absolute_path_str);
                         LOG_DEFAULT(LogLevel::DEBUG, "NLP: Yüklenen model boyutu: " << s_fastTextModels[lang]->getDimension()); // YENİ LOG: Yüklenen modelin boyutunu onayla
 
@@ -265,156 +267,170 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     std::string generated_text = "";
     std::string reasoning_text = "";
     bool clarification_needed = false;
-
-    // Adım 1: Bağlama duyarlı, Bilgi Tabanından (KnowledgeBase) yanıt arama (GELİŞTİRİLDİ)
-    std::vector<CerebrumLux::Capsule> search_results; // Arama sonuçları
-    std::string search_query_str; // Loglama ve prompt oluşturma için metin sorgusu
-    std::vector<float> search_query_embedding; // KnowledgeBase'e gönderilecek embedding
-    if (!relevant_keywords.empty()) { // Kullanıcı girdisinden türetilen anahtar kelimeler varsa
-        search_query_str = relevant_keywords[0];
-        if (relevant_keywords.size() > 1) search_query_str += " " + relevant_keywords[1];
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de arama yapılıyor (sorgu: " << search_query_str << ").");
-        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(search_query_str, Language::EN); // Statik metod çağrısı
-        search_results = kb.semantic_search(search_query_embedding, 3); // Embedding ile ara
+ 
+    // 1. Arama Sorgusunu Belirle
+    std::string search_term_for_embedding = "";
+    
+    // ÖNCELİK 1: Sequence geçmişindeki son tam kullanıcı mesajını al (En doğru bağlam)
+    if (!sequence.user_input_history.empty()) {
+        search_term_for_embedding = sequence.user_input_history.back();
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Arama sorgusu Sequence tarihçesinden alındı: " << search_term_for_embedding);
     }
-    // Eğer anahtar kelime yoksa ancak niyet araştırma veya soru ise, daha genel bir arama yapabiliriz.
-    else if ((current_intent == CerebrumLux::UserIntent::Research || current_intent == CerebrumLux::UserIntent::Question) && !kb.get_all_capsules().empty()) {
-        // dynamic_sequence'den veya current_abstract_state'den ipuçları alabiliriz.
-        // Şimdilik daha genel bir arama yapalım.
-        search_query_embedding = NaturalLanguageProcessor::generate_text_embedding("", Language::EN); // Statik metod çağrısı
-        search_results = kb.semantic_search(search_query_embedding, 1); // Embedding ile ara
-        search_query_str = "Genel bilgi araması";
+    
+    // ÖNCELİK 2: Eğer tarihçe boşsa, anahtar kelimeleri veya niyeti kullan
+    if (search_term_for_embedding.empty()) {
+         if (!relevant_keywords.empty()) {
+             search_term_for_embedding = relevant_keywords[0];
+             if (relevant_keywords.size() > 1) search_term_for_embedding += " " + relevant_keywords[1];
+         } else {
+             search_term_for_embedding = intent_to_string(current_intent);
+             if (current_intent == CerebrumLux::UserIntent::Question) search_term_for_embedding += " nedir";
+         }
+    }
+ 
+    // 2. Embedding Oluştur
+    std::vector<float> search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(search_term_for_embedding, Language::EN);
+ 
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Semantic arama için oluşturulan embedding (ilk 5 float): " 
+                << search_query_embedding[0] << ", " << search_query_embedding[1] << ", " << search_query_embedding[2] << ", " << search_query_embedding[3] << ", " << search_query_embedding[4] 
+                << " (Sorgu: '" << search_term_for_embedding << "')");
+ 
+    // 3. Arama Stratejisi
+    // Öncelikle, temel tanımlayıcı kapsülleri doğrudan ID ile arayalım.
+    std::vector<CerebrumLux::Capsule> definitive_results;
+    bool found_by_id = false; 
+
+    // "Cerebrum Lux nedir?" benzeri bir soru için
+    if (search_term_for_embedding.find("Cerebrum Lux") != std::string::npos || search_term_for_embedding.find("nedir") != std::string::npos || search_term_for_embedding.find("tanım") != std::string::npos) {
+        std::optional<CerebrumLux::Capsule> def_capsule = kb.find_capsule_by_id("CerebrumLux_Definition_17000000000000000");
+        if (def_capsule) {
+            definitive_results.push_back(*def_capsule);
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Doğrudan ID ile 'Cerebrum Lux Tanımı' kapsülü bulundu.");
+            found_by_id = true;
+        }
+    }
+    // "Yeteneklerin neler?" veya "Nasıl yardımcı olabilirsin?" benzeri bir soru için
+    if (search_term_for_embedding.find("yetenek") != std::string::npos || search_term_for_embedding.find("nasıl yardımcı olabilirsin") != std::string::npos || current_intent == CerebrumLux::UserIntent::InquireCapability) {
+        std::optional<CerebrumLux::Capsule> cap_capsule = kb.find_capsule_by_id("CerebrumLux_Capabilities_17000000000000000");
+        if (cap_capsule) {
+            definitive_results.push_back(*cap_capsule);
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Doğrudan ID ile 'Yetenekleri' kapsülü bulundu.");
+            found_by_id = true;
+        }
+    }
+ 
+    // 4. Sonuçları Hazırla
+    std::vector<CerebrumLux::Capsule> final_results_for_synthesis;
+
+    if (found_by_id && !definitive_results.empty()) {
+        final_results_for_synthesis = definitive_results;
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Doğrudan tanımlayıcı kapsüller önceliklendirildi.");
+    } else {
+        // Doğrudan ID ile bulunamazsa, semantik arama yap
+        std::vector<CerebrumLux::Capsule> semantic_search_results = kb.semantic_search(search_query_embedding, 5);
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den semantik arama yapıldı. Bulunan kapsül sayısı: " << semantic_search_results.size() << " (Sorgu: '" << search_term_for_embedding << "')");
+ 
+        // Semantic arama sonuçlarını da final_results'a ekle, ancak boş veya anlamsız olanları filtrele
+        for (const auto& capsule : semantic_search_results) {
+            // Kapsül içeriğinin anlamsız olup olmadığını kontrol et
+            if (capsule.content.empty() ||
+                capsule.content.find("Is this data relevant to AI Insight?") != std::string::npos ||
+                capsule.content.find("Bilgi bulunamadı.") != std::string::npos ||
+                capsule.plain_text_summary.empty() ||
+                capsule.plain_text_summary.find("Is this data relevant to AI Insight?") != std::string::npos ||
+                capsule.plain_text_summary.find("Bilgi bulunamadı.") != std::string::npos) {
+                LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Anlamsız veya boş içeriğe sahip kapsül filtrelendi. ID: " << capsule.id);
+                continue;
+            }
+            final_results_for_synthesis.push_back(capsule);
+        }
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Semantik arama sonuçları filtrelendi ve yanıt sentezi için hazırlandı. Sayı: " << final_results_for_synthesis.size());
     }
 
-    if (!search_results.empty()) {
-        const CerebrumLux::Capsule& relevant_capsule = search_results[0];
-        generated_text = "Bilgi tabanımda '" + relevant_capsule.topic + "' konusunda bilgi buldum: " + relevant_capsule.plain_text_summary;
-        
-        // Eğer daha fazla ilgili kapsül varsa, bunları da gerekçeye ekle
-        if (search_results.size() > 1) {
-            generated_text += " Daha fazla ilgili bilgi için bakınız: ";
-            for (size_t i = 1; i < search_results.size(); ++i) {
-                generated_text += search_results[i].topic + (i == search_results.size() - 1 ? "." : ", ");
+    // 5. Yanıt Sentezi (Gelişmiş)
+    if (!final_results_for_synthesis.empty()) { 
+        std::stringstream response_stream;
+        std::stringstream reasoning_stream;
+        std::vector<std::string> cited_capsule_ids;
+
+        response_stream << "Bilgi tabanımda sorunuzla ilgili bazı bilgiler buldum: \n";
+        reasoning_stream << "Yanıt, KnowledgeBase'deki ";
+
+        // En alakalı kapsülleri birleştirerek yanıt oluştur
+        for (size_t i = 0; i < final_results_for_synthesis.size(); ++i) { 
+            const CerebrumLux::Capsule& capsule = final_results_for_synthesis[i]; 
+            cited_capsule_ids.push_back(capsule.id);
+            
+            // YENİ LOG: Bulunan her kapsülün ID'sini, konusunu ve içeriğini (özet veya tam) logla.
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Bulunan Kapsül - ID: " << capsule.id 
+                        << ", Konu: " << capsule.topic 
+                        << ", Özet: '" << capsule.plain_text_summary.substr(0, std::min((size_t)100, capsule.plain_text_summary.length())) << "'"
+                        << ", İçerik Boyutu: " << capsule.content.length()
+                        << ", İçerik (İlk 100 char): '" << capsule.content.substr(0, std::min((size_t)100, capsule.content.length())) << "...'");
+
+            // Kapsülün içeriğini veya özetini kullanarak daha zengin bir yanıt oluştur
+            std::string display_content = capsule.content;
+            if (display_content.empty() || 
+                display_content.find("Is this data relevant to AI Insight?") != std::string::npos || 
+                display_content.find("Bilgi bulunamadı.") != std::string::npos) 
+            {
+                display_content = capsule.plain_text_summary; // İçerik boşsa özeti kullan
+                if (display_content.empty() || 
+                    display_content.find("Is this data relevant to AI Insight?") != std::string::npos || 
+                    display_content.find("Bilgi bulunamadı.") != std::string::npos) 
+                {
+                    display_content = "İlgili bilgi mevcut değil."; // Hem içerik hem özet boşsa veya anlamsızsa
+                }
+            }
+            
+            // Metni biraz kırp (çok uzunsa) ve sonuna ... ekle
+            std::string content_snippet = display_content.substr(0, std::min((size_t)400, display_content.length())); 
+            if (display_content.length() > 400) content_snippet += "...";
+
+            response_stream << "\n- **" << capsule.topic << "**: " << content_snippet << " [cite:" << capsule.id << "]";
+
+            reasoning_stream << "'" << capsule.topic << "' (ID: " << capsule.id << ")";
+            if (i < final_results_for_synthesis.size() - 1) {
+                reasoning_stream << ", ";
             }
         }
-        
-        reasoning_text += "Yanıt, KnowledgeBase'deki en alakalı kapsülden ('" + relevant_capsule.topic + "', ID: " + relevant_capsule.id + ") ve diğer ilgili kapsüllerden (" + std::to_string(search_results.size() -1) + " adet) türetildi. ";
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den yanıt üretildi: " << generated_text);
-    } else {
+        reasoning_stream << " kapsüllerinin sentezlenmesiyle oluşturuldu.";
+
+        generated_text = response_stream.str();
+        reasoning_text = reasoning_stream.str();
+
+        if (final_results_for_synthesis.size() > 1) {
+            generated_text += "\nDaha detaylı bilgi için yukarıdaki referanslara tıklayabilirsiniz.";
+        }
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'den sentezlenmiş yanıt üretildi. Yanıt uzunluğu: " << generated_text.length());
+    } else { // final_results_for_synthesis boşsa
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: KnowledgeBase'de ilgili kapsül bulunamadı. Kural tabanlı yanıta dönülüyor.");
         
-        // Adım 2.1: Niyet ve duruma göre kural tabanlı yanıt üretimi
-        generated_text = "Anladım. ";
-    
-        // Adım 2: Dinamik prompt oluşturma ve kullanma (Bu prompt'u doğrudan LLM'e göndermek yerine,
-        // şu anki kural tabanlı sistemin kararını zenginleştirmek için kullanıyoruz.)
-        std::string dynamic_prompt = generate_dynamic_prompt(current_intent, current_abstract_state, current_goal, sequence, search_query_str, search_results);
+        // Adım 2: Kural tabanlı yanıt üretimi ve dinamik prompt kullanımı
+        std::string dynamic_prompt = generate_dynamic_prompt(current_intent, current_abstract_state, current_goal, sequence, search_term_for_embedding, final_results_for_synthesis); 
         LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "NaturalLanguageProcessor: Dinamik Olarak Üretilen Prompt: " << dynamic_prompt);
-
-        // Eğer KnowledgeBase'de ilgili bilgi bulunamazsa veya LLM entegre değilse kural tabanlı yanıt üretmeye devam et.
-        // Kural tabanlı yanıtlarınızı, dynamic_prompt'tan gelen ipuçları ile zenginleştirebilirsiniz.
-        // Örneğin, dynamic_prompt'ta "2-3 farklı perspektiften değerlendirme" isteniyorsa,
-        // mevcut kural tabanlı yanıta bunları eklemeye çalışın.
-
-        // Mevcut kural tabanlı yanıt mantığı (zenginleştirme potansiyeli ile)
-        // Bu kısım, dynamic_prompt'u temel alarak daha akıllı hale getirilebilir.
-        // Şimdilik, niyet ve duruma göre mevcut yanıtları kullanıyoruz.
-
-        // Yanıtları daha spesifik hale getirmek için dynamic_prompt'taki anahtar kelimeleri kullanabiliriz.
-        // Örneğin, "AI optimizasyonları" gibi anahtar kelimeler varsa, bunlara özel yanıtlar oluşturabiliriz.
-        if (current_intent == CerebrumLux::UserIntent::Question && search_results.empty()) {
-             generated_text += "Bu konuda daha fazla bilgiye ihtiyacım var. Ne sormak istersiniz?";
-             reasoning_text += "Yanıt, KnowledgeBase'de ilgili bilgi bulunamadığı için 'Soru' niyetine göre genel kural tabanlı olarak üretildi. ";
-        } else if (current_intent == CerebrumLux::UserIntent::Research && search_results.empty()) {
-            generated_text += "Araştırma niyetinizi anladım. Hangi konuda araştırma yapmak istersiniz?";
-            reasoning_text += "Yanıt, KnowledgeBase'de ilgili bilgi bulunamadığı için 'Araştırma' niyetine göre genel kural tabanlı olarak üretildi. ";
-        } else if (generated_text == "Anladım. ") { // Hala çok genel ise
-            switch (current_intent) {
-                case CerebrumLux::UserIntent::Question: generated_text += "Bu konuda ne öğrenmek istersiniz?"; break;
-                case CerebrumLux::UserIntent::Command: generated_text += "Komutunuzu işliyorum."; break;
-                case CerebrumLux::UserIntent::Greeting: generated_text = "Merhaba! Size nasıl yardımcı olabilirim?"; break;
-                case CerebrumLux::UserIntent::Farewell: generated_text = "Güle güle! Görüşmek üzere."; break;
-                case CerebrumLux::UserIntent::FastTyping: generated_text = "Çok hızlı yazıyorsunuz! Harika bir üretkenlik."; break;
-                case CerebrumLux::UserIntent::Editing: generated_text = "Düzenleme sürecinde misiniz? "; break;
-                case CerebrumLux::UserIntent::Programming: generated_text = "Kodlama aktivitesi algılandı. "; break;
-                case CerebrumLux::UserIntent::Gaming: generated_text = "Oyun modundasınız. "; break;
-                case CerebrumLux::UserIntent::MediaConsumption: generated_text = "Medya tüketimi yapıyorsunuz. "; break;
-                case CerebrumLux::UserIntent::CreativeWork: generated_text = "Yaratıcı bir çalışma yapıyorsunuz. "; break;
-                case CerebrumLux::UserIntent::Research: generated_text = "Araştırma yapıyor ve bilgi arıyorsunuz. "; break;
-                case CerebrumLux::UserIntent::Communication: generated_text = "İletişim kurarken size eşlik ediyorum. "; break;
-                case CerebrumLux::UserIntent::FeedbackPositive: generated_text = "Geri bildiriminiz için teşekkür ederim!"; break;
-                case CerebrumLux::UserIntent::FeedbackNegative: generated_text = "Geri bildiriminiz önemli. Bu konuda nasıl yardımcı olabilirim?"; break;
-                case CerebrumLux::UserIntent::RequestInformation: generated_text = "Hangi bilgiyi arıyorsunuz?"; break;
-                case CerebrumLux::UserIntent::ExpressEmotion: generated_text += "Duygularınızı anlıyorum. "; break;
-                case CerebrumLux::UserIntent::Confirm: generated_text = "Onaylandı. "; break;
-                case CerebrumLux::UserIntent::Deny: generated_text = "Reddedildi. "; break;
-                case CerebrumLux::UserIntent::Elaborate: generated_text = "Daha fazla detay verebilir misiniz?"; break;
-                case CerebrumLux::UserIntent::Clarify: generated_text = "Lütfen açıklayınız. "; break;
-                case CerebrumLux::UserIntent::CorrectError: generated_text = "Hatayı düzeltmeye çalışıyorum. "; break;
-                case CerebrumLux::UserIntent::InquireCapability: generated_text = "Yeteneklerim hakkında bilgi mi almak istiyorsunuz? "; break;
-                case CerebrumLux::UserIntent::ShowStatus: generated_text = "Sistem durumunu kontrol ediyorum. "; break;
-                case CerebrumLux::UserIntent::ExplainConcept: generated_text = "Kavramı açıklamaya çalışıyorum. "; break;
-                case CerebrumLux::UserIntent::Undefined:
-                case CerebrumLux::UserIntent::Unknown:
-                    generated_text += "Niyetinizi tam olarak anlayamadım.";
-                    clarification_needed = true;
-                    break;
-            }
-            reasoning_text += "Yanıt, KnowledgeBase'de ilgili bilgi bulunamadığı için niyetinize göre kural tabanlı olarak üretildi. ";
-        }
-
-        // Durumlara göre ek bağlamsal yanıtlar (üstteki cevabı tamamlar)
-        if (current_abstract_state == CerebrumLux::AbstractState::Error) {
-            generated_text += " Bir hata durumu tespit ettim.";
-            reasoning_text += "Hata durumu göz önünde bulunduruldu. ";
-        } else if (current_abstract_state == CerebrumLux::AbstractState::Learning) {
-            generated_text += " Şu an öğrenme modundayım.";
-            reasoning_text += "Öğrenme durumu göz önünde bulunduruldu. ";
-        } else if (current_abstract_state == CerebrumLux::AbstractState::Focused) {
-            generated_text += " Odaklanmış görünüyorsunuz.";
-            reasoning_text += "Odaklanmış durum göz önünde bulunduruldu. ";
-        } else if (current_abstract_state == CerebrumLux::AbstractState::Distracted) {
-            generated_text += " Dikkatiniz dağınık gibi.";
-            reasoning_text += "Dikkat dağınıklığı durumu göz önünde bulunduruldu. ";
-        } else if (current_abstract_state == CerebrumLux::AbstractState::HighProductivity) {
-            generated_text += " Yüksek üretkenlik içindesiniz.";
-            reasoning_text += "Yüksek üretkenlik durumu göz önünde bulunduruldu. ";
-        } else if (current_abstract_state == CerebrumLux::AbstractState::LowProductivity) {
-            generated_text += " Üretkenliğiniz düşük görünüyor.";
-            reasoning_text += "Düşük üretkenlik durumu göz önünde bulunduruldu. ";
-        }
-
-        // Hedeflere göre ek bağlamsal yanıtlar
-        if (current_goal == CerebrumLux::AIGoal::OptimizeProductivity) {
-            generated_text += " Verimliliğinizi artırmaya odaklanıyorum.";
-            reasoning_text += "Verimlilik optimizasyonu hedefi göz önünde bulunduruldu. ";
-        } else if (current_goal == CerebrumLux::AIGoal::EnsureSecurity) {
-            generated_text += " Güvenliğinizi sağlamak için çalışıyorum.";
-            reasoning_text += "Güvenlik sağlama hedefi göz önünde bulunduruldu. ";
-        } else if (current_goal == CerebrumLux::AIGoal::MaximizeLearning) {
-            generated_text += " Öğrenme kapasitemi artırmaya çalışıyorum.";
-            reasoning_text += "Öğrenme maksimizasyonu hedefi göz önünde bulunduruldu. "; // Düzeltildi
-        }
     }
 
-    // Nihai Fallback (eğer hala boşsa veya çok genel bir yanıt ise)
-    if (generated_text == "Anladım. " || generated_text.empty()) {
+    // Durum ve hedefe dayalı bağlamsal eklemeler yap
+    std::string contextual_additions = "";
+    std::string contextual_reasoning = "";
+    
+    if (current_goal == CerebrumLux::AIGoal::OptimizeProductivity) { contextual_additions += " \nVerimliliğinizi artırmaya odaklanıyorum."; }
+    
+    // Eğer KnowledgeBase'den yanıt alınamadıysa ve generated_text hala boşsa, fallback yanıtı kullan
+    if (generated_text.empty() || generated_text == "Bilgi tabanımda sorunuzla ilgili bazı bilgiler buldum: \n") { 
         generated_text = fallback_response_for_intent(current_intent, current_abstract_state, sequence);
-        reasoning_text += "Varsayılan fallback yanıtı kullanıldı. ";
-        clarification_needed = true; // Fallback kullanıldıysa genellikle açıklama gerekebilir
+        reasoning_text = "KnowledgeBase'de doğrudan ilgili bilgi bulunamadığı için kural tabanlı fallback yanıt kullanıldı. " + contextual_reasoning;
+        clarification_needed = true;
     }
+
+    generated_text += contextual_additions;
 
     // ChatResponse objesini doldur ve döndür
     response_obj.text = generated_text;
     response_obj.reasoning = reasoning_text;
     response_obj.needs_clarification = clarification_needed;
 
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Yanıt üretildi. Niyet: " << CerebrumLux::intent_to_string(current_intent)
-                                  << ", Durum: " << CerebrumLux::abstract_state_to_string(current_abstract_state)
-                                  << ", Hedef: " << CerebrumLux::goal_to_string(current_goal)
-                                  << ", Yanıt: " << response_obj.text.substr(0, std::min((size_t)50, response_obj.text.length()))
-                                  << ", Gerekçe: " << response_obj.reasoning.substr(0, std::min((size_t)50, response_obj.reasoning.length()))
-                                  << ", Açıklama Gerekli: " << (response_obj.needs_clarification ? "Evet" : "Hayır"));
     return response_obj;
 }
 
@@ -560,17 +576,37 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
     return response;
 }
 
-// YENİ EKLENDİ: Metin girdisinden embedding hesaplama (şimdilik placeholder)
+// Metin girdisinden embedding hesaplama (FastText kullanılarak)
 std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text, Language lang) {
-    load_fasttext_models();
+    // Model henüz yüklenmediyse yüklemeyi tetikle
+    if (!s_isModelReady.load()) {
+        load_fasttext_models();
+    }
+
     const int embedding_dim = 128; // Hedef embedding boyutu
     std::vector<float> embedding(embedding_dim, 0.0f);
 
-    auto model_it = s_fastTextModels.find(lang);
+    // Model hazır değilse placeholder döndür (Race condition engellendi)
+    if (!s_isModelReady.load()) {
+        LOG_DEFAULT(LogLevel::WARNING, "NLP: FastText modeli henüz hazır değil. Placeholder embedding kullanılıyor.");
+        // Fallback: Rastgele ama deterministik
+        std::hash<std::string> hasher;
+        size_t hash = hasher(text);
+        std::mt19937 gen(hash);
+        std::uniform_real_distribution<> dis(-0.1, 0.1);
+        for (int i = 0; i < embedding_dim; ++i) embedding[i] = dis(gen);
+        return embedding;
+    }
 
-    if (model_it != s_fastTextModels.end() && model_it->second && model_it->second->getDimension() > 0) { // Model hazır mı kontrolü
+    auto model_it = s_fastTextModels.find(lang);
+    if (model_it != s_fastTextModels.end() && model_it->second && model_it->second->getDimension() > 0) {
         fasttext::FastText& model = *(model_it->second); // unique_ptr'dan referans al
         fasttext::Vector ft_embedding(model.getDimension()); // FastText'in kendi Vector sınıfı
+        
+        if (text.empty()) { // Boş metin için boş embedding döndür
+            return embedding;
+        }
+
         std::stringstream text_stream(text);
         model.getSentenceVector(text_stream, ft_embedding);
 
@@ -579,10 +615,14 @@ std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::
         for (int i = 0; i < std::min((int)ft_embedding.size(), embedding_dim); ++i) {
             embedding[i] = ft_embedding[i];
         }
+        // Eğer FastText embedding boyutu (model.getDimension()) hedef embedding_dim'den büyükse,
+        // kalan boyutları sıfırla. Eğer küçükse, zaten padding yapılmış olacaktır.
+        for (int i = ft_embedding.size(); i < embedding_dim; ++i) {
+            embedding[i] = 0.0f;
+        }
         LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için FastText embedding olusturuldu. Boyut: " << embedding.size());
         return embedding;
     }
-
     // Fallback: Model yüklenemedi veya hazır değilse deterministik kelime tabanlı hash placeholder üret
     LOG_DEFAULT(LogLevel::WARNING, "NLP: FastText modeli veya belirtilen dil için model kullanılamıyor. Placeholder embedding üretiliyor.");
     

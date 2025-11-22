@@ -51,6 +51,10 @@ public:
     // Verilen hash'e sahip CryptofigVector'ü veritabanından getirir
     std::unique_ptr<CryptofigVector> get_vector(const std::string& id, MDB_txn* existing_txn = nullptr) const; // Keep consistent
     // Verilen hash'e sahip vektörü siler
+
+    // YENİ: Toplu okuma fonksiyonu (Performans optimizasyonu)
+    std::vector<std::unique_ptr<CryptofigVector>> get_vectors_batch(const std::vector<std::string>& ids) const;
+
     bool delete_vector(const std::string& id);
     // Veritabanının açık olup olmadığını döndürür
     bool is_open() const { return env_ != nullptr; }
@@ -63,6 +67,11 @@ public:
     bool store_q_value_json(const EmbeddingStateKey& state_key, const std::string& action_map_json_str);
     std::optional<std::string> get_q_value_json(const EmbeddingStateKey& state_key) const;
     bool delete_q_value_json(const EmbeddingStateKey& state_key);
+
+    // YENİ EKLENDİ: Kapsül içeriklerini yönetmek için metotlar
+    bool store_capsule_content(const std::string& id, const std::string& content, MDB_txn* existing_txn = nullptr);
+    std::optional<std::string> get_capsule_content(const std::string& id, MDB_txn* existing_txn = nullptr) const;
+
     // Belirli bir DBI'daki tüm anahtarları döndürür.
     std::vector<EmbeddingStateKey> get_all_keys_for_dbi(MDB_dbi dbi) const;
 

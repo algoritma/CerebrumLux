@@ -15,6 +15,7 @@
 #include <QUrlQuery> // URL kodlama için gerekli
 #include <QDateTime> // QDateTime::currentDateTime().toString() için
 
+#include "../communication/natural_language_processor.h" // generate_text_embedding için
 namespace CerebrumLux {
 
 using EmbeddingStateKey = CerebrumLux::SwarmVectorDB::EmbeddingStateKey;
@@ -67,6 +68,7 @@ void LearningModule::learnFromText(const std::string& text,
     new_capsule.cryptofig_blob_base64 = cryptofig_encode(new_capsule.embedding);
 
     knowledgeBase.add_capsule(new_capsule);
+    emit knowledgeBaseUpdated(); // YENİ: Sinyali yay
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Yeni kapsül bilgi tabanına eklendi. ID: " << new_capsule.id);
 }
 
@@ -131,7 +133,8 @@ void LearningModule::onStructuredWebContentFetched(const QString& url, const std
         }
  
         knowledgeBase.add_capsule(web_capsule);
-        LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web arama kapsülü eklendi: ID: " << web_capsule.id << ", URL: " << QString::fromStdString(result.url));
+        emit knowledgeBaseUpdated(); // YENİ: Sinyali yay
+        LOG_DEFAULT(LogLevel::INFO, "LearningModule: Web arama kapsülü eklendi: ID: " << web_capsule.id << ", URL: " << result.url);
     }
     webFetchInProgress = false;
     emit webFetchCompleted(createIngestReport(CerebrumLux::IngestResult::Success, "Web'den öğrenme tamamlandı."));
@@ -169,6 +172,11 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         insight_capsule.id = insight.id;
         insight_capsule.content = insight.observation;
         insight_capsule.source = "AIInsightsEngine";
+        // YENİ DÜZELTME: plain_text_summary'yi daha anlamlı hale getir.
+        // Eğer insight.observation zaten yeterince uzunsa, onu kullan.
+        // Aksi takdirde, daha açıklayıcı bir özet oluştur.
+        insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)500, insight.observation.length()));
+        if (insight.observation.length() > 500) insight_capsule.plain_text_summary += "...";
         insight_capsule.topic = "AI Insight";
         switch (insight.urgency) {
             case CerebrumLux::UrgencyLevel::Low: insight_capsule.confidence = 0.7f; break;
@@ -237,7 +245,6 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
             }
         }
 
-        insight_capsule.plain_text_summary = insight.observation.substr(0, std::min((size_t)500, insight.observation.length())) + "...";
         insight_capsule.timestamp_utc = std::chrono::system_clock::now();
 
         if (!insight.associated_cryptofig.empty()) {
@@ -278,6 +285,7 @@ void LearningModule::process_ai_insights(const std::vector<AIInsight>& insights)
         insight_capsule.code_file_path = insight.code_file_path;
 
         knowledgeBase.add_capsule(insight_capsule);
+        emit knowledgeBaseUpdated(); // YENİ: Sinyali yay
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "[LearningModule] KnowledgeBase'e içgörü kapsülü EKLENDİ. ID: " << insight_capsule.id << ", Topic: " << insight_capsule.topic << ", Özet: " << insight_capsule.plain_text_summary.substr(0, std::min((size_t)50, insight_capsule.plain_text_summary.length())) << "..." << ", Confidence: " << insight_capsule.confidence);
     }
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "[LearningModule] --- İçgörü İşleme Bitti ---");
@@ -361,6 +369,7 @@ IngestReport LearningModule::ingest_envelope(const Capsule& envelope, const std:
         LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Doğrulama kontrolü başarılı (Placeholder).");
 
         knowledgeBase.add_capsule(sanitized_capsule);
+        emit knowledgeBaseUpdated(); // YENİ: Sinyali yay
         report.result = IngestResult::Success;
         report.message = "Kapsül başarıyla yutuldu ve bilgi tabanına eklendi.";
         report.processed_capsule = sanitized_capsule;
@@ -389,17 +398,9 @@ CerebrumLux::IngestReport LearningModule::createIngestReport(CerebrumLux::Ingest
 }
 
 std::vector<float> LearningModule::compute_embedding(const std::string& text) const {
-    LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: compute_embedding (KnowledgeBase'den) çağrıldı.");
-    std::vector<float> embedding(CryptofigAutoencoder::INPUT_DIM);
-    for (size_t i = 0; i < CryptofigAutoencoder::INPUT_DIM; ++i) {
-        embedding[i] = SafeRNG::getInstance().get_float(0.0f, 1.0f);
-    }
-    embedding[0] = static_cast<float>(text.length()) / 200.0f;
-    embedding[1] = static_cast<float>(std::count_if(text.begin(), text.end(), [](char c){ return std::isupper(c); })) / 50.0f;
-
-    return embedding;
+    // Düzeltme: compute_embedding artık NaturalLanguageProcessor::generate_text_embedding'i kullanacak.
+    return CerebrumLux::NaturalLanguageProcessor::generate_text_embedding(text, Language::EN);
 }
-
 std::string LearningModule::cryptofig_encode(const std::vector<float>& cryptofig_vector) const {
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: cryptofig_encode çağrıldı. Boyut: " << cryptofig_vector.size());
     std::ostringstream oss;
@@ -537,16 +538,14 @@ void LearningModule::update_q_values(const std::vector<float>& current_state_emb
     }
 
     q_table.q_values[current_state_key][action] = current_q_value + learning_rate_rl * (reward + discount_factor * max_next_q - current_q_value);
-
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table güncellendi. Current State: " << static_cast<std::string>(current_state_key).substr(0, std::min((size_t)50, static_cast<std::string>(current_state_key).length())) << "..., Action: " << CerebrumLux::action_to_string(action) << ", Reward: " << reward << ", Yeni Q-Value: " << q_table.q_values[current_state_key][action] << ", Next State (kısmi): " << static_cast<std::string>(next_state_key).substr(0, std::min((size_t)50, static_cast<std::string>(next_state_key).length())) << "...");
+    
+    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table değeri güncellendi. Durum (Kısmi): " << current_state_key.substr(0, std::min((size_t)50, current_state_key.length())) << "..., Eylem: " << CerebrumLux::action_to_string(action) << ", Ödül: " << reward << ", Yeni Q-Değeri: " << q_table.q_values[current_state_key][action]);
+    emit qTableUpdated(); // Q-Table güncellendiğinde sinyal yay
+    save_q_table();       // Her güncellemeden sonra Q-Table'ı diske kaydet. (Geçici çözüm, daha sonra optimize edilebilir)
 }
 
 void LearningModule::save_q_table() const {
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] save_q_table() ENTRY. Current Q-Table size (in memory): " << q_table.q_values.size()); // YENİ LOG: Metoda giriş ve bellek içi boyut
-
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'ye kaydetme işlemi BAŞLADI."); // YENİ: Başlangıç logu
-
-    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'ye kaydediliyor. Toplam durum: " << q_table.q_values.size());
+    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'ye kaydediliyor... Toplam durum: " << q_table.q_values.size());
 
     if (!knowledgeBase.get_swarm_db().is_open()) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table kaydedilemedi: SwarmVectorDB açık değil.");
@@ -565,13 +564,12 @@ void LearningModule::save_q_table() const {
             LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table kaydetme başarısız: EmbeddingStateKey (kısmi): " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())));
         }
     }
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'ye kaydetme işlemi BİTTİ."); // YENİ: Bitiş logu
 
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table kaydetme tamamlandı. Toplam kaydedilen durum: " << q_table.q_values.size());
 }
 
 void LearningModule::load_q_table() {
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'den yükleniyor. Başlangıçta q_table boyutu: " << q_table.q_values.size());
+    LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Q-Table LMDB'den yükleniyor. Başlangıçta q_table boyutu (in-memory): " << q_table.q_values.size());
 
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table LMDB'den yükleniyor.");
     q_table.q_values.clear();
@@ -579,25 +577,28 @@ void LearningModule::load_q_table() {
     // SwarmVectorDB'nin açık olduğunu varsayıyoruz (KnowledgeBase tarafından yönetiliyor).
 
     std::vector<CerebrumLux::SwarmVectorDB::EmbeddingStateKey> all_q_state_keys = knowledgeBase.get_swarm_db().get_all_keys_for_dbi(knowledgeBase.get_swarm_db().q_values_dbi());
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] load_q_table(): LMDB'den alınan toplam Q-Table anahtar sayısı: " << all_q_state_keys.size());
+    
     for (const auto& state_key : all_q_state_keys) {
         std::optional<std::string> action_map_json_str_opt = knowledgeBase.get_swarm_db().get_q_value_json(state_key);
         if (action_map_json_str_opt) {
             try {
-                LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Q-Table için durum anahtarı JSON yüklendi (kısmi): " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())));
+                // LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] load_q_table(): Q-Table için durum anahtarı JSON yüklendi (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length()))); // Aşırı loglamayı önlemek için kaldırıldı.
 
                 nlohmann::json action_map_json = nlohmann::json::parse(*action_map_json_str_opt);
                 for (nlohmann::json::const_iterator action_it = action_map_json.begin(); action_it != action_map_json.end(); ++action_it) {
                     q_table.q_values[state_key][CerebrumLux::string_to_action(action_it.key())] = action_it.value().get<float>();
                 }
-                LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] Q-Table için durum yükleniyor. EmbeddingStateKey (kısmi): " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())));
+                // LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] load_q_table(): Q-Table'a durum eklendi. EmbeddingStateKey (kısmi): " << state_key.substr(0, std::min((size_t)50, state_key.length()))); // Aşırı loglamayı önlemek için kaldırıldı.
             } catch (const nlohmann::json::exception& e) {
                 LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "[LearningModule] Q-Table yüklenemedi: JSON ayrıştırma hatası: " << e.what() << ". EmbeddingStateKey (kısmi): " << static_cast<std::string>(state_key).substr(0, std::min((size_t)50, static_cast<std::string>(state_key).length())));
             }
         }
     }
-    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Q-Table LMDB'den yüklendi. Son q_table boyutu: " << q_table.q_values.size());
+    LOG_DEFAULT(LogLevel::TRACE, "[LearningModule] load_q_table() EXIT. Q-Table LMDB'den yüklendi. Son q_table boyutu (in-memory): " << q_table.q_values.size());
 
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table yükleme tamamlandı. Toplam yüklü durum: " << q_table.q_values.size());
+    emit qTableLoadCompleted(); // Yükleme tamamlandığında sinyal yay
 }
 
 } // namespace CerebrumLux

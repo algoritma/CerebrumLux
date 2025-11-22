@@ -47,22 +47,15 @@ void QTableWorker::fetchQTableContent(const QString& filterText, const QString& 
     try {
         LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: Q-Table içeriği çekme işlemi başlatıldı (Worker Thread). Filter: '" << filterText.toStdString() << "'");
 
-        LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: LearningModule::load_q_table() çağrılıyor...");
-
-        learningModule.load_q_table();
-        LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: LearningModule::load_q_table() çağrısı tamamlandı.");
-
-        // YENİ EKLENDİ: getQTable() sonrası Q-Table boyutunu logla
         const CerebrumLux::SwarmVectorDB::SparseQTable& q_table_ref = learningModule.getQTable();
 
-        // YENİ EKLENDİ: q_values boyutunu kontrol et
         if (q_table_ref.q_values.empty()) {
             LOG_DEFAULT(LogLevel::WARNING, "QTableWorker: LearningModule'den alınan SparseQTable boş görünüyor. Q-Table'da hiç veri yok.");
             // Boş listeleri emit et ve erken çık
             emit qTableContentFetched({}, {}, currentSelectionStateKey);
             return; 
         }
-        LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: SparseQTable'da bulunan toplam durum anahtarı sayısı: " << q_table_ref.q_values.size());
+        // LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: SparseQTable'da bulunan toplam durum anahtarı sayısı: " << q_table_ref.q_values.size());
 
         // YENİ EKLENDİ: all_q_state_keys oluşturulduktan sonra boyutunu logla
         std::vector<CerebrumLux::SwarmVectorDB::EmbeddingStateKey> all_q_state_keys;
@@ -72,7 +65,7 @@ void QTableWorker::fetchQTableContent(const QString& filterText, const QString& 
 
         std::vector<CerebrumLux::SwarmVectorDB::EmbeddingStateKey> filtered_state_keys = filterStates(all_q_state_keys, filterText);
         // YENİ EKLENDİ: filterStates sonrası boyutunu logla
-         LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: Filtrelenmiş durum anahtarı sayısı: " << filtered_state_keys.size());
+         // LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: Filtrelenmiş durum anahtarı sayısı: " << filtered_state_keys.size());
 
         std::map<QString, QTableDisplayData> displayed_details;
         for (const auto& state_key_std_str : filtered_state_keys) {
@@ -82,7 +75,7 @@ void QTableWorker::fetchQTableContent(const QString& filterText, const QString& 
             }
         }
         // YENİ EKLENDİ: displayed_details boyutu logla
-        LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: Görüntülenmek üzere hazırlanan detaylı durum sayısı: " << displayed_details.size());
+        // LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: Görüntülenmek üzere hazırlanan detaylı durum sayısı: " << displayed_details.size());
 
         emit qTableContentFetched(all_q_state_keys, displayed_details, currentSelectionStateKey);
         LOG_DEFAULT(LogLevel::DEBUG, "QTableWorker: Q-Table içeriği başarıyla çekildi (Worker Thread). Toplam filtrelenmiş: " << filtered_state_keys.size());

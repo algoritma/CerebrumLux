@@ -219,8 +219,8 @@ bool SwarmVectorDB::open() {
 
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_env_create başarılı.");
 
-    // 2. Ortam boyutunu ayarla (örn: 1GB)
-    rc = mdb_env_set_mapsize(env_, 4ULL * 1024ULL * 1024ULL * 1024ULL); // DÜZELTME: Geri 4GB'a döndür, 8GB çok yüksek başlangıç için.
+    // 2. Ortam boyutunu ayarla (örn: 4GB)
+    rc = mdb_env_set_mapsize(env_, 8ULL * 1024ULL * 1024ULL * 1024ULL); // 8GB
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_env_set_mapsize başarısız: " << mdb_strerror(rc));
         mdb_env_close(env_); env_ = nullptr;
@@ -311,6 +311,15 @@ bool SwarmVectorDB::open() {
         return false;
     }
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'q_metadata_db' başarılı.");
+
+    // DÜZELTME: Kapsül içerikleri için veritabanını aç (Eğer yoksa ekleyin)
+    rc = mdb_dbi_open(txn, "capsule_content_db", MDB_CREATE, &capsule_content_dbi_);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'capsule_content_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'capsule_content_db' başarılı.");
 
     rc = mdb_txn_commit(txn);
     if (rc != MDB_SUCCESS) {
@@ -785,6 +794,33 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     return cv;
 }
 
+// YENİ: Toplu okuma implementasyonu
+std::vector<std::unique_ptr<CryptofigVector>> SwarmVectorDB::get_vectors_batch(const std::vector<std::string>& ids) const {
+    std::vector<std::unique_ptr<CryptofigVector>> results;
+    if (env_ == nullptr) return results;
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::get_vectors_batch: Transaction başlatılamadı.");
+        return results;
+    }
+
+    results.reserve(ids.size());
+    for (const auto& id : ids) {
+        // get_vector metodunu mevcut transaction ile çağırıyoruz.
+        // Not: get_vector içindeki transaction kontrol mantığına güveniyoruz.
+        // get_vector, verilen txn null değilse onu kullanır ve abort etmez.
+        auto cv = get_vector(id, txn);
+        if (cv) {
+            results.push_back(std::move(cv));
+        }
+    }
+
+    mdb_txn_abort(txn); // Read-only transaction bitti
+    return results;
+}
+
 bool SwarmVectorDB::delete_vector(const std::string& id) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (env_ == nullptr) {
@@ -1072,6 +1108,62 @@ std::vector<EmbeddingStateKey> SwarmVectorDB::get_all_keys_for_dbi(MDB_dbi dbi) 
     mdb_txn_abort(txn); // Salt okunur işlem iptal edilebilir
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::get_all_keys_for_dbi(): DBI " << dbi << " için toplam " << keys.size() << " anahtar getirildi.");
     return keys;
+}
+
+
+// YENİ: Kapsül içeriğini depolamak için metot
+bool SwarmVectorDB::store_capsule_content(const std::string& id, const std::string& content, MDB_txn* existing_txn) {
+    bool created_new_txn = false;
+    MDB_txn* current_txn = existing_txn;
+    if (!current_txn) {
+        int rc = mdb_txn_begin(env_, nullptr, 0, &current_txn);
+        if (rc != MDB_SUCCESS) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_capsule_content(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+            return false;
+        }
+        created_new_txn = true;
+    }
+
+    MDB_val key, data;
+    key.mv_size = id.length();
+    key.mv_data = (void*)id.c_str();
+    data.mv_size = content.length();
+    data.mv_data = (void*)content.c_str();
+
+    int rc = mdb_put(current_txn, capsule_content_dbi_, &key, &data, 0);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_capsule_content(): mdb_put başarısız: " << mdb_strerror(rc));
+        if (created_new_txn) mdb_txn_abort(current_txn);
+        return false;
+    }
+
+    if (created_new_txn) {
+        rc = mdb_txn_commit(current_txn);
+        if (rc != MDB_SUCCESS) return false;
+    }
+    return true;
+}
+
+// YENİ: Kapsül içeriğini getirmek için metot
+std::optional<std::string> SwarmVectorDB::get_capsule_content(const std::string& id, MDB_txn* existing_txn) const {
+    if (!env_) return std::nullopt;
+
+    MDB_txn* txn = existing_txn;
+    bool local_txn = false;
+    if (!txn) {
+        if (mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn) != MDB_SUCCESS) return std::nullopt;
+        local_txn = true;
+    }
+
+    MDB_val key = { id.size(), (void*)id.data() };
+    MDB_val data;
+    int rc = mdb_get(txn, capsule_content_dbi_, &key, &data);
+    
+    std::optional<std::string> result;
+    if (rc == MDB_SUCCESS) result = std::string((char*)data.mv_data, data.mv_size);
+
+    if (local_txn) mdb_txn_abort(txn);
+    return result;
 }
 
 

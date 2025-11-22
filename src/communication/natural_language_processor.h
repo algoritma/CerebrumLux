@@ -40,6 +40,7 @@ class NaturalLanguageProcessor { // NaturalLanguageProcessor sınıfı
 private:
     // YENİ: Tüm FastText modelleri için statik map
     static std::map<Language, std::unique_ptr<fasttext::FastText>> s_fastTextModels; 
+    static std::atomic<bool> s_isModelReady; // Modelin kullanıma hazır olup olmadığını kontrol eder
 
 public:
     NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef);

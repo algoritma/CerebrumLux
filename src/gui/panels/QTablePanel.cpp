@@ -105,17 +105,9 @@ void QTablePanel::handleQTableContentFetched(const std::vector<CerebrumLux::Swar
         QString itemText = QString("Durum Anahtarı: %1 | Eylem Sayısı: %2")
                             .arg(stateKey.left(50) + "...")
                             .arg(data.actionQValues.size());
- 
-        // YENİ EKLENDİ: itemText içeriğini logla
-        LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: Eklenen liste öğesi metni: '" << itemText.toStdString() << "'");
-        LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: stateKey'in ilk 50 karakteri: '" << stateKey.left(50).toStdString() << "'");
-        LOG_DEFAULT(LogLevel::DEBUG, "QTablePanel: data.actionQValues.size(): " << data.actionQValues.size());
-
-        // DÜZELTİLDİ: Qt::MatchUserRole hatası giderildi.
-        // Öğenin user role verisini kontrol etmek için manuel bir döngüye ihtiyaç var.
-            QListWidgetItem *item = new QListWidgetItem(itemText);
-            item->setData(Qt::UserRole, stateKey);
-            stateListWidget->addItem(item);
+        QListWidgetItem *item = new QListWidgetItem(itemText);
+        item->setData(Qt::UserRole, stateKey);
+        stateListWidget->addItem(item);
     }
 
     // Seçimi geri yükle

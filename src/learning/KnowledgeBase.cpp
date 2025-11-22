@@ -11,11 +11,33 @@
 #include <numeric> // std::iota için (embedding için)
 #include <iomanip> // std::setw için
 
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <QCoreApplication>
+#endif
+
 // Özel olarak CryptofigVector embedding dönüşümü için
 #include <Eigen/Dense> 
 
 namespace CerebrumLux {
 
+// Düzeltme: Uygulamanın çalıştığı dizini platformdan bağımsız olarak bulan yardımcı fonksiyon.
+// Bu, 'get_application_directory' was not declared in this scope hatasını çözer.
+std::filesystem::path get_application_directory() {
+    std::filesystem::path app_dir;
+#ifdef _WIN32
+    char path[MAX_PATH] = {0};
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) == 0) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "GetModuleFileNameA failed. Fallback to current_path().");
+        return std::filesystem::current_path();
+    }
+    app_dir = std::filesystem::path(path).parent_path();
+#else
+    app_dir = QCoreApplication::applicationDirPath().toStdString();
+#endif
+    return app_dir;
+}
 // --- Yardımcı Dönüşüm Metodları ---
 SwarmVectorDB::CryptofigVector KnowledgeBase::convert_capsule_to_cryptofig_vector(const Capsule& capsule) const {
     std::vector<uint8_t> cryptofig_bytes;
@@ -61,7 +83,14 @@ Capsule KnowledgeBase::convert_cryptofig_vector_to_capsule(const SwarmVectorDB::
     capsule.source = "SwarmVectorDB";
     capsule.confidence = 1.0f;
     capsule.plain_text_summary = cv.fisher_query;
-    capsule.content = "";
+
+    // DÜZELTME: Kapsül içeriğini LMDB'den çek
+    std::optional<std::string> content_opt = m_swarm_db.get_capsule_content(cv.id);
+    if (content_opt) {
+        capsule.content = *content_opt;
+    } else {
+        capsule.content = ""; 
+    }
     
     capsule.embedding.resize(cv.embedding.size());
     for (int i = 0; i < cv.embedding.size(); ++i) {
@@ -119,10 +148,15 @@ void KnowledgeBase::add_capsule(const Capsule& capsule) {
         LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Mevcut kapsül güncellendi. ID: " << capsule.id);
     }
     SwarmVectorDB::CryptofigVector cv = convert_capsule_to_cryptofig_vector(capsule);
-    if (m_swarm_db.store_vector(cv)) {
-         LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: New capsule added. ID: " << capsule.id);
+    
+    // DÜZELTME: Hem vektörü hem de metin içeriğini kaydet
+    bool vec_ok = m_swarm_db.store_vector(cv);
+    bool content_ok = m_swarm_db.store_capsule_content(capsule.id, capsule.content);
+
+    if (vec_ok && content_ok) {
+         LOG_DEFAULT(LogLevel::INFO, "KnowledgeBase: Kapsül ve içerik başarıyla eklendi. ID: " << capsule.id);
     } else {
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Kapsül LMDB'ye eklenemedi. ID: " << capsule.id);
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeBase: Kapsül tam olarak eklenemedi (Vec: " << vec_ok << ", Cont: " << content_ok << "). ID: " << capsule.id);
     }
 }
 
@@ -188,8 +222,11 @@ void KnowledgeBase::export_to_json(const std::string& filename) const {
     std::vector<Capsule> all_active_capsules = get_all_capsules(); 
     j["active_capsules"] = all_active_capsules;
 
-    std::filesystem::path current_path = std::filesystem::current_path();
-    std::filesystem::path file_path = current_path / filename;
+    // Düzeltme: Dosya yolunu, çalıştırılabilir dosyanın konumuna göre belirle.
+    // Bu, uygulamanın 'build' klasöründen çalıştırıldığında bile doğru 'data' klasörünü bulmasını sağlar.
+    std::filesystem::path app_dir = get_application_directory();
+    std::filesystem::path data_dir = app_dir.parent_path() / "data";
+    std::filesystem::path file_path = data_dir / filename;
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Kaydedilmeye calisilan tam dosya yolu (JSON Export): " << file_path.string());
 
     std::ofstream o(file_path);
@@ -203,8 +240,11 @@ void KnowledgeBase::export_to_json(const std::string& filename) const {
 
 void KnowledgeBase::import_from_json(const std::string& filename) {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase::import_from_json(): JSON dosyasından kapsüller içe aktarılıyor.");
-    std::filesystem::path current_path = std::filesystem::current_path();
-    std::filesystem::path file_path = current_path / filename;
+    // Düzeltme: Dosya yolunu, çalıştırılabilir dosyanın konumuna göre belirle.
+    // Bu, uygulamanın 'build' klasöründen çalıştırıldığında bile doğru 'data' klasörünü bulmasını sağlar.
+    std::filesystem::path app_dir = get_application_directory();
+    std::filesystem::path data_dir = app_dir.parent_path() / "data";
+    std::filesystem::path file_path = data_dir / filename;
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "KnowledgeBase: Yuklenmeye calisilan tam dosya yolu (JSON Import denemesi): " << file_path.string());
 
     if (!std::filesystem::exists(file_path)) {
@@ -247,8 +287,11 @@ std::vector<Capsule> KnowledgeBase::get_all_capsules() const {
     }
 
     std::vector<std::string> all_ids = m_swarm_db.get_all_ids();
-    for (const auto& id : all_ids) {
-        std::unique_ptr<SwarmVectorDB::CryptofigVector> cv = m_swarm_db.get_vector(id);
+
+    // DÜZELTME: Tek tek okumak yerine toplu okuma (Batch Read) kullanılıyor
+    auto cryptofig_vectors = m_swarm_db.get_vectors_batch(all_ids);
+
+    for (const auto& cv : cryptofig_vectors) {
         if (cv) {
             all_capsules.push_back(convert_cryptofig_vector_to_capsule(*cv));
         }

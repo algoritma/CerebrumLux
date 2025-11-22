@@ -82,14 +82,14 @@ public:
     
     // Kod geliştirme önerisi geri bildirimini işler (public metot olarak eklendi)
     void processCodeSuggestionFeedback(const std::string& capsuleId, bool accepted);
-
+    
     // Sparse Q-Table kalıcılığı için metotlar
     void save_q_table() const;
     void load_q_table();
-
+    
     // Sparse Q-Table'ı güncellemek için metot
     void update_q_values(const std::vector<float>& current_state_embedding, CerebrumLux::AIAction action, float reward, const std::vector<float>& next_state_embedding);
-
+    
     IngestReport ingest_envelope(const Capsule& envelope, const std::string& signature, const std::string& sender_id);
 
     std::vector<float> compute_embedding(const std::string& text) const;
@@ -97,11 +97,12 @@ public:
     std::vector<float> cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const;
 
 signals:
-    // Web çekme işleminin sonucunu bildiren sinyal
-    void webFetchCompleted(const CerebrumLux::IngestReport& report);
-
     void qTableUpdated();       // Q-Table'da bir Q-değeri güncellendiğinde yayılır
     void qTableLoadCompleted(); // Q-Table LMDB'den yüklendikten sonra yayılır
+
+    // Web çekme işleminin sonucunu bildiren sinyal
+    void webFetchCompleted(const CerebrumLux::IngestReport& report);
+    void knowledgeBaseUpdated(); // YENİ: KB güncellendiğinde (kapsül eklendiğinde) tetiklenir
 
 private slots:
     // WebFetcher'dan gelen yapılandırılmış arama sonuçlarını işlemek için slot

@@ -99,7 +99,7 @@ void WebFetcher::on_network_reply_finished(QNetworkReply* reply) {
                     QString name = QString::fromStdString(input_match[1].str());
                     QString value = QString::fromStdString(input_match[2].str());
                     post_data.addQueryItem(name, value);
-                    LOG_DEFAULT(LogLevel::TRACE, "WebFetcher: Hidden input (consent): Name=" << name << ", Value=" << value);
+                    LOG_DEFAULT(LogLevel::TRACE, "WebFetcher: Hidden input (consent): Name=" << name.toStdString() << ", Value=" << value.toStdString());
                 }
                 search_start = input_match.suffix().first;
             }

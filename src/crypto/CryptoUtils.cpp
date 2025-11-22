@@ -3,8 +3,9 @@
 #include "../core/logger.h" // LOG_DEFAULT için
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include <openssl/evp.h>   // Düzeltme: Modern EVP API'leri için eklendi
 #include <openssl/pem.h>
-#include <openssl/sha.h> // SHA-256 için gerekli
+#include <openssl/sha.h>   // SHA256_DIGEST_LENGTH için gerekli
 #include <openssl/err.h> // ERR_print_errors_fp için eklendi
 #include <cstring> // for memset
 
@@ -121,13 +122,36 @@ void secure_zero_memory(void* v, size_t n) {
     }
 }
 
-// YENİ EKLENDİ: SHA-256 hash fonksiyonu implementasyonu
+// DÜZELTİLDİ: SHA-256 hash fonksiyonu OpenSSL 3.0+ uyumlu EVP API'lerini kullanacak şekilde güncellendi.
 std::string sha256_hash(const std::string& data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, data.c_str(), data.length());
-    SHA256_Final(hash, &sha256); // Doğru SHA256_Final kullanımı
+    unsigned int hash_len;
+
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    if(context == nullptr) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "SHA256: EVP_MD_CTX_new failed.");
+        return "";
+    }
+
+    if(1 != EVP_DigestInit_ex(context, EVP_sha256(), nullptr)) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "SHA256: EVP_DigestInit_ex failed.");
+        EVP_MD_CTX_free(context);
+        return "";
+    }
+
+    if(1 != EVP_DigestUpdate(context, data.c_str(), data.length())) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "SHA256: EVP_DigestUpdate failed.");
+        EVP_MD_CTX_free(context);
+        return "";
+    }
+
+    if(1 != EVP_DigestFinal_ex(context, hash, &hash_len)) {
+        LOG_DEFAULT(LogLevel::ERR_CRITICAL, "SHA256: EVP_DigestFinal_ex failed.");
+        EVP_MD_CTX_free(context);
+        return "";
+    }
+
+    EVP_MD_CTX_free(context);
 
     std::stringstream ss;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
