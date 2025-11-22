@@ -36,6 +36,11 @@ LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoMan
             this, &LearningModule::onWebFetchError, Qt::QueuedConnection);
     LOG_DEFAULT(LogLevel::TRACE, "LearningModule::LearningModule: WebFetcher sinyalleri bağlandı.");
 
+    // YENİ: Otomatik kayıt zamanlayıcısını başlat (Her 10 saniyede bir)
+    autoSaveTimer = new QTimer(this);
+    connect(autoSaveTimer, &QTimer::timeout, this, &LearningModule::onAutoSaveTimerTimeout);
+    autoSaveTimer->start(10000); // 10000 ms = 10 saniye
+
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Initialized with CryptoManager.");
     load_q_table(); // Q-table'ı başlangıçta LMDB'den yükle
 }
@@ -45,6 +50,7 @@ LearningModule::~LearningModule() {
 
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: Destructor called.");
     save_q_table(); // Q-table'ı kapanışta LMDB'ye kaydet
+    if (autoSaveTimer->isActive()) autoSaveTimer->stop();
 
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: Destructor finished saving Q-Table."); // YENİ LOG: Yıkıcının bitişini onayla
 }
@@ -541,7 +547,9 @@ void LearningModule::update_q_values(const std::vector<float>& current_state_emb
     
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table değeri güncellendi. Durum (Kısmi): " << current_state_key.substr(0, std::min((size_t)50, current_state_key.length())) << "..., Eylem: " << CerebrumLux::action_to_string(action) << ", Ödül: " << reward << ", Yeni Q-Değeri: " << q_table.q_values[current_state_key][action]);
     emit qTableUpdated(); // Q-Table güncellendiğinde sinyal yay
-    save_q_table();       // Her güncellemeden sonra Q-Table'ı diske kaydet. (Geçici çözüm, daha sonra optimize edilebilir)
+    // PERFORMANS DÜZELTMESİ:
+    // save_q_table(); ÇAĞRISI KALDIRILDI.
+    // Artık her güncellemede diske yazmıyoruz, zamanlayıcı (autoSaveTimer) bunu yapacak.
 }
 
 void LearningModule::save_q_table() const {
@@ -599,6 +607,12 @@ void LearningModule::load_q_table() {
 
     LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table yükleme tamamlandı. Toplam yüklü durum: " << q_table.q_values.size());
     emit qTableLoadCompleted(); // Yükleme tamamlandığında sinyal yay
+}
+
+// YENİ: Otomatik kayıt slotu
+void LearningModule::onAutoSaveTimerTimeout() {
+    LOG_DEFAULT(LogLevel::DEBUG, "[LearningModule] Otomatik kayıt tetiklendi.");
+    save_q_table();
 }
 
 } // namespace CerebrumLux

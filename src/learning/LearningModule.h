@@ -19,6 +19,7 @@
 #include "web_search_result.h" // WebSearchResult için
 
 #include <QObject> 
+#include <QTimer> // YENİ: Otomatik kayıt için
 #include <QString> // QString için
 
 namespace CerebrumLux {
@@ -110,6 +111,9 @@ private slots:
     // WebFetcher'dan gelen hata sinyali için slot
     void onWebFetchError(const QString& url, const QString& error_message); 
 
+    // YENİ: Periyodik kayıt için slot
+    void onAutoSaveTimerTimeout();
+
 private:
     KnowledgeBase& knowledgeBase;
     CerebrumLux::Crypto::CryptoManager& cryptoManager;
@@ -121,6 +125,7 @@ private:
     bool webFetchInProgress = false;
     QString currentWebFetchQuery;
     CerebrumLux::SwarmVectorDB::SparseQTable q_table; // Sparse Q-Table üyesi eklendi
+    QTimer* autoSaveTimer; // YENİ: Otomatik kayıt zamanlayıcısı
 
     bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
     Capsule decrypt_payload(const Capsule& encrypted_capsule) const;
