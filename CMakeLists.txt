@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # -----------------------------
 # Qt6 entegrasyonu
 # -----------------------------
-find_package(Qt6 COMPONENTS Core Gui Widgets Network Charts REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Core Gui Charts Network OpenGL OpenGLWidgets TextToSpeech)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -219,7 +219,9 @@ target_link_libraries(CerebrumLuxGUI PRIVATE
     Qt6::Gui
     #Qt6::Widgets
     Qt6::Network
+    Qt6::Widgets # GUI uygulamaları için Widgets modülü gereklidir
     Qt6::Charts
+    Qt6::TextToSpeech
     OpenSSL::SSL
     OpenSSL::Crypto
     ws2_32

@@ -67,17 +67,45 @@ ChatResponse ResponseEngine::generate_response(
             user_input = sequence.user_input_history.back();
         }
 
+        // --- DİNAMİK DİL VE DAVRANIŞ ADAPTASYONU ---
+        // Varsayılan dil Türkçe
+        std::string target_lang = "TURKISH";
+        std::string lang_instruction = "SADECE TÜRKÇE konuş. Verilen bilgiyi kullanarak soruyu yanıtla. Talimatları tekrar etme.";
+
+        // Basit Dil Algılama (Heuristic)
+        // Türkçe karakterler veya komutlar var mı?
+        // Not: std::string içinde UTF-8 baytlarını arıyoruz.
+        bool explicit_turkish = (user_input.find("Türkçe") != std::string::npos || 
+                                 user_input.find("türkçe") != std::string::npos ||
+                                 user_input.find("ğ") != std::string::npos || 
+                                 user_input.find("ş") != std::string::npos || 
+                                 user_input.find("ı") != std::string::npos);
+
+        bool explicit_english = (user_input.find("English") != std::string::npos || 
+                                 user_input.find("english") != std::string::npos || 
+                                 user_input.find("Hello") != std::string::npos ||
+                                 user_input.find("What is") != std::string::npos);
+
+        // Eğer açıkça İngilizce konuşuluyorsa veya komut verildiyse dili değiştir
+        if (explicit_english && !explicit_turkish) {
+            target_lang = "ENGLISH";
+            lang_instruction = "The provided Context is in Turkish. TRANSLATE the relevant information and answer the user's question in ENGLISH only.";
+        }
+        // --------------------------------------------
+
         // Prompt Hazırlama (Llama-2 Formatı - GÜÇLENDİRİLMİŞ TÜRKÇE)
         std::stringstream prompt_ss;
         prompt_ss << "[INST] <<SYS>>\n"
-                  << "Sen Cerebrum Lux adında yardımcı bir yapay zeka asistanısın. "
-                  << "Kullanıcının sorusuna SADECE TÜRKÇE dilinde yanıt ver. İngilizce kullanma. "
-                  << "Aşağıdaki 'Bilgi Tabanı' verilerini kullanarak doğal, akıcı ve profesyonel bir yanıt oluştur. "
-                  << "Bilgi tabanındaki [cite:...] referanslarını yanıtının içinde korumaya çalış.\n"
+                  << "You are Cerebrum Lux, an advanced AI assistant. "
+                  << "Your goal is to answer the user question based ONLY on the provided Context. "
+                  << "Respect the target language instruction below. "
+                  << "Keep [cite:...] references intact.\n"
                   << "<</SYS>>\n\n"
-                  << "Bilgi Tabanı:\n" << nlp_generated_response.text << "\n\n"
-                  << "Kullanıcı Sorusu:\n" << user_input << "\n\n"
-                  << "Türkçe Yanıt:\n" // Modeli zorlamak için ipucu
+                  << "Context:\n" << nlp_generated_response.text << "\n\n"
+                  << "User Question:\n" << user_input << "\n\n"
+                  << "Target Language: " << target_lang << "\n"
+                  << "Instruction: " << lang_instruction << "\n"
+                  << "Answer:\n"
                   << "[/INST]";
 
         std::string prompt = prompt_ss.str();

@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QDateTime> // QDateTime için
+#include <QTextToSpeech> // YENİ: TTS Kütüphanesi
 
 #include "../../core/logger.h" // LOG_DEFAULT makrosu için
 #include "../../communication/natural_language_processor.h" // CerebrumLux::ChatResponse için
@@ -42,6 +43,7 @@ private slots:
     void onSuggestionBtnClicked();
     void onLikeClicked();
     void onDislikeClicked();
+    void onToggleVoiceClicked(); // YENİ: Ses aç/kapa slotu
 
 private:
     QTextEdit *chatHistoryDisplay;
@@ -53,7 +55,12 @@ private:
     QHBoxLayout *suggestionLayout;
     QPushButton *btnLike;
     QPushButton *btnDislike;
-    
+   
+    // YENİ: Sesli Yanıt Elemanları
+    QTextToSpeech *tts;
+    QPushButton *btnVoiceToggle;
+    bool isVoiceEnabled;
+
     void clearSuggestions();
     void addSuggestionButton(const std::string& text);
     void setupUi();

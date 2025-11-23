@@ -1,3 +1,6 @@
+#include <QLocale> // Dil ayarı için
+#include <QRegularExpression> // Dil algılama için
+
 #include "ChatPanel.h"
 
 namespace CerebrumLux {
@@ -6,6 +9,25 @@ ChatPanel::ChatPanel(QWidget *parent) : QWidget(parent)
 {
     setupUi();
     LOG_DEFAULT(LogLevel::INFO, "ChatPanel: Initialized.");
+
+    // YENİ: TTS Motorunu Başlat
+    tts = new QTextToSpeech(this);
+    
+    /*
+    // Türkçe dilini ayarlamaya çalış
+    QList<QLocale> locales = tts->availableLocales();
+    for (const QLocale &locale : locales) {
+        if (locale.language() == QLocale::Turkish) {
+            tts->setLocale(locale);
+            break;
+        }
+    }
+    */
+    // Başlangıçta varsayılan sistemi kullan, her konuşmada dinamik ayarlanacak.
+  
+    // Varsayılan olarak ses kapalı olsun (Kullanıcı isterse açsın)
+    isVoiceEnabled = false; 
+
 }
 
 ChatPanel::~ChatPanel() {
@@ -51,12 +73,20 @@ void ChatPanel::setupUi() {
     btnDislike->setFixedWidth(30);
     connect(btnDislike, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onDislikeClicked);
     
+    // YENİ: Ses Aç/Kapa Butonu
+    btnVoiceToggle = new QPushButton("🔇", this); // Başlangıçta sessiz ikonu
+    btnVoiceToggle->setToolTip("Sesli Yanıtı Aç/Kapat");
+    btnVoiceToggle->setFixedWidth(30);
+    btnVoiceToggle->setCheckable(true);
+    connect(btnVoiceToggle, &QPushButton::clicked, this, &CerebrumLux::ChatPanel::onToggleVoiceClicked);
+
     // Başlangıçta feedback butonları pasif olabilir veya aktif kalabilir
     
     bottomLayout->addWidget(chatMessageLineEdit);
     bottomLayout->addWidget(sendChatMessageButton);
     bottomLayout->addWidget(btnLike);
     bottomLayout->addWidget(btnDislike);
+    bottomLayout->addWidget(btnVoiceToggle);
 
     mainLayout->addLayout(bottomLayout);
 
@@ -82,7 +112,39 @@ void ChatPanel::appendChatMessage(const QString& sender, const CerebrumLux::Chat
     }
 
     chatHistoryDisplay->append(formattedMessage);
-    
+
+    // YENİ: Sesli Okuma (Eğer aktifse ve gönderen CerebrumLux ise)
+    if (isVoiceEnabled && sender == "CerebrumLux") {
+        // HTML etiketlerini temizle (Sadece metni oku)
+        QTextDocument doc;
+        doc.setHtml(QString::fromStdString(response.text));
+        QString plainText = doc.toPlainText();
+
+        // --- DİNAMİK DİL ALGILAMA ---
+        // Metin Türkçe karakterler içeriyor mu? (ı, ğ, ü, ş, ö, ç ve büyük halleri)
+        // Eğer içeriyorsa Türkçe motoru, içermiyorsa İngilizce motoru seç.
+        QLocale::Language targetLang = QLocale::English; // Varsayılan İngilizce
+        QRegularExpression trRegex(QString::fromUtf8("[ığüşöçİĞÜŞÖÇ]"));
+        
+        if (plainText.contains(trRegex)) {
+            targetLang = QLocale::Turkish;
+        }
+
+        // TTS Motorunu uygun dile ayarla
+        QList<QLocale> locales = tts->availableLocales();
+        for (const QLocale &locale : locales) {
+            if (locale.language() == targetLang) {
+                tts->setLocale(locale);
+                break;
+            }
+        }
+        // ---------------------------
+
+        // Okumayı başlat
+        if (tts->state() == QTextToSpeech::Speaking) tts->stop();
+        tts->say(plainText);
+    }
+
     // 2. Önerileri Göster
     clearSuggestions(); // Öncekileri temizle
     for (const auto& suggestion : response.suggested_questions) {
@@ -154,5 +216,15 @@ void ChatPanel::onSendClicked() {
     }
 }
 
+// YENİ: Ses butonu tıklama işlemi
+void ChatPanel::onToggleVoiceClicked() {
+    isVoiceEnabled = btnVoiceToggle->isChecked();
+    if (isVoiceEnabled) {
+        btnVoiceToggle->setText("🔊"); // Sesli ikon
+    } else {
+        btnVoiceToggle->setText("🔇"); // Sessiz ikon
+        tts->stop(); // Eğer konuşuyorsa sustur
+    }
+}
 
 } // namespace CerebrumLux
