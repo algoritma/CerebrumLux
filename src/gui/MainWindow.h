@@ -8,6 +8,8 @@
 #include <QMap>
 #include <QVector>
 #include <QTimer>
+#include <QtConcurrent/QtConcurrent> // YENİ: Asenkron işlemler için
+#include <QFutureWatcher> // YENİ: Asenkron işlem takibi için
 
 #include "../data_models/sequence_manager.h"
 #include "../learning/LearningModule.h"
@@ -58,6 +60,9 @@ private slots:
     void onWebFetchCompleted(const CerebrumLux::IngestReport& report);
     void onChatMessageReceived(const QString& message); // YENİ: Chat mesajı işleme slotu
 
+    // YENİ: Asenkron LLM yanıtı tamamlandığında çağrılacak slot
+    void onLLMResponseReady();
+
 private:
     Ui::MainWindow *ui;
     QTabWidget *tabWidget;
@@ -73,6 +78,9 @@ private:
     LearningModule& learningModule;
 
     QTimer *guiUpdateTimer;
+
+    // YENİ: Asenkron işlem izleyicisi
+    QFutureWatcher<CerebrumLux::ChatResponse> responseWatcher;
 
     SimulationData convertCapsuleToSimulationData(const Capsule& capsule);
 };

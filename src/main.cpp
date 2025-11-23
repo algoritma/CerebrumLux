@@ -43,6 +43,9 @@
 
 int main(int argc, char *argv[])
 {
+    // YENİ: Başlangıç kontrolü için konsola yaz
+    std::cout << "Uygulama baslatiliyor... (Main Entry)" << std::endl;
+
     // Erken teşhis log dosyası (QApplication başlatılmadan önceki hataları yakalamak için)
     std::ofstream early_diagnostic_log("cerebrum_lux_early_diagnostic.log", std::ios_base::app);
     if (early_diagnostic_log.is_open()) {

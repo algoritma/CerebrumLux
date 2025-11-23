@@ -29,6 +29,42 @@ find_package(hnswlib CONFIG REQUIRED) # hnswlib için vcpkg tarafından sağlana
 # gumbo kütüphanesini bul (HTML5 parser)
 # find_package(gumbo CONFIG REQUIRED) # Gumbo manuel olarak bağlanıyor
 
+# --- llama.cpp Entegrasyonu ---
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Force static libraries" FORCE)
+set(LLAMA_STATIC ON CACHE BOOL "Force static build" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "Disable tests" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "Disable examples" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "Disable server" FORCE)
+
+# --- PERFORMANS AYARLARI AÇILIYOR ---
+
+# OpenMP AÇIK (Çoklu çekirdek kullanımı için şart)
+set(LLAMA_OPENMP ON CACHE BOOL "Enable OpenMP" FORCE)
+set(GGML_OPENMP ON CACHE BOOL "Enable GGML OpenMP" FORCE)
+
+# AVX2 AÇIK (Modern işlemcilerde matris çarpımını hızlandırır)
+# Eğer işlemciniz çok eskiyse (2013 öncesi) bunu OFF yapın.
+set(LLAMA_AVX ON CACHE BOOL "Enable AVX" FORCE)
+set(LLAMA_AVX2 ON CACHE BOOL "Enable AVX2" FORCE)
+set(LLAMA_FMA ON CACHE BOOL "Enable FMA" FORCE)
+set(LLAMA_F16C ON CACHE BOOL "Enable F16C" FORCE)
+
+# NATIVE kapalı kalsın (Derleme taşınabilirliği için)
+set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+
+# 2. Alt dizini ekle
+add_subdirectory(thirdparty/llama.cpp)
+
+# 3. Include yolları
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/llama.cpp/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/llama.cpp/ggml/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/llama.cpp)
+
+# Not: target_link_libraries kısmında 'llama' kütüphanesini bağladığınızdan emin olun.
+# target_link_libraries(CerebrumLuxCore PRIVATE llama)
+# ---------------------------------------
+
 # -----------------------------
 # Core library
 # -----------------------------
@@ -66,7 +102,11 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
     "${PROJECT_SRC_DIR}/hnswlib_wrapper.h"
 )
 
-add_library(CerebrumLuxCore STATIC ${CEREBRUMLUX_CORE_SOURCES} ${CEREBRUMLUX_CORE_HEADERS})
+add_library(CerebrumLuxCore STATIC 
+    ${CEREBRUMLUX_CORE_SOURCES} 
+    ${CEREBRUMLUX_CORE_HEADERS}
+    ${LLAMA_SOURCES}  # YENİ: llama.cpp kaynaklarını buraya ekledik
+)
 
 # --------------------------------------------------
 # FastText Entegrasyonu
@@ -116,6 +156,7 @@ target_link_libraries(CerebrumLuxCore PUBLIC
     "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib kütüphanesini CerebrumLuxCore'a statik olarak bağla
     hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla (doğrudan dosya yolu kaldırıldı)
     fasttext
+    llama ggml
     Threads::Threads
     winpthread # winpthread kütüphanesini CerebrumLuxCore'a bağla
     ws2_32 # Windows Sockets
@@ -134,7 +175,7 @@ target_link_directories(CerebrumLuxCore PUBLIC
 # -----------------------------
 # Debug aşamasında konsollu çalışsın, Release'te sessiz GUI olsun
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_executable(CerebrumLuxGUI WIN32
+    add_executable(CerebrumLuxGUI #WIN32
         # Ana GUI dosyaları
         "${PROJECT_SRC_DIR}/main.cpp"
         "${PROJECT_SRC_DIR}/gui/MainWindow.cpp"

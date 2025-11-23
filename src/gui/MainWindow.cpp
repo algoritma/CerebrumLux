@@ -5,6 +5,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QDebug>
+#include <QtConcurrent/QtConcurrent> // Asenkron çalıştırma için
 
 #include "../core/logger.h"
 #include "../gui/panels/LogPanel.h"
@@ -110,11 +111,24 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     // YENİ: KnowledgeBasePanel'i sinyale bağla
     connect(&learningModule, &CerebrumLux::LearningModule::knowledgeBaseUpdated, this, &CerebrumLux::MainWindow::updateKnowledgeBasePanel, Qt::QueuedConnection);
 
+    // YENİ: Asenkron yanıt izleyicisini bağla
+    connect(&responseWatcher, &QFutureWatcher<CerebrumLux::ChatResponse>::finished, this, &CerebrumLux::MainWindow::onLLMResponseReady);
+
     guiUpdateTimer = new QTimer(this);
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
     guiUpdateTimer->start(1000); // Düzeltme: Graph ve Simulation panellerinin güncellenmesi için zamanlayıcıyı yeniden başlat.
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms). [Graph ve Simulation panellerini etkiler]");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
+
+    // YENİ: Ağır LLM modelini GUI'yi bloklamadan arka planda yükle
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: LLM modelinin asenkron yüklenmesi tetikleniyor...");
+    // DÜZELTME: QtConcurrent::run, bir üye fonksiyona işaretçi ile çağrıldığında derleme hatası verebiliyor.
+    // İSTEĞE BAĞLI İYİLEŞTİRME: [-Wunused-result] uyarısını gidermek için Q_UNUSED kullanıyoruz.
+    //Q_UNUSED(QtConcurrent::run([this]() {
+    //    this->engine.getResponseEngine().load_llm_model_async();
+    //}));
+    // LLM modeli zaten ResponseEngine oluşturulurken yüklendiği için 
+    // burada tekrar yüklemeye gerek yok.
 
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Kurucu çıkışı. isVisible(): " << isVisible() << ", geometry: " << geometry().width() << "x" << geometry().height());
 }
@@ -268,16 +282,33 @@ void MainWindow::onChatMessageReceived(const QString& message) {
     // EngineIntegration'dan güncel sekansı alabiliriz
     const CerebrumLux::DynamicSequence& current_sequence = engine.getSequenceManager().get_current_sequence_ref();
     
-    // Yanıt üretmek için NLP'yi kullan
-    // DEĞİŞTİRİLEN KOD: generate_response'dan ChatResponse objesi al
-    CerebrumLux::ChatResponse nlp_chat_response = engine.getResponseEngine().generate_response(user_intent, current_abstract_state, current_goal, current_sequence, learningModule.getKnowledgeBase());
-    // Yanıtı GUI'ye ekle
+    // UI'da "Yazıyor..." veya bekleme durumu gösterilebilir (İsteğe bağlı)
+    if (chatPanel) chatPanel->appendChatMessage("System", "<i>(Düşünüyor...)</i>");
+
+    // KRİTİK: Yanıt üretimini asenkron olarak başlat (GUI donmasını engeller)
+    // QtConcurrent::run ile generate_response metodunu arka planda çalıştırıyoruz.
+    QFuture<CerebrumLux::ChatResponse> future = QtConcurrent::run([=, this]() {
+        return engine.getResponseEngine().generate_response(
+            user_intent, 
+            current_abstract_state, 
+            current_goal, 
+            current_sequence, 
+            learningModule.getKnowledgeBase()
+        );
+    });
+    
+    // Sonucu izleyiciye bağla
+    responseWatcher.setFuture(future);
+}
+
+// YENİ: Asenkron işlem bittiğinde çağrılacak slot
+void MainWindow::onLLMResponseReady() {
+    CerebrumLux::ChatResponse response = responseWatcher.result();
+    
     if (chatPanel) {
-        chatPanel->appendChatMessage("CerebrumLux", nlp_chat_response); // Doğrudan ChatResponse objesini gönder
-    } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::onChatMessageReceived: chatPanel null. NLP yanıtı gösterilemedi.");
+        chatPanel->appendChatMessage("CerebrumLux", response);
     }
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: NLP yanıtı üretildi.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Asenkron NLP yanıtı GUI'ye eklendi.");
 }
 
 void MainWindow::updateKnowledgeBasePanel() {
