@@ -241,8 +241,16 @@ bool SwarmVectorDB::open() {
     // Ancak, eğer db_path zaten bir dosya ise MDB_NOSUBDIR sorun çıkarabilir.
     // Path bir dizin olduğundan, MDB_NOSUBDIR kullanımı sorunsuz olmalı.
 
-    // 4. Ortamı aç. db_path_ bir dizin ve LMDB dosyalarını bu dizin içinde oluşturacaktır. MDB_NOSUBDIR kullanılmıyor. İzin modu (0) Windows'ta varsayılanı kullanır.
-    rc = mdb_env_open(env_, db_path_.c_str(), 0, 0);
+    // --- WINDOWS PERFORMANS OPTİMİZASYONU ---
+    // MDB_WRITEMAP: İşletim sistemi dosya önbelleğini doğrudan kullanır, RAM kopyalamayı önler.
+    // MDB_MAPASYNC: Diske yazmayı asenkron yapar (Hız artışı).
+    // MDB_NOTLS: Thread Local Storage kullanmaz (C++ threadleri ile daha uyumlu).
+    // MDB_NORDAHEAD: Windows'un gereksiz "ileriyi okuma" yapıp RAM doldurmasını engeller.
+    unsigned int flags = MDB_WRITEMAP | MDB_MAPASYNC | MDB_NOTLS | MDB_NORDAHEAD;
+
+    // 4. Ortamı aç.
+    rc = mdb_env_open(env_, db_path_.c_str(), flags, 0664);
+
     if (rc != MDB_SUCCESS) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_env_open başarısız: " << mdb_strerror(rc) << ", Yol: " << db_path_); // 'native_db_path' -> 'db_path_'
         mdb_env_close(env_); env_ = nullptr;

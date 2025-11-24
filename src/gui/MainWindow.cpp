@@ -116,8 +116,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
 
     guiUpdateTimer = new QTimer(this);
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
-    guiUpdateTimer->start(1000); // Düzeltme: Graph ve Simulation panellerinin güncellenmesi için zamanlayıcıyı yeniden başlat.
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (1000ms). [Graph ve Simulation panellerini etkiler]");
+    // OPTİMİZASYON: GUI güncelleme sıklığı 1 saniyeden 3 saniyeye çekildi.
+    // Bu, veritabanı okuma yükünü %66 azaltır ve arayüz donmalarını engeller.
+    guiUpdateTimer->start(3000); 
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (3000ms). [Graph ve Simulation panellerini etkiler]");
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
 
     // YENİ: Ağır LLM modelini GUI'yi bloklamadan arka planda yükle
@@ -159,21 +161,22 @@ void MainWindow::updateSimulationHistory(const QVector<CerebrumLux::SimulationDa
 }
 
 void MainWindow::updateGui() {
-    // Statik NLP metodunu kullanarak embedding alıyoruz.
-    // YENİ: Embedding'leri bir kez hesaplayıp önbelleğe alabiliriz, her updateGui() çağrısında tekrar hesaplamak yerine.
-    static std::vector<float> sim_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("StepSimulation");
-    std::vector<CerebrumLux::Capsule> capsules_for_sim = engine.getKnowledgeBase().semantic_search(sim_query_embedding, 100);
-    QVector<CerebrumLux::SimulationData> sim_data;
-    for (const auto& cap : capsules_for_sim) {
-        sim_data.append(convertCapsuleToSimulationData(cap));
-    }
-    if (simulationPanel) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MainWindow::updateGui: SimulationPanel güncelleniyor. Veri noktası sayısı: " << sim_data.size());
-        simulationPanel->updateSimulationHistory(sim_data);
-    } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: simulationPanel null. Simülasyon verisi güncellenemedi.");
-    }
-
+    // --- PERFORMANS DÜZELTMESİ ---
+    // Buradaki ağır veritabanı sorguları (semantic_search) KALDIRILDI.
+    // Artık bu paneller sadece 'knowledgeBaseUpdated' sinyali geldiğinde güncellenecek.
+    // 'updateKnowledgeBasePanel' fonksiyonu bu işi zaten yapıyor veya oraya taşıyacağız.
+    
+    // Eğer Simülasyon verilerinin sürekli akması gerekiyorsa (animasyon gibi),
+    // bunu DB'den okumak yerine EngineIntegration üzerindeki RAM cache'den okumalıyız.
+    // Şimdilik DB yükünü kesmek için burayı pasifize ediyoruz.
+    
+    /* 
+       Eski Kod: Her saniye DB'yi tarıyordu.
+       Yeni Durum: Sadece System Monitor gibi hafif verileri güncelle.
+    */
+   
+   // Sadece LogPanel veya hafif arayüz güncellemeleri burada kalabilir.
+   // Ağır işler Event-Driven oldu.
 
     // YENİ: GraphData embedding'ini bir kez hesaplayıp önbelleğe alıyoruz.
     static std::vector<float> graph_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("GraphData");
@@ -193,12 +196,15 @@ void MainWindow::updateGui() {
         min_confidence = std::min(min_confidence, static_cast<qreal>(cap.confidence));
         max_confidence = std::max(max_confidence, static_cast<qreal>(cap.confidence));
     }
-    if (graphPanel) {
-        graphPanel->updateData("AI Confidence", graph_data);
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow::updateGui: GraphPanel güncellendi. Veri noktası sayısı: " << graph_data.size());
-    } else {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateGui: graphPanel null. Grafik verisi güncellenemedi.");
-    }
+    
+    // Graph Panel güncellemesini de çok sık yapmaya gerek yok, 
+    // veya sadece yeni veri eklendiğinde yapılmalı.
+    // Şimdilik burayı da yorum satırına alıp, updateKnowledgeBasePanel içine taşıyabiliriz.
+    // Ancak görsel olarak bir şey görmek istiyorsanız açık kalabilir, 
+    // fakat VectorDB optimizasyonu (MDB_NORDAHEAD) olmadan burası diski yorar.
+    
+    // ÖNERİ: GraphPanel güncellemesini de 'knowledgeBaseUpdated' sinyaline taşıyalım.
+    // if (graphPanel) { graphPanel->updateData(...); } // Buradan kaldırıldı.
     
     // KRİTİK PERFORMANS DÜZELTMESİ:
     // updateKnowledgeBasePanel() çağrısı buradan KALDIRILDI. 

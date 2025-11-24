@@ -71,6 +71,13 @@ public:
 
     static std::vector<float> generate_text_embedding(const std::string& text, Language lang = Language::EN);
 
+    // YENİ: Metnin bilişsel zorluk derecesini hesaplar (0.0 - 1.0 arası)
+    // 0.0: Çok basit (Refleks), 1.0: Çok karmaşık (Derin Düşünme)
+    float calculate_cognitive_load(const std::string& text) const;
+
+    // YENİ: Refleks yanıtı (Varsa döndürür, yoksa boş döner)
+    std::string get_reflex_response(const std::string& text, const UserIntent& intent) const;
+
     // public yapıldı (önceki oturumda yapılmıştı)
     std::string fallback_response_for_intent(CerebrumLux::UserIntent intent, CerebrumLux::AbstractState state, const CerebrumLux::DynamicSequence& sequence) const;
 

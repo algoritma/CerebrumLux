@@ -32,15 +32,21 @@ public:
     // Modelin yüklü olup olmadığını kontrol eder
     bool is_model_loaded() const;
 
+    // YENİ: Metin Embedding (Vektör) Üretimi
+    // Metni alır, Llama-2'nin içsel temsilini vektör olarak döner.
+    // Bu metod RAG sistemi için kritiktir.
+    std::vector<float> get_embedding(const std::string& text);
+
     // Verilen prompt'a göre yanıt üretir
-    // callback: Her token üretildiğinde çağrılır (streaming için). 
-    // Eğer callback false dönerse üretim durdurulur.
     std::string generate(const std::string& prompt, 
                          const LLMGenerationConfig& config = LLMGenerationConfig(),
                          std::function<bool(const std::string&)> callback = nullptr);
 
     // Model kaynaklarını serbest bırakır
     void unload_model();
+
+    // YENİ: Global erişim noktası (NaturalLanguageProcessor'ın erişmesi için)
+    static LLMEngine* global_instance;
 
 private:
     llama_model* model = nullptr;

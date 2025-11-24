@@ -19,6 +19,7 @@
 #include <QCoreApplication> // Çalıştırılabilir dosya yolunu almak için
 
 #include <filesystem>
+#include "../brain/llm_engine.h" // EKLENDİ: Llama-2 Motoruna Erişim
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -596,63 +597,120 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
 
 // Metin girdisinden embedding hesaplama (FastText kullanılarak)
 std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text, Language lang) {
-    // Model henüz yüklenmediyse yüklemeyi tetikle
-    if (!s_isModelReady.load()) {
-        load_fasttext_models();
+    // STRATEJİ: Dinamik Zeka (Adaptive Compute)
+    // 1. ÖNCELİK: Llama-2 (Unified Brain). 
+    // Zaten RAM'de olan "Işık Beyin"i kullanıyoruz. Bu hem daha zeki hem de ekstra RAM harcamaz.
+    if (LLMEngine::global_instance && LLMEngine::global_instance->is_model_loaded()) {
+        std::vector<float> emb = LLMEngine::global_instance->get_embedding(text);
+        if (!emb.empty()) {
+            // KRİTİK DÜZELTME: Boyut Uyumsuzluğu Giderme (4096 -> 128)
+            // VectorDB (HNSW) 128 boyut bekliyor. Llama-2 4096 veriyor.
+            // Adaptive Pooling ile boyutu küçültüyoruz.
+            
+            const size_t target_dim = 128;
+            if (emb.size() > target_dim) {
+                std::vector<float> reduced_emb(target_dim, 0.0f);
+                size_t chunk_size = emb.size() / target_dim;
+                
+                for (size_t i = 0; i < target_dim; ++i) {
+                    float sum = 0.0f;
+                    for (size_t j = 0; j < chunk_size; ++j) {
+                        if (i * chunk_size + j < emb.size()) // Sınır kontrolü
+                            sum += emb[i * chunk_size + j];
+                    }
+                    reduced_emb[i] = sum / chunk_size; // Ortalama al
+                }
+                return reduced_emb;
+           }
+            return emb;
+        }
     }
 
-    const int embedding_dim = 128; // Hedef embedding boyutu
+    // 2. FALLBACK: Düşük Kaynak Modu (Hash)
+    // Eğer Llama henüz yüklenmediyse (açılışta) veya bir hata varsa, sistemi kilitlememek için
+    // deterministik bir hash vektörü üretilir.
+    const int embedding_dim = 128; 
     std::vector<float> embedding(embedding_dim, 0.0f);
-
-    // Model hazır değilse placeholder döndür (Race condition engellendi)
-    if (!s_isModelReady.load()) {
-        LOG_DEFAULT(LogLevel::WARNING, "NLP: FastText modeli henüz hazır değil. Placeholder embedding kullanılıyor.");
-        // Fallback: Rastgele ama deterministik
-        std::hash<std::string> hasher;
-        size_t hash = hasher(text);
-        std::mt19937 gen(hash);
-        std::uniform_real_distribution<> dis(-0.1, 0.1);
-        for (int i = 0; i < embedding_dim; ++i) embedding[i] = dis(gen);
-        return embedding;
-    }
-
-    auto model_it = s_fastTextModels.find(lang);
-    if (model_it != s_fastTextModels.end() && model_it->second && model_it->second->getDimension() > 0) {
-        fasttext::FastText& model = *(model_it->second); // unique_ptr'dan referans al
-        fasttext::Vector ft_embedding(model.getDimension()); // FastText'in kendi Vector sınıfı
-        
-        if (text.empty()) { // Boş metin için boş embedding döndür
-            return embedding;
-        }
-
-        std::stringstream text_stream(text);
-        model.getSentenceVector(text_stream, ft_embedding);
-
-
-        // FastText embedding'ini hedef boyutumuza (128) sığdır
-        for (int i = 0; i < std::min((int)ft_embedding.size(), embedding_dim); ++i) {
-            embedding[i] = ft_embedding[i];
-        }
-        // Eğer FastText embedding boyutu (model.getDimension()) hedef embedding_dim'den büyükse,
-        // kalan boyutları sıfırla. Eğer küçükse, zaten padding yapılmış olacaktır.
-        for (int i = ft_embedding.size(); i < embedding_dim; ++i) {
-            embedding[i] = 0.0f;
-        }
-        LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için FastText embedding olusturuldu. Boyut: " << embedding.size());
-        return embedding;
-    }
-    // Fallback: Model yüklenemedi veya hazır değilse deterministik kelime tabanlı hash placeholder üret
-    LOG_DEFAULT(LogLevel::WARNING, "NLP: FastText modeli veya belirtilen dil için model kullanılamıyor. Placeholder embedding üretiliyor.");
     
     if (text.empty()) {
         return embedding; // Sıfırlarla dolu embedding
     }
 
+    // Deterministik Hash Üretimi
+    std::hash<std::string> hasher;
+    size_t hash = hasher(text);
+    std::mt19937 gen(hash);
+    std::uniform_real_distribution<> dis(-0.5, 0.5);
+
     for (int i = 0; i < embedding_dim; ++i) {
-        embedding[i] = SafeRNG::getInstance().get_float(-1.0f, 1.0f);
+        embedding[i] = dis(gen);
     }
-    LOG_DEFAULT(LogLevel::TRACE, "NLP: Metin '" << text.substr(0, std::min(text.length(), (size_t)50)) << "...' için anlamsal placeholder embedding olusturuldu.");
+
     return embedding;
+}
+
+// YENİ: Bilişsel Yük Hesaplama
+float NaturalLanguageProcessor::calculate_cognitive_load(const std::string& text) const {
+    float load = 0.0f;
+    size_t length = text.length();
+
+    // 1. Uzunluk analizi: Uzun cümleler genelde daha fazla işlem gerektirir.
+    if (length < 10) load += 0.1f;
+    else if (length < 50) load += 0.3f;
+    else load += 0.8f;
+
+    // 2. Anahtar kelime analizi (Soru kelimeleri yükü artırır)
+    std::string lower_text = text; // Basit lowercase dönüşümü varsayalım
+    // (Gerçek implementasyonda utf8 lowercase yapılmalı)
+    
+    if (lower_text.find("neden") != std::string::npos || 
+        lower_text.find("nasil") != std::string::npos ||
+        lower_text.find("açıkla") != std::string::npos ||
+        lower_text.find("analiz") != std::string::npos) {
+        load += 0.5f;
+    }
+
+    // 3. Basit selamlaşma kalıpları yükü düşürür
+    if (lower_text == "selam" || lower_text == "merhaba" || lower_text == "naber") {
+        load = 0.0f;
+    }
+
+    return std::min(1.0f, load);
+}
+
+// YENİ: Refleks Yanıt Sistemi
+std::string NaturalLanguageProcessor::get_reflex_response(const std::string& text, const UserIntent& intent) const {
+    // Basit bir hash map veya if-else zinciri. 
+    // İleride burası JSON'dan yüklenebilir.
+    
+    // Basit temizlik (Pre-processing)
+    std::string key = text;
+    // Sondaki boşlukları silme vs. eklenebilir.
+
+    // Selamlaşma Refleksleri
+    if (key.find("Selam") != std::string::npos || key.find("selam") != std::string::npos) 
+        return "Selam! Senin için ne yapabilirim?";
+    
+    if (key.find("Merhaba") != std::string::npos || key.find("merhaba") != std::string::npos) 
+        return "Merhaba! Cerebrum Lux sistemi hazır.";
+
+    if (key.find("Nasılsın") != std::string::npos || key.find("nasılsın") != std::string::npos) 
+        return "Ben bir yapay zeka sistemiyim, dolayısıyla hislerim yok ama tüm sistemlerim %100 verimlilikle çalışıyor. Sen nasılsın?";
+
+    if (key.find("Kimsin") != std::string::npos || key.find("kimsin") != std::string::npos)
+        return "Ben Cerebrum Lux. Kişisel donanımlarda çalışmak üzere tasarlanmış, mahremiyet odaklı ve yüksek performanslı bir yapay zekayım.";
+
+    if (key.find("Adın ne") != std::string::npos || key.find("adın ne") != std::string::npos || key.find("ismin ne") != std::string::npos)
+        return "Adım Cerebrum Lux. 'Işık Beyin' anlamına gelir.";
+
+    // Sistem Komutları Refleksi (String tabanlı kontrol)
+    // UserIntent::SystemControl tanımlı olmadığı için doğrudan metne bakıyoruz.
+    if (key.find("kapat") != std::string::npos || key.find("exit") != std::string::npos) {
+         return "Sistemi kapatma yetkim şu an simülasyon modunda. (Refleks Yanıtı)";
+    }
+
+    // Refleks bulunamadı, boş dön -> LLM devreye girecek.
+    return "";
 }
 
 } // namespace CerebrumLux

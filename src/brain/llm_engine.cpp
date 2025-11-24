@@ -4,27 +4,29 @@
 #include <vector>
 #include <cstring>
 #include <algorithm>
+#include <cmath> // sqrt ve pow için
 
 namespace CerebrumLux {
 
 // Statik backend başlatma bayrağı
 static bool g_llama_backend_initialized = false;
 
+// YENİ: Global instance tanımı
+LLMEngine* LLMEngine::global_instance = nullptr;
+
 LLMEngine::LLMEngine() {
-    //llama_backend_init();
-    // Constructor boş, backend init'i load_model'e taşıdık
+    // Global instance'ı ayarla
+    global_instance = this;
 }
 
 LLMEngine::~LLMEngine() {
     unload_model();
-    // Backend free işlemini burada yapmıyoruz çünkü global olabilir, 
-    // ama tek instance kullanıyorsak sorun değil.
-    // Güvenlik için şimdilik backend_free'yi kaldırıyorum, OS temizlesin.
-    //llama_backend_free();
+    if (global_instance == this) {
+        global_instance = nullptr;
+    }
 }
 
 bool LLMEngine::load_model(const std::string& model_path) {
-    // Backend'i sadece ilk seferde başlat
     if (!g_llama_backend_initialized) {
         llama_backend_init();
         g_llama_backend_initialized = true;
@@ -46,9 +48,13 @@ bool LLMEngine::load_model(const std::string& model_path) {
     }
 
     auto ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = n_ctx;
+    ctx_params.n_ctx = (n_ctx > 2048 || n_ctx == 0) ? 2048 : n_ctx;
     ctx_params.n_threads = n_threads;
     ctx_params.n_threads_batch = n_threads;
+    
+    // KRİTİK DEĞİŞİKLİK: Embedding modunu aktifleştir
+    // Bu olmazsa llama_get_embeddings() null döner.
+    ctx_params.embeddings = true;
 
     ctx = llama_new_context_with_model(model, ctx_params);
     if (ctx == nullptr) {
@@ -58,7 +64,7 @@ bool LLMEngine::load_model(const std::string& model_path) {
         return false;
     }
 
-    LOG_DEFAULT(LogLevel::INFO, "LLMEngine: Model hazır.");
+    LOG_DEFAULT(LogLevel::INFO, "LLMEngine: Model hazır (Chat + Embedding).");
     return true;
 }
 
@@ -74,7 +80,6 @@ void LLMEngine::unload_model() {
 std::vector<llama_token> LLMEngine::tokenize(const std::string& text, bool add_bos) {
     int n_tokens = text.length() + add_bos;
     std::vector<llama_token> tokens(n_tokens);
-    // b3085 için llama_tokenize imzası:
     n_tokens = llama_tokenize(model, text.c_str(), text.length(), tokens.data(), tokens.size(), add_bos, false);
     if (n_tokens < 0) {
         tokens.resize(-n_tokens);
@@ -86,16 +91,66 @@ std::vector<llama_token> LLMEngine::tokenize(const std::string& text, bool add_b
 
 std::string LLMEngine::token_to_str(llama_token token) {
     char buf[256];
-    // DÜZELTME: b3085 sürümünde llama_token_to_piece 6 argüman alır:
-    // (model, token, buffer, length, lstrip, special)
-    // lstrip = 0 (false), special = true (özel tokenları da göster)
     int n = llama_token_to_piece(model, token, buf, sizeof(buf), 0, true);
-    
-    if (n < 0) {
-        // Buffer yetersizse tekrar dene (basitlik için atlıyoruz, 256 genelde yeterli)
-        return "";
-    }
+    if (n < 0) return "";
     return std::string(buf, n);
+}
+
+// YENİ: Embedding Üretim Fonksiyonu
+std::vector<float> LLMEngine::get_embedding(const std::string& text) {
+    if (!is_model_loaded()) return {};
+
+    std::vector<llama_token> tokens_list = tokenize(text, true);
+    
+    // Modelin desteklediği max token kontrolü
+    if (tokens_list.size() > n_ctx) {
+        tokens_list.resize(n_ctx);
+    }
+
+    // Embedding çıkarımı için batch oluştur
+    llama_batch batch = llama_batch_init(n_ctx, 0, 1);
+    for (size_t i = 0; i < tokens_list.size(); i++) {
+        batch.token[i] = tokens_list[i];
+        batch.pos[i] = i;
+        batch.n_seq_id[i] = 1;
+        batch.seq_id[i][0] = 0;
+        batch.logits[i] = false;
+    }
+    batch.n_tokens = tokens_list.size();
+    // Son token için embedding/logits istiyoruz ama llama.cpp'de embedding modunda
+    // tüm sekans işlendikten sonra embedding alınabilir.
+    
+    // Context'i temizle (önceki KV cache'i sil)
+    llama_kv_cache_clear(ctx);
+
+    if (llama_decode(ctx, batch) != 0) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "LLMEngine: Embedding decode hatası.");
+        llama_batch_free(batch);
+        return {};
+    }
+
+    // Embedding'i al
+    float* emb = llama_get_embeddings(ctx);
+    if (!emb) {
+        LOG_ERROR_CERR(LogLevel::WARNING, "LLMEngine: Embedding verisi alınamadı (null). ctx_params.embeddings=true olduğundan emin olun.");
+        llama_batch_free(batch);
+        return {};
+    }
+
+    // Vektörü kopyala ve normalize et (Cosine Similarity için normalizasyon şart)
+    int n_embd = llama_n_embd(model);
+    std::vector<float> embedding(emb, emb + n_embd);
+
+    // Normalizasyon (Euclidean Norm)
+    double sum = 0.0;
+    for (float f : embedding) sum += f * f;
+    double norm = std::sqrt(sum);
+    if (norm > 0) {
+        for (float& f : embedding) f /= norm;
+    }
+
+    llama_batch_free(batch);
+    return embedding;
 }
 
 std::string LLMEngine::generate(const std::string& prompt, 
@@ -105,7 +160,10 @@ std::string LLMEngine::generate(const std::string& prompt,
 
     std::vector<llama_token> tokens_list = tokenize(prompt, true);
     
-    // Batch oluşturma
+    // KV Cache temizlenmeli çünkü embedding işlemi cache'i bozmuş olabilir.
+    // Sohbet geçmişi tutuyorsak daha akıllı yönetim gerekir ama şimdilik güvenlik için temizliyoruz.
+    llama_kv_cache_clear(ctx);
+
     llama_batch batch = llama_batch_init(2048, 0, 1); 
 
     for (size_t i = 0; i < tokens_list.size(); i++) {
@@ -127,8 +185,6 @@ std::string LLMEngine::generate(const std::string& prompt,
     int n_cur = batch.n_tokens;
     int n_decode = 0;
     std::string full_response = "";
-
-    // Tekrar cezası için son tokenları tutacak tampon (Context window kadar olabilir ama 64 genelde yeterli)
     std::vector<llama_token> last_n_tokens(64, 0);
 
     while (n_decode < config.max_tokens) {
@@ -142,11 +198,7 @@ std::string LLMEngine::generate(const std::string& prompt,
         }
         llama_token_data_array candidates_p = { candidates.data(), candidates.size(), false };
 
-        // --- OPTİMİZASYON: Repetition Penalty (Tekrar Cezası) ---
-        // Türkçe tutarlılığı için 1.1f kritik bir değerdir. Config'e eklenene kadar hardcoded kalabilir.
-        llama_sample_repetition_penalties(ctx, &candidates_p, last_n_tokens.data(), last_n_tokens.size(), 1.1f, 0.0f, 0.0f);
-        // --------------------------------------------------------
-
+        llama_sample_repetition_penalties(ctx, &candidates_p, last_n_tokens.data(), last_n_tokens.size(), 1.25f, 0.0f, 0.0f);
         llama_sample_top_k(ctx, &candidates_p, config.top_k, 1);
         llama_sample_top_p(ctx, &candidates_p, config.top_p, 1);
         llama_sample_temp(ctx, &candidates_p, config.temperature);
@@ -166,7 +218,6 @@ std::string LLMEngine::generate(const std::string& prompt,
         batch.logits[0] = true;
         batch.n_tokens = 1;
 
-        // Son token'ı geçmiş listesine ekle (Shift işlemi)
         last_n_tokens.erase(last_n_tokens.begin());
         last_n_tokens.push_back(new_token_id);
 
