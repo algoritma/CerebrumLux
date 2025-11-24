@@ -273,6 +273,14 @@ void MainWindow::onChatMessageReceived(const QString& message) {
     // DÜZELTME: Kullanıcı mesajını SequenceManager'a ekle, böylece NLP son mesajı okuyabilir.
     // Bu, generate_response çağrısından ÖNCE yapılmalıdır.
     engine.getSequenceManager().add_user_input(message.toStdString());
+
+    // --- RLHF ENTEGRASYONU ---
+    // Kullanıcı mesajının embedding'ini hesapla ve LearningModule'e "Son Durum" olarak bildir.
+    // Action olarak şimdilik genel 'MaximizeLearning' kullanıyoruz (Chat yanıtı için).
+    std::vector<float> user_msg_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding(message.toStdString());
+    learningModule.setLastInteraction(user_msg_embedding, CerebrumLux::AIAction::MaximizeLearning);
+    // -------------------------
+
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Mesaj SequenceManager'a eklendi, NLP bekleniyor...");
 
     CerebrumLux::UserIntent user_intent = engine.getNlpProcessor().infer_intent_from_text(message.toStdString());

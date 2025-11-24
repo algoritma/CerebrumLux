@@ -87,6 +87,9 @@ public:
     // YENİ: Kullanıcının chat yanıtına verdiği geri bildirimi işler
     void processUserChatFeedback(bool isPositive);
 
+    // YENİ: RLHF için son etkileşim durumunu kaydeder
+    void setLastInteraction(const std::vector<float>& state, CerebrumLux::AIAction action);
+
     // Sparse Q-Table kalıcılığı için metotlar
     void save_q_table() const;
     void load_q_table();
@@ -129,6 +132,10 @@ private:
     QString currentWebFetchQuery;
     CerebrumLux::SwarmVectorDB::SparseQTable q_table; // Sparse Q-Table üyesi eklendi
     QTimer* autoSaveTimer; // YENİ: Otomatik kayıt zamanlayıcısı
+
+    // RLHF (Human Feedback) için son durumu tutan değişkenler
+    std::vector<float> last_interaction_state;
+    CerebrumLux::AIAction last_interaction_action = CerebrumLux::AIAction::None;
 
     bool verify_signature(const Capsule& capsule, const std::string& signature, const std::string& sender_id) const;
     Capsule decrypt_payload(const Capsule& encrypted_capsule) const;

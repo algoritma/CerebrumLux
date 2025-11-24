@@ -615,16 +615,31 @@ void LearningModule::onAutoSaveTimerTimeout() {
     save_q_table();
 }
 
+// YENİ: RLHF için son durumu kaydet
+void LearningModule::setLastInteraction(const std::vector<float>& state, CerebrumLux::AIAction action) {
+    this->last_interaction_state = state;
+    this->last_interaction_action = action;
+    LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: RLHF için son etkileşim kaydedildi. Action: " << CerebrumLux::action_to_string(action));
+}
+
 // YENİ: Kullanıcı geri bildirimini işle
 void LearningModule::processUserChatFeedback(bool isPositive) {
-    // Şimdilik basit bir mantık: Son Q-Table güncellemesini (son durumu) etkile.
-    // Gerçek bir RLHF için "hangi eyleme" geri bildirim verildiğini bilmek gerekir.
-    // Burada, LearningModule içinde son işlenen eylemi tutmadığımız için,
-    // genel bir "öğrenme pekiştirmesi" logluyoruz.
-    // İleride: SequenceManager'dan son eylemi çekip Q-değerini güncelleyeceğiz.
-    
-    float feedback_score = isPositive ? 1.0f : -1.0f;
-    LOG_DEFAULT(LogLevel::INFO, "LearningModule: Kullanıcı geri bildirimi alındı: " << (isPositive ? "POZİTİF" : "NEGATİF"));
+    if (last_interaction_state.empty() || last_interaction_action == CerebrumLux::AIAction::None) {
+        LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Geri bildirim işlenemedi, çünkü son etkileşim kaydı yok.");
+        return;
+    }
+
+    // RLHF Ödül/Ceza Mekanizması
+    // Pozitif: +5.0 (Güçlü pekiştirme), Negatif: -5.0 (Güçlü ceza)
+    float reward = isPositive ? 5.0f : -5.0f;
+     
+    LOG_DEFAULT(LogLevel::INFO, "LearningModule: RLHF Tetiklendi -> Geri Bildirim: " << (isPositive ? "POZİTİF" : "NEGATİF") 
+                                << ", Ödül: " << reward 
+                                << ", Action: " << CerebrumLux::action_to_string(last_interaction_action));
+
+    // Q-Table'ı güncelle
+    // Not: Next state olarak şimdilik mevcut state'i veriyoruz, bu basit bir "bandit" yaklaşımıdır.
+    update_q_values(last_interaction_state, last_interaction_action, reward, last_interaction_state);
     
     // Buraya Q-Table güncelleme mantığı eklenecek. 
     // Örn: Son state-action çiftini bul ve reward += feedback_score uygula.

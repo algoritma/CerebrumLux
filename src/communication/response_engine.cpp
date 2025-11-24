@@ -68,45 +68,43 @@ ChatResponse ResponseEngine::generate_response(
         }
 
         // --- DİNAMİK DİL VE DAVRANIŞ ADAPTASYONU ---
-        // Varsayılan dil Türkçe
-        std::string target_lang = "TURKISH";
-        std::string lang_instruction = "SADECE TÜRKÇE konuş. Verilen bilgiyi kullanarak soruyu yanıtla. Talimatları tekrar etme.";
-
-        // Basit Dil Algılama (Heuristic)
-        // Türkçe karakterler veya komutlar var mı?
-        // Not: std::string içinde UTF-8 baytlarını arıyoruz.
-        bool explicit_turkish = (user_input.find("Türkçe") != std::string::npos || 
-                                 user_input.find("türkçe") != std::string::npos ||
-                                 user_input.find("ğ") != std::string::npos || 
-                                 user_input.find("ş") != std::string::npos || 
-                                 user_input.find("ı") != std::string::npos);
-
+        // Dil Algılama: Varsayılan Türkçe, İngilizce anahtar kelimeler varsa İngilizce modu.
         bool explicit_english = (user_input.find("English") != std::string::npos || 
                                  user_input.find("english") != std::string::npos || 
-                                 user_input.find("Hello") != std::string::npos ||
+                                 user_input.find("Translate") != std::string::npos ||
                                  user_input.find("What is") != std::string::npos);
 
-        // Eğer açıkça İngilizce konuşuluyorsa veya komut verildiyse dili değiştir
-        if (explicit_english && !explicit_turkish) {
-            target_lang = "ENGLISH";
-            lang_instruction = "The provided Context is in Turkish. TRANSLATE the relevant information and answer the user's question in ENGLISH only.";
-        }
-        // --------------------------------------------
-
-        // Prompt Hazırlama (Llama-2 Formatı - GÜÇLENDİRİLMİŞ TÜRKÇE)
         std::stringstream prompt_ss;
-        prompt_ss << "[INST] <<SYS>>\n"
-                  << "You are Cerebrum Lux, an advanced AI assistant. "
-                  << "Your goal is to answer the user question based ONLY on the provided Context. "
-                  << "Respect the target language instruction below. "
-                  << "Keep [cite:...] references intact.\n"
-                  << "<</SYS>>\n\n"
-                  << "Context:\n" << nlp_generated_response.text << "\n\n"
-                  << "User Question:\n" << user_input << "\n\n"
-                  << "Target Language: " << target_lang << "\n"
-                  << "Instruction: " << lang_instruction << "\n"
-                  << "Answer:\n"
-                  << "[/INST]";
+        
+        if (explicit_english) {
+            // İNGİLİZCE MODU: System prompt İngilizce kurgulanır
+            prompt_ss << "[INST] <<SYS>>\n"
+                      << "You are Cerebrum Lux, a helpful AI assistant.\n"
+                      << "Task: Answer the user question using ONLY the provided Context below.\n"
+                      << "Constraint: If the Context is in Turkish, translate the relevant parts and answer in ENGLISH.\n"
+                      << "Keep [cite:...] references intact.\n"
+                      << "<</SYS>>\n\n"
+                      << "Context:\n" << nlp_generated_response.text << "\n\n"
+                      << "Question: " << user_input << "\n\n"
+                      << "Answer:\n"
+                      << "[/INST]";
+        } else {
+            // TÜRKÇE MODU (Varsayılan): System prompt TÜRKÇE kurgulanır.
+            // Bu, modelin latent uzayda Türkçe bağlamını yüklemesini sağlar.
+            prompt_ss << "[INST] <<SYS>>\n"
+                      << "Sen Cerebrum Lux adında, Türkçe konuşan akıllı bir asistansın.\n"
+                      << "Görevin: Aşağıda verilen 'Bağlam' (Context) metnini kullanarak kullanıcının sorusunu cevaplamaktır.\n"
+                      << "Kurallar:\n"
+                      << "1. ASLA bağlam dışı bilgi uydurma.\n"
+                      << "2. Yanıtın kısa, net ve samimi olsun.\n"
+                      << "3. SADECE TÜRKÇE konuş.\n"
+                      << "4. [cite:...] referanslarını asla silme.\n"
+                      << "<</SYS>>\n\n"
+                      << "Bağlam:\n" << nlp_generated_response.text << "\n\n"
+                      << "Kullanıcı Sorusu:\n" << user_input << "\n\n"
+                      << "Yanıt:\n"
+                      << "[/INST]";
+        }
 
         std::string prompt = prompt_ss.str();
         LOG_DEFAULT(LogLevel::DEBUG, "ResponseEngine: LLM Prompt oluşturuldu (" << prompt.length() << " karakter).");

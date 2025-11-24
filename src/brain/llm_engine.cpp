@@ -128,6 +128,9 @@ std::string LLMEngine::generate(const std::string& prompt,
     int n_decode = 0;
     std::string full_response = "";
 
+    // Tekrar cezası için son tokenları tutacak tampon (Context window kadar olabilir ama 64 genelde yeterli)
+    std::vector<llama_token> last_n_tokens(64, 0);
+
     while (n_decode < config.max_tokens) {
         auto* logits = llama_get_logits_ith(ctx, batch.n_tokens - 1);
         int n_vocab = llama_n_vocab(model);
@@ -138,6 +141,11 @@ std::string LLMEngine::generate(const std::string& prompt,
             candidates.emplace_back(llama_token_data{token_id, logits[token_id], 0.0f});
         }
         llama_token_data_array candidates_p = { candidates.data(), candidates.size(), false };
+
+        // --- OPTİMİZASYON: Repetition Penalty (Tekrar Cezası) ---
+        // Türkçe tutarlılığı için 1.1f kritik bir değerdir. Config'e eklenene kadar hardcoded kalabilir.
+        llama_sample_repetition_penalties(ctx, &candidates_p, last_n_tokens.data(), last_n_tokens.size(), 1.1f, 0.0f, 0.0f);
+        // --------------------------------------------------------
 
         llama_sample_top_k(ctx, &candidates_p, config.top_k, 1);
         llama_sample_top_p(ctx, &candidates_p, config.top_p, 1);
@@ -157,6 +165,10 @@ std::string LLMEngine::generate(const std::string& prompt,
         batch.seq_id[0][0] = 0;
         batch.logits[0] = true;
         batch.n_tokens = 1;
+
+        // Son token'ı geçmiş listesine ekle (Shift işlemi)
+        last_n_tokens.erase(last_n_tokens.begin());
+        last_n_tokens.push_back(new_token_id);
 
         n_decode++;
         n_cur++;
