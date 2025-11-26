@@ -15,7 +15,7 @@ namespace CerebrumLux { // CryptofigAutoencoder sınıfı bu namespace içine al
 class CryptofigAutoencoder {
 public:
     // Yapılandırma parametreleri
-    static const int INPUT_DIM = 128; // KRİTİK DÜZELTME: Bu 128 olmalı. statistical_features_vector boyutu
+    static const int INPUT_DIM = 256; // DÜZELTME: Embedding boyutu 256'ya güncellendi
     static const int LATENT_DIM = 3; // Bu, projenin tasarım kararıdır. latent_cryptofig_vector boyutu
 
     CryptofigAutoencoder();

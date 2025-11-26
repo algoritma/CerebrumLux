@@ -53,8 +53,8 @@ SwarmVectorDB::CryptofigVector KnowledgeBase::convert_capsule_to_cryptofig_vecto
 
     if (capsule.embedding.size() != EMBEDDING_DIM) {
         LOG_DEFAULT(LogLevel::WARNING, "KnowledgeBase: Capsule ID " << capsule.id 
-                    << " için JSON'dan okunan embedding boyutu (" << capsule.embedding.size()
-                    << ") beklenen (" << EMBEDDING_DIM << ") ile uyuşmuyor. Boyut düzeltiliyor.");
+                    << " için embedding boyutu (" << capsule.embedding.size()
+                    << ") beklenen (" << EMBEDDING_DIM << ") ile uyuşmuyor. Bellekte düzeltiliyor.");
     }
     
     for (int i = 0; i < EMBEDDING_DIM; ++i) {
@@ -144,12 +144,18 @@ KnowledgeBase::KnowledgeBase(const std::string& db_path)
 }
 
 void KnowledgeBase::add_capsule(const Capsule& capsule) {
+    // --- KENDİ KENDİNİ İYİLEŞTİRME (SELF-HEALING) MEKANİZMASI ---
+    Capsule corrected_capsule = capsule;
+    if (corrected_capsule.embedding.size() != CerebrumLux::CryptofigAutoencoder::INPUT_DIM) {
+        LOG_DEFAULT(LogLevel::TRACE, "KnowledgeBase: Capsule ID " << corrected_capsule.id << " için embedding boyutu (" << corrected_capsule.embedding.size() << ") beklenen (" << CerebrumLux::CryptofigAutoencoder::INPUT_DIM << ") ile uyuşmuyor. Boyut düzeltiliyor.");
+        corrected_capsule.embedding.resize(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+    }
+
     if (m_swarm_db.get_vector(capsule.id)) {
         LOG_DEFAULT(LogLevel::DEBUG, "KnowledgeBase: Mevcut kapsül güncellendi. ID: " << capsule.id);
     }
-    SwarmVectorDB::CryptofigVector cv = convert_capsule_to_cryptofig_vector(capsule);
+    SwarmVectorDB::CryptofigVector cv = convert_capsule_to_cryptofig_vector(corrected_capsule);
     
-    // DÜZELTME: Hem vektörü hem de metin içeriğini kaydet
     bool vec_ok = m_swarm_db.store_vector(cv);
     bool content_ok = m_swarm_db.store_capsule_content(capsule.id, capsule.content);
 

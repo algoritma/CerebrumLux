@@ -23,7 +23,7 @@ struct CryptofigVector {
     std::string id;                 // Kapsül ID'sine karşılık gelen benzersiz ID
     std::string content_hash;       // İçerik hash'i, tekillik için
 
-    CryptofigVector() : embedding(128) {} // 128D vektör başlat
+    CryptofigVector() : embedding(256) {} // DÜZELTME: 256D vektör başlat
     CryptofigVector(const std::vector<uint8_t>& crypto, const Eigen::VectorXf& emb, const std::string& query, const std::string& capsule_topic, // topic yer değiştirildi
                     const std::string& capsule_id, const std::string& hash) // ID ve Hash sona alındı
         : cryptofig(crypto), embedding(emb), fisher_query(query), topic(capsule_topic), id(capsule_id), content_hash(hash) {}

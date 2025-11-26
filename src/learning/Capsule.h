@@ -69,11 +69,11 @@ struct Capsule {
         ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
         c.timestamp_utc = std::chrono::system_clock::from_time_t(std::mktime(&tm));
 
-        // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak
-        // Daha sonra KnowledgeBase.cpp'de 128 boyuta düzeltilecek.
+        // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak.
+        // Daha sonra KnowledgeBase.cpp'de 256 boyuta düzeltilecek.
         if (j.contains("embedding") && j.at("embedding").is_array()) {
-            // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak
-        // Daha sonra KnowledgeBase.cpp'de 128 boyuta düzeltilecek.
+            // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak.
+        // Daha sonra KnowledgeBase.cpp'de 256 boyuta düzeltilecek.
         if (j.contains("embedding") && j.at("embedding").is_array()) {
             j.at("embedding").get_to(c.embedding);
         } else {

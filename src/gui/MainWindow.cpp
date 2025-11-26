@@ -179,7 +179,7 @@ void MainWindow::updateGui() {
    // Ağır işler Event-Driven oldu.
 
     // YENİ: GraphData embedding'ini bir kez hesaplayıp önbelleğe alıyoruz.
-    static std::vector<float> graph_query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("GraphData");
+    static std::vector<float> graph_query_embedding = engine.getNlpProcessor().generate_text_embedding("GraphData");
     auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search(graph_query_embedding, 100);
      QMap<qreal, qreal> graph_data;
     qreal min_confidence = std::numeric_limits<qreal>::max();

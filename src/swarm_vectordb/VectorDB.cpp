@@ -67,7 +67,7 @@ void SwarmConsensusTree::update_tree(const CryptofigVector& cv) {
 
 SwarmVectorDB::SwarmVectorDB(const std::string& db_path)
     : db_path_(db_path), 
-    hnsw_index_(std::make_unique<CerebrumLux::HNSW::HNSWIndex>(128, 100000)), // 128D embedding, max 100k eleman
+    hnsw_index_(std::make_unique<CerebrumLux::HNSW::HNSWIndex>(256, 100000)), // DÜZELTME: HNSW Index 256D
     next_hnsw_label_(0) {
     hnsw_label_to_id_map_dbi_ = 0;
     id_to_hnsw_label_map_dbi_ = 0;
@@ -559,8 +559,9 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     const uint8_t* embedding_data_ptr = reinterpret_cast<const uint8_t*>(cv.embedding.data());
     serialized_data.insert(serialized_data.end(), embedding_data_ptr, embedding_data_ptr + (cv.embedding.size() * sizeof(float)));
    
-    if (hnsw_index_ && cv.embedding.size() != hnsw_index_->get_dim()) { // Use get_dim from HNSWIndex for consistency 
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): Embedding boyutu 128 float degil! ID: " << cv.id);
+    if (hnsw_index_ && static_cast<size_t>(cv.embedding.size()) != hnsw_index_->get_dim()) { // Use get_dim from HNSWIndex for consistency 
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): Gelen embedding boyutu (" << cv.embedding.size() 
+                       << ") veritabani index boyutu (" << hnsw_index_->get_dim() << ") ile uyusmuyor! ID: " << cv.id);
         mdb_txn_abort(txn);
         return false;
     }
@@ -711,8 +712,8 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     remaining_size -= cryptofig_len;
 
     // 3. Deserialize cv.embedding
-    cv->embedding.resize(128);
-    size_t embedding_byte_size = 128 * sizeof(float);
+    cv->embedding.resize(256); // DÜZELTME: 256
+    size_t embedding_byte_size = 256 * sizeof(float); // DÜZELTME: 256
     if (remaining_size < embedding_byte_size) { // KRİTİK EKSİK SINIR KONTROLÜ EKLENDİ
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB: CryptofigVector deserialization hatasi: Embedding verisi eksik veya bozuk. ID: " << id);
         if (!existing_txn) mdb_txn_abort(current_txn);

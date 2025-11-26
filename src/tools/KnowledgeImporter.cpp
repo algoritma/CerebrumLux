@@ -214,7 +214,7 @@ SwarmVectorDB::CryptofigVector KnowledgeImporter::convert_capsule_to_cryptofig_v
         }
     }
 
-    const int EMBEDDING_DIM = 128;
+    const int EMBEDDING_DIM = 256; // DÜZELTME: 256'ya yükseltildi
     Eigen::VectorXf embedding(EMBEDDING_DIM);
     if (capsule.embedding.size() == EMBEDDING_DIM) {
         for (int i = 0; i < EMBEDDING_DIM; ++i) {

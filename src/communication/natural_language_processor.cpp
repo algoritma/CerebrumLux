@@ -596,18 +596,18 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
 }
 
 // Metin girdisinden embedding hesaplama (FastText kullanılarak)
-std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text, Language lang) {
+std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text, Language lang) { // const kaldırıldı
     // STRATEJİ: Dinamik Zeka (Adaptive Compute)
     // 1. ÖNCELİK: Llama-2 (Unified Brain). 
     // Zaten RAM'de olan "Işık Beyin"i kullanıyoruz. Bu hem daha zeki hem de ekstra RAM harcamaz.
     if (LLMEngine::global_instance && LLMEngine::global_instance->is_model_loaded()) {
         std::vector<float> emb = LLMEngine::global_instance->get_embedding(text);
         if (!emb.empty()) {
-            // KRİTİK DÜZELTME: Boyut Uyumsuzluğu Giderme (4096 -> 128)
-            // VectorDB (HNSW) 128 boyut bekliyor. Llama-2 4096 veriyor.
+            // KRİTİK DÜZELTME: Boyut Uyumsuzluğu Giderme (4096 -> 256)
+            // VectorDB (HNSW) 256 boyut bekliyor. Llama-2 4096 veriyor.
             // Adaptive Pooling ile boyutu küçültüyoruz.
             
-            const size_t target_dim = 128;
+            const size_t target_dim = 256; // DÜZELTME: 256
             if (emb.size() > target_dim) {
                 std::vector<float> reduced_emb(target_dim, 0.0f);
                 size_t chunk_size = emb.size() / target_dim;
@@ -629,7 +629,7 @@ std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::
     // 2. FALLBACK: Düşük Kaynak Modu (Hash)
     // Eğer Llama henüz yüklenmediyse (açılışta) veya bir hata varsa, sistemi kilitlememek için
     // deterministik bir hash vektörü üretilir.
-    const int embedding_dim = 128; 
+    const int embedding_dim = 256; // DÜZELTME: 256
     std::vector<float> embedding(embedding_dim, 0.0f);
     
     if (text.empty()) {
