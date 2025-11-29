@@ -10,8 +10,9 @@
 #include "../core/enums.h"
 #include "../data_models/dynamic_sequence.h"
 #include "../learning/KnowledgeBase.h"
-#include "../brain/llm_engine.h" // YENİ: LLM Motoru
-#include "natural_language_processor.h" // YENİ EKLENDİ: CerebrumLux::ChatResponse için
+#include "../brain/llm_engine.h" 
+#include "../gui/DataTypes.h" // EKLENDİ: ChatResponse için (Artık buradan geliyor)
+#include "natural_language_processor.h" // NaturalLanguageProcessor'ın tam tanımı için
 
 namespace CerebrumLux {
 
@@ -27,7 +28,8 @@ public:
         CerebrumLux::AbstractState current_abstract_state,
         CerebrumLux::AIGoal current_goal,
         const CerebrumLux::DynamicSequence& sequence,
-        const CerebrumLux::KnowledgeBase& kb
+        const CerebrumLux::KnowledgeBase& kb,
+        const std::vector<float>& user_embedding // YENİ: Embedding parametresi
     ) const;
 
     // YENİ: LLM Motoruna erişim (Gerekirse dışarıdan yapılandırmak için)

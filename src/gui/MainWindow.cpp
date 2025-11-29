@@ -36,6 +36,7 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     : QMainWindow(parent),
       ui(new Ui::MainWindow),
       engine(engineRef),
+      // NLP'yi QObject'ten türettiğimiz için parent istiyor.
       learningModule(learningModuleRef)
 {
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Kurucuya girildi.");
@@ -56,11 +57,15 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel oluşturuldu. Adresi: " << simulationPanel << ", isVisible(): " << simulationPanel->isVisible());
     capsuleTransferPanel = new CerebrumLux::CapsuleTransferPanel(this);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CapsuleTransferPanel oluşturuldu. Adresi: " << capsuleTransferPanel << ", isVisible(): " << capsuleTransferPanel->isVisible());
-    knowledgeBasePanel = new CerebrumLux::KnowledgeBasePanel(learningModule, this);
+    knowledgeBasePanel = new CerebrumLux::KnowledgeBasePanel(learningModule, this); 
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: KnowledgeBasePanel oluşturuldu. Adresi: " << knowledgeBasePanel << ", isVisible(): " << knowledgeBasePanel->isVisible());
     qTablePanel = new CerebrumLux::QTablePanel(learningModule, this); // YENİ: QTablePanel oluşturuldu
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel oluşturuldu. Adresi: " << qTablePanel << ", isVisible(): " << qTablePanel->isVisible());
     chatPanel = new CerebrumLux::ChatPanel(this); // YENİ: ChatPanel oluşturuldu
+
+    // NLP'den gelen asenkron embedding sinyaline bağlan
+    connect(&engine.getNlpProcessor(), &CerebrumLux::NaturalLanguageProcessor::embeddingReady,
+            this, &CerebrumLux::MainWindow::onEmbeddingReady, Qt::QueuedConnection);
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: ChatPanel oluşturuldu. Adresi: " << chatPanel << ", isVisible(): " << chatPanel->isVisible());
 
     tabWidget->addTab(logPanel, "Log");
@@ -123,14 +128,15 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
 
     // YENİ: Ağır LLM modelini GUI'yi bloklamadan arka planda yükle
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: LLM modelinin asenkron yüklenmesi tetikleniyor...");
+    // LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: LLM modelinin asenkron yüklenmesi tetikleniyor..."); // Bu satır kaldırıldı
     // DÜZELTME: QtConcurrent::run, bir üye fonksiyona işaretçi ile çağrıldığında derleme hatası verebiliyor.
     // İSTEĞE BAĞLI İYİLEŞTİRME: [-Wunused-result] uyarısını gidermek için Q_UNUSED kullanıyoruz.
     //Q_UNUSED(QtConcurrent::run([this]() {
     //    this->engine.getResponseEngine().load_llm_model_async();
     //}));
-    // LLM modeli zaten ResponseEngine oluşturulurken yüklendiği için 
-    // burada tekrar yüklemeye gerek yok.
+    // KRİTİK PERFORMANS DÜZELTMESİ: LLM Modeli zaten 'main.cpp' içinde ResponseEngine başlatılırken senkron olarak yüklendi.
+    // Burada tekrar asenkron yükleme başlatmak (Double Loading), RAM'i şişirir ve açılışı yavaşlatır.
+    // Bu blok tamamen kaldırılmıştır.
 
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Kurucu çıkışı. isVisible(): " << isVisible() << ", geometry: " << geometry().width() << "x" << geometry().height());
 }
@@ -179,7 +185,7 @@ void MainWindow::updateGui() {
    // Ağır işler Event-Driven oldu.
 
     // YENİ: GraphData embedding'ini bir kez hesaplayıp önbelleğe alıyoruz.
-    static std::vector<float> graph_query_embedding = engine.getNlpProcessor().generate_text_embedding("GraphData");
+    static std::vector<float> graph_query_embedding = engine.getNlpProcessor().generate_text_embedding_sync("GraphData");
     auto capsules_for_graph = learningModule.getKnowledgeBase().semantic_search(graph_query_embedding, 100);
      QMap<qreal, qreal> graph_data;
     qreal min_confidence = std::numeric_limits<qreal>::max();
@@ -276,38 +282,51 @@ void MainWindow::onWebFetchCompleted(const CerebrumLux::IngestReport& report) {
 void MainWindow::onChatMessageReceived(const QString& message) {
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Chat mesajı alındı: " << message.toStdString());
     
-    // DÜZELTME: Kullanıcı mesajını SequenceManager'a ekle, böylece NLP son mesajı okuyabilir.
-    // Bu, generate_response çağrısından ÖNCE yapılmalıdır.
     engine.getSequenceManager().add_user_input(message.toStdString());
 
+    if (chatPanel) chatPanel->appendChatMessage("System", "<i>(Analiz ediliyor...)</i>");
+    
+    // KRİTİK DÜZELTME: Embedding işlemini ASENKRON başlatıyoruz.
+    // LLM'in ana thread'i BLOKLAMASINI ENGELLEYECEK olan bu çağrıdır.
+    // Embedding hazır olduğunda 'onEmbeddingReady' slotu tetiklenecek.
+    // request_id olarak mesajın kendisini kullanıyoruz (basitlik için).
+    engine.getNlpProcessor().request_embedding_async(message.toStdString(), message.toStdString());
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Asenkron embedding isteği gönderildi.");
+}
+
+// YENİ SLOT: Embedding hazır olduğunda çağrılır
+void MainWindow::onEmbeddingReady(const std::string& request_id, const std::vector<float>& embedding) {
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Embedding hazır. Request ID: " << request_id << ", Embedding boyutu: " << embedding.size());
+
     // --- RLHF ENTEGRASYONU ---
-    // Kullanıcı mesajının embedding'ini hesapla ve LearningModule'e "Son Durum" olarak bildir.
-    // Action olarak şimdilik genel 'MaximizeLearning' kullanıyoruz (Chat yanıtı için).
-    std::vector<float> user_msg_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding(message.toStdString());
-    learningModule.setLastInteraction(user_msg_embedding, CerebrumLux::AIAction::MaximizeLearning);
+    // Kullanıcı mesajının embedding'ini hazır olduğunda kullanıyoruz.
+    // Action olarak şimdilik genel 'MaximizeLearning' kullanıyoruz.
+    learningModule.setLastInteraction(embedding, CerebrumLux::AIAction::MaximizeLearning);
     // -------------------------
 
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Mesaj SequenceManager'a eklendi, NLP bekleniyor...");
-
-    CerebrumLux::UserIntent user_intent = engine.getNlpProcessor().infer_intent_from_text(message.toStdString());
-    CerebrumLux::AbstractState current_abstract_state = CerebrumLux::AbstractState::Idle;
-    CerebrumLux::AIGoal current_goal = engine.getGoalManager().get_current_goal();
+    // Artık elimizde embedding var! Bunu kullanarak NLP ve ResponseEngine'i tetikleyebiliriz.
+    // Niyet ve durum çıkarımı da bu embedding'i kullanacak.
+    // NOT: Bu blok hala GUI thread'inde çalışıyor, ancak embedding artık alındığı için kısa sürecektir.
     
-    // EngineIntegration'dan güncel sekansı alabiliriz
-    const CerebrumLux::DynamicSequence& current_sequence = engine.getSequenceManager().get_current_sequence_ref();
+    // Niyet çıkarımı (artık embedding ile)
+    CerebrumLux::UserIntent user_intent = engine.getNlpProcessor().infer_intent_from_text_with_embedding(request_id, embedding); 
     
-    // UI'da "Yazıyor..." veya bekleme durumu gösterilebilir (İsteğe bağlı)
-    if (chatPanel) chatPanel->appendChatMessage("System", "<i>(Düşünüyor...)</i>");
+    // Diğer durum ve hedef çıkarımları
+    CerebrumLux::AbstractState current_abstract_state = CerebrumLux::AbstractState::Idle; 
+    CerebrumLux::AIGoal current_goal = engine.getGoalManager().get_current_goal(); 
+    const CerebrumLux::DynamicSequence& current_sequence = engine.getSequenceManager().get_current_sequence_ref(); 
 
-    // KRİTİK: Yanıt üretimini asenkron olarak başlat (GUI donmasını engeller)
-    // QtConcurrent::run ile generate_response metodunu arka planda çalıştırıyoruz.
+    // KRİTİK: Yanıt üretimini asenkron olarak başlatıyoruz (LLM'i başka bir thread'e atıyoruz)
+    // Bu, generate_response içinde LLM.generate çağrısının ana thread'i bloklamasını engeller.
+    // user_embedding'i doğrudan generate_response'a iletiyoruz.
     QFuture<CerebrumLux::ChatResponse> future = QtConcurrent::run([=, this]() {
         return engine.getResponseEngine().generate_response(
             user_intent, 
             current_abstract_state, 
             current_goal, 
             current_sequence, 
-            learningModule.getKnowledgeBase()
+            learningModule.getKnowledgeBase(),
+            embedding // YENİ: Embedding'i ResponseEngine'e iletiyoruz
         );
     });
     

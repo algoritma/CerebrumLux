@@ -2,10 +2,21 @@
 #define DATATYPES_H
 
 #include <QString>
+#include <string>
 #include <QVector> // QVector için
 #include <map>
+#include <vector> // std::vector için
 
 namespace CerebrumLux {
+
+// YENİ EKLENEN STRUCT: Chat yanıtını ve ek meta-bilgileri taşımak için
+// NaturalLanguageProcessor.h'den buraya taşındı.
+struct ChatResponse {
+    std::string text;
+    std::string reasoning; // Yanıtın nasıl üretildiğine dair açıklama
+    std::vector<std::string> suggested_questions; // YENİ: Önerilen takip soruları
+    bool needs_clarification = false; // Yanıtın belirsiz olup olmadığı ve kullanıcının onayına ihtiyaç duyup duymadığı
+};
 
 struct SimulationData {
     QString id;

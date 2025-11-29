@@ -63,6 +63,9 @@ private slots:
     // YENİ: Asenkron LLM yanıtı tamamlandığında çağrılacak slot
     void onLLMResponseReady();
 
+    // YENİ: Asenkron embedding hazır olduğunda çağrılır
+    void onEmbeddingReady(const std::string& request_id, const std::vector<float>& embedding);
+
 private:
     Ui::MainWindow *ui;
     QTabWidget *tabWidget;

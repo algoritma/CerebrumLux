@@ -1,5 +1,6 @@
 #ifndef CEREBRUM_LUX_ENUMS_H
 #define CEREBRUM_LUX_ENUMS_H
+#include <algorithm> // std::transform için eklendi
 
 #include <string>
 #include <vector>
@@ -197,6 +198,32 @@ enum class MouseButtonState : unsigned char {
     Middle,
     None
 };
+
+namespace Utils {
+    std::string insight_type_to_string(InsightType type);
+    InsightType string_to_insight_type(const std::string& s);
+    std::string action_to_string(AIAction action);
+    AIAction string_to_action(const std::string& s);
+} // namespace Utils
+
+// YENİ: Desteklenen diller için enum (NLP'den buraya taşındı)
+enum class Language {
+    EN,
+    DE,
+    TR,
+    UNKNOWN
+};
+
+// YENİ: Dil string'ini enum'a çeviren yardımcı fonksiyon (NLP'den buraya taşındı)
+inline Language string_to_lang(const std::string& lang_str) {
+    std::string lower_lang_str = lang_str;
+    std::transform(lower_lang_str.begin(), lower_lang_str.end(), lower_lang_str.begin(),
+                   [](unsigned char c){ return static_cast<unsigned char>(std::tolower(c)); });
+    if (lower_lang_str == "en" || lower_lang_str == "english") return Language::EN;
+    if (lower_lang_str == "de" || lower_lang_str == "german") return Language::DE;
+    if (lower_lang_str == "tr" || lower_lang_str == "turkish") return Language::TR;
+    return Language::UNKNOWN;
+}
 
 } // namespace CerebrumLux
 

@@ -56,9 +56,8 @@ struct IngestReport {
 
 class LearningModule : public QObject {
     Q_OBJECT 
-
 public:
-    explicit LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent = nullptr);
+    LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, NaturalLanguageProcessor& nlp, QObject *parent = nullptr);
     ~LearningModule();
 
     void learnFromText(const std::string& text,
@@ -123,6 +122,7 @@ private slots:
 private:
     KnowledgeBase& knowledgeBase;
     CerebrumLux::Crypto::CryptoManager& cryptoManager;
+    NaturalLanguageProcessor& nlp_processor_; // YENİ: NLP'ye referans
     std::unique_ptr<UnicodeSanitizer> unicodeSanitizer;
     std::unique_ptr<StegoDetector> stegoDetector;
     std::unique_ptr<WebFetcher> webFetcher;

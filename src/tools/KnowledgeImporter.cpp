@@ -12,6 +12,8 @@
 #include "../swarm_vectordb/DataModels.h"   // CryptofigVector için
 #include "../swarm_vectordb/VectorDB.h"     // SwarmVectorDB için
 #include "../learning/KnowledgeBase.h"      // KnowledgeBase için
+#include "../communication/ai_insights_engine.h" // Dummy sınıflar için eklendi
+#include "../planning_execution/goal_manager.h" // Hata düzeltmesi için eklendi
 #include "../communication/natural_language_processor.h" // NaturalLanguageProcessor için
 
 
@@ -25,6 +27,39 @@
 #ifdef _WIN32
 #include <Windows.h>
 #endif
+
+// Hata düzeltmesi: NLP örneği oluşturmak için gereken dummy sınıflar
+class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer { public: DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {} };
+class DummySuggestionEngine : public CerebrumLux::SuggestionEngine { public: DummySuggestionEngine(CerebrumLux::IntentAnalyzer& a) : CerebrumLux::SuggestionEngine(a) {} };
+class DummyUserProfileManager : public CerebrumLux::UserProfileManager { public: DummyUserProfileManager() : CerebrumLux::UserProfileManager() {} };
+class DummyIntentLearner : public CerebrumLux::IntentLearner { public: DummyIntentLearner(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SuggestionEngine& s, CerebrumLux::UserProfileManager& u) : CerebrumLux::IntentLearner(a,s,u) {} };
+class DummySequenceManager : public CerebrumLux::SequenceManager { public: DummySequenceManager() : CerebrumLux::SequenceManager() {} };
+class DummyPredictionEngine : public CerebrumLux::PredictionEngine { public: DummyPredictionEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SequenceManager& sm) : CerebrumLux::PredictionEngine(a,sm) {} };
+class DummyCryptofigAutoencoder : public CerebrumLux::CryptofigAutoencoder { public: DummyCryptofigAutoencoder() : CerebrumLux::CryptofigAutoencoder() {} };
+class DummyCryptofigProcessor : public CerebrumLux::CryptofigProcessor { public: DummyCryptofigProcessor(CerebrumLux::IntentAnalyzer& a, CerebrumLux::CryptofigAutoencoder& ae) : CerebrumLux::CryptofigProcessor(a,ae) {} };
+class DummyAIInsightsEngine : public CerebrumLux::AIInsightsEngine { public: DummyAIInsightsEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::IntentLearner& l, CerebrumLux::PredictionEngine& p, CerebrumLux::CryptofigAutoencoder& ae, CerebrumLux::CryptofigProcessor& cp) : CerebrumLux::AIInsightsEngine(a,l,p,ae,cp) {} };
+class DummyGoalManager : public CerebrumLux::GoalManager { public: DummyGoalManager(CerebrumLux::AIInsightsEngine& ie) : CerebrumLux::GoalManager(ie) {} };
+class DummyKnowledgeBase : public CerebrumLux::KnowledgeBase { public: DummyKnowledgeBase() : CerebrumLux::KnowledgeBase("dummy_db_path_ki") {} };
+class DummyNLP : public CerebrumLux::NaturalLanguageProcessor {
+public:
+    DummyNLP(CerebrumLux::GoalManager& gm, CerebrumLux::KnowledgeBase& kb) : CerebrumLux::NaturalLanguageProcessor(gm, kb, nullptr) {}
+
+    // Saf sanal fonksiyonları uygula
+    CerebrumLux::ChatResponse generate_response_text(
+        CerebrumLux::UserIntent, CerebrumLux::AbstractState, CerebrumLux::AIGoal,
+        const CerebrumLux::DynamicSequence&, const std::vector<std::string>&,
+        const CerebrumLux::KnowledgeBase&, const std::vector<float>&
+    ) const override {
+        CerebrumLux::ChatResponse res;
+        res.text = "dummy response";
+        return res;
+    }
+
+    std::vector<float> generate_text_embedding_sync(const std::string& text, CerebrumLux::Language lang = CerebrumLux::Language::TR) const override {
+        return std::vector<float>(256, 0.1f);
+    }
+};
+
 
 namespace CerebrumLux {
 namespace Tools {
@@ -178,7 +213,20 @@ bool KnowledgeImporter::perform_semantic_search(const std::string& query, int to
     }
 
     // Sorgu metni için embedding hesapla (statik NaturalLanguageProcessor metodunu kullan)
-    std::vector<float> query_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding(query);
+    // Hata düzeltmesi: Statik çağrı yerine bir NLP örneği oluştur ve kullan
+    DummyIntentAnalyzer dummy_analyzer;
+    DummySuggestionEngine dummy_suggester(dummy_analyzer);
+    DummyUserProfileManager dummy_user_profile_manager;
+    DummyIntentLearner dummy_learner(dummy_analyzer, dummy_suggester, dummy_user_profile_manager);
+    DummySequenceManager dummy_seq_manager;
+    DummyPredictionEngine dummy_predictor(dummy_analyzer, dummy_seq_manager);
+    DummyCryptofigAutoencoder dummy_autoencoder;
+    DummyCryptofigProcessor dummy_cryptofig_processor(dummy_analyzer, dummy_autoencoder);
+    DummyAIInsightsEngine dummy_insights_engine(dummy_analyzer, dummy_learner, dummy_predictor, dummy_autoencoder, dummy_cryptofig_processor);
+    DummyGoalManager dummy_gm(dummy_insights_engine);
+    DummyKnowledgeBase dummy_kb;
+    DummyNLP dummy_nlp(dummy_gm, dummy_kb);
+    std::vector<float> query_embedding = dummy_nlp.generate_text_embedding_sync(query, CerebrumLux::Language::TR);
     if (query_embedding.empty()) { 
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "KnowledgeImporter::perform_semantic_search(): Sorgu embedding'i olusturulamadi. Arama yapilamadi.");
         m_knowledge_base.get_swarm_db().close(); 

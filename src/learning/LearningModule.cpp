@@ -16,14 +16,16 @@
 #include <QDateTime> // QDateTime::currentDateTime().toString() için
 
 #include "../communication/natural_language_processor.h" // generate_text_embedding için
+#include "../gui/engine_integration.h" // Geçici olarak NLP'ye erişim için
 namespace CerebrumLux {
 
 using EmbeddingStateKey = CerebrumLux::SwarmVectorDB::EmbeddingStateKey;
 
-LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, QObject *parent)
+LearningModule::LearningModule(KnowledgeBase& kb, CerebrumLux::Crypto::CryptoManager& cryptoMan, NaturalLanguageProcessor& nlp, QObject *parent)
     : QObject(parent),
       knowledgeBase(kb),
       cryptoManager(cryptoMan),
+      nlp_processor_(nlp),
       unicodeSanitizer(std::make_unique<UnicodeSanitizer>()),
       stegoDetector(std::make_unique<StegoDetector>()),
       webFetcher(std::make_unique<WebFetcher>(this)),
@@ -404,8 +406,8 @@ CerebrumLux::IngestReport LearningModule::createIngestReport(CerebrumLux::Ingest
 }
 
 std::vector<float> LearningModule::compute_embedding(const std::string& text) const {
-    // Düzeltme: compute_embedding artık NaturalLanguageProcessor::generate_text_embedding'i kullanacak.
-    return CerebrumLux::NaturalLanguageProcessor::generate_text_embedding(text, Language::EN);
+    // Düzeltme: compute_embedding artık nlp_processor_.generate_text_embedding_sync'i kullanacak.
+    return nlp_processor_.generate_text_embedding_sync(text);
 }
 std::string LearningModule::cryptofig_encode(const std::vector<float>& cryptofig_vector) const {
     LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: cryptofig_encode çağrıldı. Boyut: " << cryptofig_vector.size());

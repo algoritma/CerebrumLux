@@ -13,11 +13,64 @@
 #include "../src/learning/LearningModule.h"
 #include "../src/learning/KnowledgeBase.h"
 #include "../src/learning/Capsule.h"
+#include "../src/communication/ai_insights_engine.h" // AIInsightsEngine için eklendi
+#include "../src/brain/intent_analyzer.h"
+#include "../src/brain/intent_learner.h"
+#include "../src/brain/prediction_engine.h"
+#include "../src/brain/autoencoder.h"
+#include "../src/brain/cryptofig_processor.h"
+#include "../src/communication/natural_language_processor.h" // NLP için eklendi
+#include "../src/planning_execution/goal_manager.h" // GoalManager için eklendi
 #include "../src/crypto/CryptoManager.h"
 #include "../src/crypto/CryptoUtils.h"
 
 // JSON işleme için
 #include "../src/external/nlohmann/json.hpp"
+
+// test_response_engine.cpp'den alınan dummy sınıflar
+class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer { public: DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {} };
+class DummyIntentLearner : public CerebrumLux::IntentLearner { public: DummyIntentLearner(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SuggestionEngine& s, CerebrumLux::UserProfileManager& u) : CerebrumLux::IntentLearner(a,s,u) {} };
+class DummyPredictionEngine : public CerebrumLux::PredictionEngine { public: DummyPredictionEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SequenceManager& sm) : CerebrumLux::PredictionEngine(a,sm) {} };
+class DummyCryptofigAutoencoder : public CerebrumLux::CryptofigAutoencoder { public: DummyCryptofigAutoencoder() : CerebrumLux::CryptofigAutoencoder() {} };
+class DummyCryptofigProcessor : public CerebrumLux::CryptofigProcessor { public: DummyCryptofigProcessor(CerebrumLux::IntentAnalyzer& a, CerebrumLux::CryptofigAutoencoder& ae) : CerebrumLux::CryptofigProcessor(a,ae) {} };
+class DummyAIInsightsEngine : public CerebrumLux::AIInsightsEngine { public: DummyAIInsightsEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::IntentLearner& l, CerebrumLux::PredictionEngine& p, CerebrumLux::CryptofigAutoencoder& ae, CerebrumLux::CryptofigProcessor& cp) : CerebrumLux::AIInsightsEngine(a,l,p,ae,cp) {} };
+class DummySequenceManager : public CerebrumLux::SequenceManager { public: DummySequenceManager() : CerebrumLux::SequenceManager() {} };
+class DummySuggestionEngine : public CerebrumLux::SuggestionEngine { public: DummySuggestionEngine(CerebrumLux::IntentAnalyzer& a) : CerebrumLux::SuggestionEngine(a) {} };
+class DummyUserProfileManager : public CerebrumLux::UserProfileManager { public: DummyUserProfileManager() : CerebrumLux::UserProfileManager() {} };
+
+
+// Basit bir test için sahte sınıflar
+class DummyGoalManager : public CerebrumLux::GoalManager {
+public:
+    // Düzeltme: GoalManager artık AIInsightsEngine referansı alıyor.
+    DummyGoalManager(CerebrumLux::AIInsightsEngine& insights_engine) : CerebrumLux::GoalManager(insights_engine) {}
+};
+
+class DummyKnowledgeBase : public CerebrumLux::KnowledgeBase {
+public:
+    DummyKnowledgeBase() : CerebrumLux::KnowledgeBase("dummy_db_path_lm_test") {}
+};
+
+class DummyNLP : public CerebrumLux::NaturalLanguageProcessor {
+public:
+    DummyNLP(CerebrumLux::GoalManager& gm, CerebrumLux::KnowledgeBase& kb) : CerebrumLux::NaturalLanguageProcessor(gm, kb, nullptr) {}
+
+    // Saf sanal fonksiyonları uygula
+    CerebrumLux::ChatResponse generate_response_text(
+        CerebrumLux::UserIntent, CerebrumLux::AbstractState, CerebrumLux::AIGoal,
+        const CerebrumLux::DynamicSequence&, const std::vector<std::string>&,
+        const CerebrumLux::KnowledgeBase&, const std::vector<float>&
+    ) const override {
+        CerebrumLux::ChatResponse res;
+        res.text = "dummy response";
+        return res;
+    }
+
+    std::vector<float> generate_text_embedding_sync(const std::string& text, CerebrumLux::Language lang) const override {
+        // Basit bir embedding döndür
+        return std::vector<float>(256, 0.1f);
+    }
+};
 
 
 int main() {
@@ -27,8 +80,19 @@ int main() {
 
     // Gerekli bağımlılıkları oluştur
     CerebrumLux::Crypto::CryptoManager cryptoManager;
-    CerebrumLux::KnowledgeBase kb;
-    CerebrumLux::LearningModule learning_module(kb, cryptoManager);
+    DummyIntentAnalyzer dummy_analyzer;
+    DummySequenceManager dummy_seq_manager;
+    DummySuggestionEngine dummy_suggester(dummy_analyzer);
+    DummyUserProfileManager dummy_user_profile_manager;
+    DummyIntentLearner dummy_learner(dummy_analyzer, dummy_suggester, dummy_user_profile_manager);
+    DummyPredictionEngine dummy_predictor(dummy_analyzer, dummy_seq_manager);
+    DummyCryptofigAutoencoder dummy_autoencoder;
+    DummyCryptofigProcessor dummy_cryptofig_processor(dummy_analyzer, dummy_autoencoder);
+    DummyAIInsightsEngine dummy_insights_engine(dummy_analyzer, dummy_learner, dummy_predictor, dummy_autoencoder, dummy_cryptofig_processor);
+    DummyKnowledgeBase kb;
+    DummyGoalManager gm(dummy_insights_engine);
+    DummyNLP nlp(gm, kb);
+    CerebrumLux::LearningModule learning_module(kb, cryptoManager, nlp);
 
     // Test senaryolarında kullanılacak helper lambda (main.cpp'den taşındı)
     auto create_signed_encrypted_capsule = [&](const std::string& id_prefix, const std::string& content, const std::string& source_peer, float confidence) {

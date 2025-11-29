@@ -7,6 +7,7 @@
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <mutex> // EKLENDİ: std::recursive_mutex için
 
 // llama.cpp başlık dosyası
 #include "llama.h" 
@@ -36,6 +37,9 @@ public:
     // Metni alır, Llama-2'nin içsel temsilini vektör olarak döner.
     // Bu metod RAG sistemi için kritiktir.
     std::vector<float> get_embedding(const std::string& text);
+    
+    // YENİ: Embedding boyutunu düşürme (4096 -> 256)
+    static std::vector<float> reduce_embedding_dimension(const std::vector<float>& original_embedding, size_t target_dim);
 
     // Verilen prompt'a göre yanıt üretir
     std::string generate(const std::string& prompt, 
@@ -51,6 +55,8 @@ public:
 private:
     llama_model* model = nullptr;
     llama_context* ctx = nullptr;
+    mutable std::recursive_mutex engine_mutex;
+    // KRİTİK: Thread güvenliği için recursive mutex
     
     // Model parametreleri
     int n_ctx = 2048; 

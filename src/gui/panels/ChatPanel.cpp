@@ -121,7 +121,7 @@ void ChatPanel::appendChatMessage(const QString& sender, const CerebrumLux::Chat
         QString plainText = doc.toPlainText();
 
         // --- DİNAMİK DİL ALGILAMA ---
-        // Metin Türkçe karakterler içeriyor mu? (ı, ğ, ü, ş, ö, ç ve büyük halleri)
+        // Metin Türkçe karakterler içeriyor mu? (ı, ğ, ü, ş, ö, ç ve büyük halleri) (Language enum'u artık core/enums.h'den geliyor)
         // Eğer içeriyorsa Türkçe motoru, içermiyorsa İngilizce motoru seç.
         QLocale::Language targetLang = QLocale::English; // Varsayılan İngilizce
         QRegularExpression trRegex(QString::fromUtf8("[ığüşöçİĞÜŞÖÇ]"));

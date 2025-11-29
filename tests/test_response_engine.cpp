@@ -211,15 +211,30 @@ public:
 class DummyNaturalLanguageProcessor : public CerebrumLux::NaturalLanguageProcessor {
 public:
     // NaturalLanguageProcessor'ın yeni kurucusuna uyacak şekilde güncellendi
-    DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm, CerebrumLux::KnowledgeBase& kb) : CerebrumLux::NaturalLanguageProcessor(gm, kb) {}
+    explicit DummyNaturalLanguageProcessor(CerebrumLux::GoalManager& gm, CerebrumLux::KnowledgeBase& kb) : CerebrumLux::NaturalLanguageProcessor(gm, kb, nullptr) {}
 
-    CerebrumLux::ChatResponse generate_response_text(CerebrumLux::UserIntent current_intent, CerebrumLux::AbstractState current_abstract_state, CerebrumLux::AIGoal current_goal, const CerebrumLux::DynamicSequence& sequence, const std::vector<std::string>& relevant_keywords, const CerebrumLux::KnowledgeBase& kb) const override { // Dönüş tipi std::string'den ChatResponse'a değişti        
+    CerebrumLux::ChatResponse generate_response_text(
+        CerebrumLux::UserIntent current_intent,
+        CerebrumLux::AbstractState current_abstract_state,
+        CerebrumLux::AIGoal current_goal,
+        const CerebrumLux::DynamicSequence& sequence,
+        const std::vector<std::string>& relevant_keywords,
+        const CerebrumLux::KnowledgeBase& kb,
+        const std::vector<float>& user_embedding
+    ) const override {
         CerebrumLux::ChatResponse dummy_response;
-        dummy_response.text = "Dummy NLP yanıtı.";
+        dummy_response.text = "Dummy NLP yaniti.";
         dummy_response.reasoning = "Dummy gerekçe.";
         dummy_response.needs_clarification = false;
         return dummy_response;
      }
+
+    // DÜZELTME: Eksik olan saf sanal fonksiyonu uygula.
+    std::vector<float> generate_text_embedding_sync(const std::string& text,
+                                                    CerebrumLux::Language lang) const override
+    {
+        return std::vector<float>(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.1f);
+    }
  };
 
 
@@ -290,23 +305,26 @@ int main() {
     seq.network_activity_level = 75;
     seq.current_application_context = "Testing";
 
+    // generate_response için dummy embedding
+    std::vector<float> dummy_user_embedding(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f);
+
     // Test Senaryosu 1: Genel yanıt
     // DEĞİŞTİRİLEN KOD: ChatResponse objesi al ve .text üyesine eriş
-    CerebrumLux::ChatResponse r1_chat_response = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Idle, CerebrumLux::AIGoal::UndefinedGoal, seq, dummy_kb);
+    CerebrumLux::ChatResponse r1_chat_response = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Idle, CerebrumLux::AIGoal::UndefinedGoal, seq, dummy_kb, dummy_user_embedding);
     std::string r1 = r1_chat_response.text;
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 1 (Genel): " << r1 << " (Gerekçe: " << r1_chat_response.reasoning << ")");
     assert(!r1.empty()); // Assert metin üzerinde yapılmalı
 
     // Test Senaryosu 2: Programlama niyeti ve odaklanmış durum
     // DEĞİŞTİRİLEN KOD: ChatResponse objesi al ve .text üyesine eriş
-    CerebrumLux::ChatResponse r2_chat_response = response_engine.generate_response(CerebrumLux::UserIntent::Programming, CerebrumLux::AbstractState::Focused, CerebrumLux::AIGoal::OptimizeProductivity, seq, dummy_kb);
+    CerebrumLux::ChatResponse r2_chat_response = response_engine.generate_response(CerebrumLux::UserIntent::Programming, CerebrumLux::AbstractState::Focused, CerebrumLux::AIGoal::OptimizeProductivity, seq, dummy_kb, dummy_user_embedding);
     std::string r2 = r2_chat_response.text;
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 2 (Programlama, Odaklanmış): " << r2 << " (Gerekçe: " << r2_chat_response.reasoning << ")");
     assert(!r2.empty()); // Assert metin üzerinde yapılmalı
 
     // Test Senaryosu 3: Hata algılandı
     // DEĞİŞTİRİLEN KOD: ChatResponse objesi al ve .text üyesine eriş
-    CerebrumLux::ChatResponse r3_chat_response = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Error, CerebrumLux::AIGoal::MinimizeErrors, seq, dummy_kb);
+    CerebrumLux::ChatResponse r3_chat_response = response_engine.generate_response(CerebrumLux::UserIntent::Undefined, CerebrumLux::AbstractState::Error, CerebrumLux::AIGoal::MinimizeErrors, seq, dummy_kb, dummy_user_embedding);
     std::string r3 = r3_chat_response.text;
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "Test 3 (Hata): " << r3 << " (Gerekçe: " << r3_chat_response.reasoning << ")");
     assert(!r3.empty()); // Assert metin üzerinde yapılmalı
@@ -315,12 +333,12 @@ int main() {
     // Kripto Yöneticisi gerekiyor
     CerebrumLux::Crypto::CryptoManager cryptoManager;
     // LearningModule kurucusu NaturalLanguageProcessor referansı almaz hale getirildiği için, test_lm için DummyKnowledgeBase yeterli.
-    CerebrumLux::KnowledgeBase test_kb("test_db_path"); // LMDB yolu ile başlatıldı
-    CerebrumLux::LearningModule test_lm(test_kb, cryptoManager);
+    DummyKnowledgeBase test_kb; // LMDB yolu ile başlatıldı
+    CerebrumLux::LearningModule test_lm(test_kb, cryptoManager, dummy_nlp);
 
     // Kapsül öğrenme testi
     test_lm.learnFromText("Bu bir test metnidir.", "Test Kaynak", "Genel");
-    std::vector<float> genel_embedding = CerebrumLux::NaturalLanguageProcessor::generate_text_embedding("Genel");
+    std::vector<float> genel_embedding = dummy_nlp.generate_text_embedding_sync("Genel", CerebrumLux::Language::EN);
     assert(test_kb.search_by_topic(genel_embedding).size() == 1);
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LearningModule Test: Metinden öğrenme başarılı.");
 

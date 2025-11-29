@@ -98,8 +98,9 @@ int main(int argc, char *argv[])
     CerebrumLux::KnowledgeBase kb;
     //CerebrumLux::KnowledgeBase kb("data/CerebrumLux_lmdb_db"); // DÜZELTME: Veritabanı dosyalarını kalıcı bir yola kaydetmek için bu satır aktive edildi.
 
-    CerebrumLux::NaturalLanguageProcessor nlp(goal_manager, kb);
-    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] NaturalLanguageProcessor init complete." << std::endl;
+    std::unique_ptr<CerebrumLux::LLMProcessor> nlp_ptr = std::make_unique<CerebrumLux::LLMProcessor>(goal_manager, kb, &app); // LLMProcessor'ı başlat
+    CerebrumLux::NaturalLanguageProcessor& nlp = *nlp_ptr; // Referans olarak kullan
+    early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] LLMProcessor init complete." << std::endl; // Log mesajı güncellendi
     early_diagnostic_log.flush();
 
     CerebrumLux::Planner planner(analyzer, suggester, goal_manager, predictor, insights_engine);
@@ -116,13 +117,12 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] KnowledgeBase created. Will load after GUI shows." << std::endl;
     early_diagnostic_log.flush();
     //CerebrumLux::LearningModule learning_module(kb, cryptoManager, &app);
-    CerebrumLux::LearningModule learning_module(kb, cryptoManager, nullptr); // YENİ DÜZELTME: Parent'ı nullptr yaparak manuel yıkımı sağlayın
+    CerebrumLux::LearningModule learning_module(kb, cryptoManager, nlp, nullptr); // YENİ DÜZELTME: NLP referansı eklendi
 
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Learning Module initialized." << std::endl;
     early_diagnostic_log.flush();
-
-    // Response Engine oluşturulurken NaturalLanguageProcessor'ın bir unique_ptr'ı verilmeli
-    CerebrumLux::ResponseEngine responder(std::make_unique<CerebrumLux::NaturalLanguageProcessor>(goal_manager, kb));
+    // Response Engine oluşturulurken LLMProcessor'ın bir unique_ptr'ı verilmeli
+    CerebrumLux::ResponseEngine responder(std::move(nlp_ptr));
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] ResponseEngine init complete." << std::endl;
     early_diagnostic_log.flush();
     
@@ -160,8 +160,7 @@ int main(int argc, char *argv[])
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller yukleniyor...");
         kb.import_from_json("knowledge.json");
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller yuklendi.");
-        CerebrumLux::NaturalLanguageProcessor::load_fasttext_models();
-        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase ve FastText model yükleme işlemleri başlatıldı (asenkron).");
+        // FastText yükleme çağrısı kaldırıldı.
         if (window.getKnowledgeBasePanel()) {
             window.getKnowledgeBasePanel()->updateKnowledgeBaseContent();
         } else {

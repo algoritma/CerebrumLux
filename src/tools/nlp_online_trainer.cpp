@@ -10,6 +10,7 @@
 #include "../core/logger.h"
 #include "../core/enums.h" // LogLevel, UserIntent, AbstractState, AIAction, AIGoal için
 #include "../planning_execution/goal_manager.h"
+#include "../learning/KnowledgeBase.h" // Hata düzeltmesi için eklendi
 #include "../communication/ai_insights_engine.h"
 #include "../brain/intent_analyzer.h"
 #include "../brain/intent_learner.h"
@@ -215,7 +216,8 @@ public:
          CerebrumLux::AIGoal current_goal,
          const CerebrumLux::DynamicSequence& sequence,
          const std::vector<std::string>& relevant_keywords,
-         const CerebrumLux::KnowledgeBase& kb
+         const CerebrumLux::KnowledgeBase& kb,
+         const std::vector<float>& user_embedding
     ) const override { // 'override' hatasını düzeltmek için return tipi güncellendi
         CerebrumLux::ChatResponse dummy_response;
         dummy_response.text = "Dummy NLP yanıtı.";
@@ -223,6 +225,14 @@ public:
         dummy_response.needs_clarification = false;
         return dummy_response;
      }
+
+    // DÜZELTME: Eksik olan saf sanal fonksiyonu uygula.
+    std::vector<float> generate_text_embedding_sync(
+        const std::string& text,
+        CerebrumLux::Language lang = CerebrumLux::Language::TR
+    ) const override {
+        return std::vector<float>(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.5f);
+    }
 
     CerebrumLux::UserIntent infer_intent_from_text(const std::string& user_input) const { return CerebrumLux::UserIntent::Undefined; }
     CerebrumLux::AbstractState infer_state_from_text(const std::string& user_input) const { return CerebrumLux::AbstractState::Undefined; }

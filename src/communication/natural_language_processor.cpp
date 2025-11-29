@@ -3,23 +3,18 @@
 #include "../core/enums.h"         // LogLevel, UserIntent, AbstractState gibi enum'lar için
 #include "../core/utils.h"          // intent_to_string, abstract_state_to_string, goal_to_string, action_to_string için
 #include "../brain/autoencoder.h"   // CryptofigAutoencoder için (INPUT_DIM, LATENT_DIM)
-#include "../learning/Capsule.h"    // Capsule için
 #include "../learning/KnowledgeBase.h" // KnowledgeBase için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 
 #include <iostream>
 #include <algorithm> // std::transform için
 #include <cctype>    // std::tolower için
-#include <random>    // SafeRNG için
-#include <stdexcept> // std::runtime_error için
 #include <sstream>   // stringstream için
-#include <fstream>   // FastText model yükleme için
 #include <functional> // std::hash için (statik embedding için)
 #include <algorithm> // std::min için
-#include <QCoreApplication> // Çalıştırılabilir dosya yolunu almak için
-
-#include <filesystem>
+#include <QtConcurrent/QtConcurrent> // EKLENDİ (Asenkron işlemler için)
 #include "../brain/llm_engine.h" // EKLENDİ: Llama-2 Motoruna Erişim
+#include "../gui/DataTypes.h" // ChatResponse için
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -27,240 +22,28 @@
 
 namespace CerebrumLux {
 
-std::map<Language, std::unique_ptr<fasttext::FastText>> NaturalLanguageProcessor::s_fastTextModels;
-
-// YENİ: Model yükleme durumu kontrolü (GUI donmasını önlemek için)
-#include <future>
-#include <atomic>
-static std::atomic<bool> s_isFastTextLoading{false};
-std::atomic<bool> NaturalLanguageProcessor::s_isModelReady{false}; // Başlangıçta hazır değil
-
-// YENİ: Dil string'ini enum'a çeviren yardımcı fonksiyon
-Language string_to_lang(const std::string& lang_str) {
-    std::string lower_lang_str = lang_str;
-    std::transform(lower_lang_str.begin(), lower_lang_str.end(), lower_lang_str.begin(),
-                   [](unsigned char c){ return static_cast<unsigned char>(std::tolower(c)); });
-    if (lower_lang_str == "en" || lower_lang_str == "english") return Language::EN;
-    if (lower_lang_str == "de" || lower_lang_str == "german") return Language::DE;
-    if (lower_lang_str == "tr" || lower_lang_str == "turkish") return Language::TR;
-    return Language::UNKNOWN;
-}
-
-// YENİ (GUI dostu): FastText modellerini asenkron yükleme
-void NaturalLanguageProcessor::load_fasttext_models() {
-    // Aynı anda birden fazla yükleme başlatılmasın
-    if (s_isFastTextLoading.load()) {
-        LOG_DEFAULT(LogLevel::DEBUG, "NLP: FastText modeli zaten yükleniyor, yeni istek atlandı.");
-        return;
-    }
-
-    // Eğer zaten yüklenmişse tekrar yükleme
-    if (!s_fastTextModels.empty() && s_fastTextModels.begin()->second && s_fastTextModels.begin()->second->getDimension() > 0) {
-        return;
-    }
-
-    s_isFastTextLoading.store(true);
-
-    // Arka planda yükleme (GUI'yi engellemeden)
-    static std::future<void> model_loading_future;
-    model_loading_future = std::async(std::launch::async, []() {
-        try {
-            // --- GÜVENİLİR VARLIK YOLU OLUŞTURMA ---
-            std::filesystem::path app_dir;
-#ifdef _WIN32
-            char path[MAX_PATH];
-            GetModuleFileNameA(NULL, path, MAX_PATH);
-            app_dir = std::filesystem::path(path).parent_path();
-#else
-            if (QCoreApplication::instance()) {
-                app_dir = QCoreApplication::applicationDirPath().toStdString();
-            } else {
-                app_dir = std::filesystem::current_path();
-            }
-#endif
-            LOG_DEFAULT(LogLevel::DEBUG, "NLP: FastText modelleri için temel dizin aranıyor: " << app_dir.parent_path() / "data" / "fasttext_models"); // YENİ LOG: Temel FastText dizin yolunu gör
-
-            //FastText modelleri için sabit kalıcı yol
-            std::filesystem::path fasttext_models_dir = app_dir.parent_path() / "data" / "fasttext_models";
-
-            static const std::map<Language, std::string> model_files = {
-                {Language::EN, "cc.en.300.bin"},
-                {Language::DE, "cc.de.300.bin"},
-                {Language::TR, "cc.tr.300.bin"}
-            };
-
-            s_fastTextModels.clear();
-            bool any_model_loaded = false;
-
-            for (const auto& pair : model_files) {
-                Language lang = pair.first;
-                std::filesystem::path model_path = fasttext_models_dir / pair.second; // Yeni yolu kullan
-                std::string absolute_path_str = std::filesystem::weakly_canonical(model_path).string();
-
-                LOG_DEFAULT(LogLevel::TRACE, "NLP: FastText modeli yüklemeye çalışılıyor: " << absolute_path_str);
-                LOG_DEFAULT(LogLevel::DEBUG, "NLP: Kontrol edilen FastText model yolu: " << absolute_path_str << " (exists: " << std::filesystem::exists(model_path) << ", size > 0: " << (std::filesystem::exists(model_path) ? (std::filesystem::file_size(model_path) > 0 ? "Evet" : "Hayır") : "Bilinmiyor") << ")"); // YENİ LOG: Detaylı dosya kontrolü
-
-                if (std::filesystem::exists(model_path) && std::filesystem::file_size(model_path) > 0) { // YENİ: Dosya boyutu kontrolü
-                    try {
-                        auto model = std::make_unique<fasttext::FastText>();
-                        LOG_DEFAULT(LogLevel::DEBUG, "NLP: FastText modeli yuklemeye baslaniyor (loadModel): " << absolute_path_str); // YENİ LOG: loadModel çağrısı öncesi
-
-                        model->loadModel(absolute_path_str);
-                        s_fastTextModels[lang] = std::move(model);
-                        s_isModelReady.store(true); // Model artık hazır
-                        LOG_DEFAULT(LogLevel::INFO, "NLP: FastText modeli başarıyla yüklendi: " << absolute_path_str);
-                        LOG_DEFAULT(LogLevel::DEBUG, "NLP: Yüklenen model boyutu: " << s_fastTextModels[lang]->getDimension()); // YENİ LOG: Yüklenen modelin boyutunu onayla
-
-                        any_model_loaded = true;
-                    } catch (const std::exception& e) {
-                        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli yüklenirken hata oluştu (" << absolute_path_str << "): " << e.what());
-                    }
-                } else { // YENİ: Model dosyası bulunamadığında daha detaylı log
-                    LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli bulunamadi veya boş: " << absolute_path_str << " (Dosya var mi: " << std::filesystem::exists(model_path) << ", Boyut > 0 mi: " << (std::filesystem::exists(model_path) ? (std::filesystem::file_size(model_path) > 0 ? "Evet" : "Hayır") : "Bilinmiyor") << ").");
-
-                    LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText modeli bulunamadı: " << absolute_path_str);
-                }
-            }
-            if (!any_model_loaded) {
-                LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: Hiçbir FastText modeli yüklenemedi. Embedding'ler fallback placeholder olacaktır.");
-            }
-        } catch (const std::exception& e) {
-            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "NLP: FastText yükleme sırasında beklenmeyen hata: " << e.what());
-        }
-
-        s_isFastTextLoading.store(false);
-        LOG_DEFAULT(LogLevel::INFO, "NLP: FastText model yükleme işlemi tamamlandı (async).");
-    });
-}
-
-NaturalLanguageProcessor::NaturalLanguageProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef)
-    : goal_manager(goal_manager_ref), kbRef_(kbRef)
+NaturalLanguageProcessor::NaturalLanguageProcessor(GoalManager& goal_manager_ref, KnowledgeBase& kbRef, QObject* parent)
+    : QObject(parent), goal_manager(goal_manager_ref), kbRef_(kbRef) // explicit constructor in header
 {
-    // YENİ: Tüm FastText modellerini yükle
-    //load_fasttext_models();
-    // DEĞİŞTİRİLDİ: FastText modellerinin yüklenmesi constructor'dan kaldırıldı.
-    // Bu işlem artık main.cpp içindeki QTimer::singleShot ile asenkron olarak çağrılacak.
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NaturalLanguageProcessor: Initialized.");
-
-    // Niyet anahtar kelime haritasını başlat (Mevcut kod aynı kalır)
-    this->intent_keyword_map[CerebrumLux::UserIntent::Programming] = {"kod", "compile", "derle", "debug", "hata", "function", "class", "stack"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Gaming]      = {"oyun", "fps", "level", "play", "match", "steam"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::MediaConsumption] = {"video", "izle", "film", "müzik", "spotify", "youtube"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::CreativeWork] = {"tasarla", "foto", "görsel", "müzik", "compose", "yarat", "üret"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Research]    = {"araştır", "search", "makale", "pdf", "doküman", "read", "oku"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Communication] = {"mail", "mesaj", "sohbet", "reply", "gönder"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Editing]     = {"düzenle", "edit", "revize", "fix", "format"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::FastTyping]  = {"hızlı", "yaz", "typing", "type", "speed"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Question] = {"neden", "nasıl", "kim", "ne", "niçin", "soru", "öğren"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Command] = {"yap", "başlat", "durdur", "sil", "oluştur", "git"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Statement] = {"bilgi", "gerçek", "biliyorum", "düşünüyorum"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::FeedbackPositive] = {"iyi", "güzel", "teşekkürler", "harika"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::FeedbackNegative] = {"kötü", "hayır", "beğenmedim", "yanlış"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Greeting] = {"merhaba", "selam", "hi", "günaydın"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Farewell] = {"güle güle", "hoşça kal", "bay bay", "görüşürüz"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::RequestInformation] = {"ver", "göster", "bilgi"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::ExpressEmotion] = {"mutlu", "üzgün", "sinirli"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Confirm] = {"evet", "tamam", "onayla"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Deny] = {"hayır", "reddet"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Elaborate] = {"açıkla", "detaylandır"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::Clarify] = {"anlamadım", "tekrarla"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::CorrectError] = {"düzelt", "hata", "yanlış"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::InquireCapability] = {"yapabilir misin", "yeteneğin ne"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::ShowStatus] = {"durum", "nedir"};
-    this->intent_keyword_map[CerebrumLux::UserIntent::ExplainConcept] = {"anlamı ne", "nedir"};
-
-    // Durum anahtar kelime haritasını başlat (Mevcut kod aynı kalır)
-    this->state_keyword_map[CerebrumLux::AbstractState::PowerSaving] = {"pil", "battery", "şarj", "charging", "battery low", "pil zayıf"};
-    this->state_keyword_map[CerebrumLux::AbstractState::FaultyHardware] = {"donanım", "arızalı", "error", "çök", "crash", "bozul"};
-    this->state_keyword_map[CerebrumLux::AbstractState::Distracted] = {"dikkat", "dikkatim", "dikkat dağılı", "notification"};
-    this->state_keyword_map[CerebrumLux::AbstractState::Focused] = {"odak", "focus", "konsantre", "akış"};
-    this->state_keyword_map[CerebrumLux::AbstractState::SeekingInformation] = {"ara", "google", "bilgi", "sorgu"};
-
-    // NLP'nin dahili model ağırlıklarını başlat (Mevcut kod aynı kalır)
-    for (auto intent_pair : this->intent_keyword_map) {
-        this->intent_cryptofig_weights[intent_pair.first].assign(CerebrumLux::CryptofigAutoencoder::LATENT_DIM, 0.0f);
-        for (size_t i = 0; i < CerebrumLux::CryptofigAutoencoder::LATENT_DIM; ++i) {
-            this->intent_cryptofig_weights[intent_pair.first][i] = static_cast<float>(CerebrumLux::SafeRNG::getInstance().get_generator()()) / CerebrumLux::SafeRNG::getInstance().get_generator().max();
-        }
-    }
     LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "NaturalLanguageProcessor: Initialized.");
 }
 
-CerebrumLux::UserIntent NaturalLanguageProcessor::infer_intent_from_text(const std::string& user_input) const {
-    std::string lower_text = user_input;
-    std::transform(lower_text.begin(), lower_text.end(), lower_text.begin(),
-                   [](unsigned char c){ return static_cast<unsigned char>(std::tolower(c)); });
-
-    // Kural tabanlı tahmin
-    CerebrumLux::UserIntent guessed_intent = rule_based_intent_guess(lower_text);
-    if (guessed_intent != CerebrumLux::UserIntent::Undefined) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Niyet kural tabanlı olarak tahmin edildi: " << CerebrumLux::intent_to_string(guessed_intent));
-        return guessed_intent;
-    }
-
-    // YENİ KOD: KnowledgeBase'den semantik arama ile niyet çıkarımı (eğer kural tabanlı başarısız olursa)
-    // Kullanıcının girdisine en yakın 1-2 kapsülü ara
-    std::vector<float> user_input_embedding = NaturalLanguageProcessor::generate_text_embedding(lower_text, Language::EN); // Statik metod çağrısı
-    std::vector<CerebrumLux::Capsule> related_capsules = kbRef_.semantic_search(user_input_embedding, 2); // Embedding ile ara
-    if (!related_capsules.empty()) {
-        // En alakalı kapsülün konusunu niyete çevirmeye çalış
-        // Basitçe: eğer topic bir niyete karşılık geliyorsa, onu kullan.
-        // Daha sofistike bir yaklaşımda: niyet sınıflandırıcı, kapsül içeriğiyle eğitilir.
-        for (const auto& capsule : related_capsules) {
-            if (capsule.topic == "Programming") return CerebrumLux::UserIntent::Programming;
-            if (capsule.topic == "Research" || capsule.topic == "WebSearch") return CerebrumLux::UserIntent::Research;
-            if (capsule.topic == "AI Insight") return CerebrumLux::UserIntent::Question; // AI Insight topic'i bir soruya yönlendirebilir.
-            // Diğer topic'ler için de benzer eşlemeler eklenebilir.
-        }
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Niyet KnowledgeBase'den türetilmeye çalışıldı, ancak doğrudan bir eşleşme bulunamadı.");
-    }
-
-    // Daha karmaşık modeller veya öğrenilmiş modeller burada kullanılabilir
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Niyet tahmin edilemedi, Undefined döndürülüyor.");
-    return CerebrumLux::UserIntent::Undefined;
+// LLMProcessor'ın kurucusu
+LLMProcessor::LLMProcessor(CerebrumLux::GoalManager& goal_manager_ref, CerebrumLux::KnowledgeBase& kbRef, QObject* parent)
+    : NaturalLanguageProcessor(goal_manager_ref, kbRef, parent)
+{
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "LLMProcessor: Initialized.");
 }
 
-CerebrumLux::AbstractState NaturalLanguageProcessor::infer_state_from_text(const std::string& user_input) const {
-    std::string lower_text = user_input;
-    std::transform(lower_text.begin(), lower_text.end(), lower_text.begin(),
-                   [](unsigned char c){ return static_cast<unsigned char>(std::tolower(c)); });
 
-    CerebrumLux::AbstractState guessed_state = rule_based_state_guess(lower_text);
-    if (guessed_state != CerebrumLux::AbstractState::Idle) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Durum kural tabanlı olarak tahmin edildi: " << CerebrumLux::abstract_state_to_string(guessed_state));
-        return guessed_state;
-    }
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP: Durum tahmin edilemedi, Idle döndürülüyor.");
-    return CerebrumLux::AbstractState::Idle;
-}
-
-float NaturalLanguageProcessor::cryptofig_score_for_intent(CerebrumLux::UserIntent intent, const std::vector<float>& latent_cryptofig) const {
-    auto it = this->intent_cryptofig_weights.find(intent);
-    if (it == this->intent_cryptofig_weights.end() || latent_cryptofig.empty()) {
-        return 0.0f;
-    }
-
-    const std::vector<float>& weights = it->second;
-    if (weights.size() != latent_cryptofig.size()) {
-        LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "NLP: cryptofig_score_for_intent - Ağırlık ve latent kriptofig boyutu uyuşmuyor.");
-        return 0.0f;
-    }
-
-    float dot_product = 0.0f;
-    for (size_t i = 0; i < weights.size(); ++i) {
-        dot_product += weights[i] * latent_cryptofig[i];
-    }
-    // Basitçe dot product döndür, daha sonra sigmoid veya başka bir aktivasyon eklenebilir
-    return dot_product;
-}
-
-ChatResponse NaturalLanguageProcessor::generate_response_text(
+ChatResponse LLMProcessor::generate_response_text(
     CerebrumLux::UserIntent current_intent,
     CerebrumLux::AbstractState current_abstract_state,
     CerebrumLux::AIGoal current_goal,
     const CerebrumLux::DynamicSequence& sequence,
     const std::vector<std::string>& relevant_keywords,
-    const CerebrumLux::KnowledgeBase& kb
+    const CerebrumLux::KnowledgeBase& kb,
+    const std::vector<float>& user_embedding
 ) const {
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: generate_response_text çağrıldı. Niyet: " << intent_to_string(current_intent) << ", Durum: " << abstract_state_to_string(current_abstract_state));
 
@@ -290,7 +73,7 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     }
  
     // 2. Embedding Oluştur
-    std::vector<float> search_query_embedding = NaturalLanguageProcessor::generate_text_embedding(search_term_for_embedding, Language::EN);
+    std::vector<float> search_query_embedding = user_embedding; // Artık parametre olarak geliyor
  
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: Semantic arama için oluşturulan embedding (ilk 5 float): " 
                 << search_query_embedding[0] << ", " << search_query_embedding[1] << ", " << search_query_embedding[2] << ", " << search_query_embedding[3] << ", " << search_query_embedding[4] 
@@ -453,6 +236,29 @@ ChatResponse NaturalLanguageProcessor::generate_response_text(
     return response_obj;
 }
 
+std::vector<float> LLMProcessor::generate_text_embedding_sync(const std::string& text, CerebrumLux::Language lang) const {
+    // STRATEJİ: Dinamik Zeka (Adaptive Compute)
+    // 1. ÖNCELİK: Llama-2 (Unified Brain).
+    // Zaten RAM'de olan "Işık Beyin"i kullanıyoruz. Bu hem daha zeki hem de ekstra RAM harcamaz.
+    if (LLMEngine::global_instance && LLMEngine::global_instance->is_model_loaded()) {
+        std::vector<float> original_embedding = LLMEngine::global_instance->get_embedding(text);
+        if (!original_embedding.empty()) {
+            LOG_DEFAULT(LogLevel::DEBUG, "NLP: Llama-2 motorundan " + std::to_string(original_embedding.size()) + " boyutlu embedding üretildi.");
+            // Boyut düşürme işlemini LLMEngine'deki statik metot ile yap
+            return LLMEngine::reduce_embedding_dimension(original_embedding, CerebrumLux::CryptofigAutoencoder::INPUT_DIM);
+        }
+    }
+
+    const int embedding_dim = CerebrumLux::CryptofigAutoencoder::INPUT_DIM;
+    std::vector<float> embedding(embedding_dim, 0.0f);
+    if (text.empty()) return embedding;
+    std::hash<std::string> hasher;
+    size_t hash_val = hasher(text);
+    for (int i = 0; i < embedding_dim; ++i) embedding[i] = static_cast<float>(std::sin(static_cast<double>(hash_val) + i));
+    LOG_DEFAULT(LogLevel::WARNING, "NLP: Llama-2 motoru kullanılamadığı için fallback (hash tabanlı) embedding üretildi.");
+    return embedding;
+}
+
 // And the rest of the file
 std::string NaturalLanguageProcessor::generate_dynamic_prompt(
     CerebrumLux::UserIntent intent,
@@ -595,122 +401,24 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
     return response;
 }
 
-// Metin girdisinden embedding hesaplama (FastText kullanılarak)
-std::vector<float> NaturalLanguageProcessor::generate_text_embedding(const std::string& text, Language lang) { // const kaldırıldı
-    // STRATEJİ: Dinamik Zeka (Adaptive Compute)
-    // 1. ÖNCELİK: Llama-2 (Unified Brain). 
-    // Zaten RAM'de olan "Işık Beyin"i kullanıyoruz. Bu hem daha zeki hem de ekstra RAM harcamaz.
-    if (LLMEngine::global_instance && LLMEngine::global_instance->is_model_loaded()) {
-        std::vector<float> emb = LLMEngine::global_instance->get_embedding(text);
-        if (!emb.empty()) {
-            // KRİTİK DÜZELTME: Boyut Uyumsuzluğu Giderme (4096 -> 256)
-            // VectorDB (HNSW) 256 boyut bekliyor. Llama-2 4096 veriyor.
-            // Adaptive Pooling ile boyutu küçültüyoruz.
-            
-            const size_t target_dim = 256; // DÜZELTME: 256
-            if (emb.size() > target_dim) {
-                std::vector<float> reduced_emb(target_dim, 0.0f);
-                size_t chunk_size = emb.size() / target_dim;
-                
-                for (size_t i = 0; i < target_dim; ++i) {
-                    float sum = 0.0f;
-                    for (size_t j = 0; j < chunk_size; ++j) {
-                        if (i * chunk_size + j < emb.size()) // Sınır kontrolü
-                            sum += emb[i * chunk_size + j];
-                    }
-                    reduced_emb[i] = sum / chunk_size; // Ortalama al
-                }
-                return reduced_emb;
-           }
-            return emb;
-        }
-    }
-
-    // 2. FALLBACK: Düşük Kaynak Modu (Hash)
-    // Eğer Llama henüz yüklenmediyse (açılışta) veya bir hata varsa, sistemi kilitlememek için
-    // deterministik bir hash vektörü üretilir.
-    const int embedding_dim = 256; // DÜZELTME: 256
-    std::vector<float> embedding(embedding_dim, 0.0f);
-    
-    if (text.empty()) {
-        return embedding; // Sıfırlarla dolu embedding
-    }
-
-    // Deterministik Hash Üretimi
-    std::hash<std::string> hasher;
-    size_t hash = hasher(text);
-    std::mt19937 gen(hash);
-    std::uniform_real_distribution<> dis(-0.5, 0.5);
-
-    for (int i = 0; i < embedding_dim; ++i) {
-        embedding[i] = dis(gen);
-    }
-
-    return embedding;
+CerebrumLux::UserIntent NaturalLanguageProcessor::infer_intent_from_text(const std::string& text) const {
+    // Bu fonksiyonun gerçek bir implementasyonu gereklidir.
+    // Şimdilik kural tabanlı bir tahmin yapalım.
+    std::string lower_text = text;
+    std::transform(lower_text.begin(), lower_text.end(), lower_text.begin(),
+                   [](unsigned char c){ return static_cast<unsigned char>(std::tolower(c)); });
+    return rule_based_intent_guess(lower_text);
 }
 
-// YENİ: Bilişsel Yük Hesaplama
-float NaturalLanguageProcessor::calculate_cognitive_load(const std::string& text) const {
-    float load = 0.0f;
-    size_t length = text.length();
-
-    // 1. Uzunluk analizi: Uzun cümleler genelde daha fazla işlem gerektirir.
-    if (length < 10) load += 0.1f;
-    else if (length < 50) load += 0.3f;
-    else load += 0.8f;
-
-    // 2. Anahtar kelime analizi (Soru kelimeleri yükü artırır)
-    std::string lower_text = text; // Basit lowercase dönüşümü varsayalım
-    // (Gerçek implementasyonda utf8 lowercase yapılmalı)
-    
-    if (lower_text.find("neden") != std::string::npos || 
-        lower_text.find("nasil") != std::string::npos ||
-        lower_text.find("açıkla") != std::string::npos ||
-        lower_text.find("analiz") != std::string::npos) {
-        load += 0.5f;
-    }
-
-    // 3. Basit selamlaşma kalıpları yükü düşürür
-    if (lower_text == "selam" || lower_text == "merhaba" || lower_text == "naber") {
-        load = 0.0f;
-    }
-
-    return std::min(1.0f, load);
-}
-
-// YENİ: Refleks Yanıt Sistemi
-std::string NaturalLanguageProcessor::get_reflex_response(const std::string& text, const UserIntent& intent) const {
-    // Basit bir hash map veya if-else zinciri. 
-    // İleride burası JSON'dan yüklenebilir.
-    
-    // Basit temizlik (Pre-processing)
-    std::string key = text;
-    // Sondaki boşlukları silme vs. eklenebilir.
-
-    // Selamlaşma Refleksleri
-    if (key.find("Selam") != std::string::npos || key.find("selam") != std::string::npos) 
-        return "Selam! Senin için ne yapabilirim?";
-    
-    if (key.find("Merhaba") != std::string::npos || key.find("merhaba") != std::string::npos) 
-        return "Merhaba! Cerebrum Lux sistemi hazır.";
-
-    if (key.find("Nasılsın") != std::string::npos || key.find("nasılsın") != std::string::npos) 
-        return "Ben bir yapay zeka sistemiyim, dolayısıyla hislerim yok ama tüm sistemlerim %100 verimlilikle çalışıyor. Sen nasılsın?";
-
-    if (key.find("Kimsin") != std::string::npos || key.find("kimsin") != std::string::npos)
-        return "Ben Cerebrum Lux. Kişisel donanımlarda çalışmak üzere tasarlanmış, mahremiyet odaklı ve yüksek performanslı bir yapay zekayım.";
-
-    if (key.find("Adın ne") != std::string::npos || key.find("adın ne") != std::string::npos || key.find("ismin ne") != std::string::npos)
-        return "Adım Cerebrum Lux. 'Işık Beyin' anlamına gelir.";
-
-    // Sistem Komutları Refleksi (String tabanlı kontrol)
-    // UserIntent::SystemControl tanımlı olmadığı için doğrudan metne bakıyoruz.
-    if (key.find("kapat") != std::string::npos || key.find("exit") != std::string::npos) {
-         return "Sistemi kapatma yetkim şu an simülasyon modunda. (Refleks Yanıtı)";
-    }
-
-    // Refleks bulunamadı, boş dön -> LLM devreye girecek.
-    return "";
+// YENİ: Asenkron embedding isteğini işleyen fonksiyon
+void NaturalLanguageProcessor::request_embedding_async(const std::string& text, const std::string& request_id) {
+    // QtConcurrent::run ile senkron embedding fonksiyonunu arka planda çalıştır
+    QtConcurrent::run([this, text, request_id]() {
+        // Arka plan thread'inde senkron metodu çağır
+        std::vector<float> embedding = this->generate_text_embedding_sync(text);
+        // Sonuç hazır olduğunda sinyali yay
+        emit this->embeddingReady(request_id, embedding);
+    });
 }
 
 } // namespace CerebrumLux

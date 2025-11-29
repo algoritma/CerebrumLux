@@ -559,9 +559,11 @@ bool SwarmVectorDB::store_vector(const CryptofigVector& cv) {
     const uint8_t* embedding_data_ptr = reinterpret_cast<const uint8_t*>(cv.embedding.data());
     serialized_data.insert(serialized_data.end(), embedding_data_ptr, embedding_data_ptr + (cv.embedding.size() * sizeof(float)));
    
-    if (hnsw_index_ && static_cast<size_t>(cv.embedding.size()) != hnsw_index_->get_dim()) { // Use get_dim from HNSWIndex for consistency 
-        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): Gelen embedding boyutu (" << cv.embedding.size() 
-                       << ") veritabani index boyutu (" << hnsw_index_->get_dim() << ") ile uyusmuyor! ID: " << cv.id);
+    // Use get_dim from HNSWIndex for consistency
+    // DÜZELTME: Embedding boyutu kontrolü (static_cast<size_t> eklendi)
+    // Use get_dim from HNSWIndex for consistency
+    if (hnsw_index_ && static_cast<size_t>(cv.embedding.size()) != hnsw_index_->get_dim()) { 
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_vector(): Embedding boyutu 128 float degil! ID: " << cv.id);
         mdb_txn_abort(txn);
         return false;
     }
