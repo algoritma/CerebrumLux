@@ -2,3 +2,12 @@ build
 data
 clean_build.bat
 export_codebase.bat
+
+# Log files
+*.log
+
+# Generated crypto keys
+*.pem
+
+# Third-party dependencies
+thirdparty/
