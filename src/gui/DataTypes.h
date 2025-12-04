@@ -16,6 +16,7 @@ struct ChatResponse {
     std::string reasoning; // Yanıtın nasıl üretildiğine dair açıklama
     std::vector<std::string> suggested_questions; // YENİ: Önerilen takip soruları
     bool needs_clarification = false; // Yanıtın belirsiz olup olmadığı ve kullanıcının onayına ihtiyaç duyup duymadığı
+    double latency_ms = 0.0; // Yanıtın üretilme süresi (ms cinsinden)
 };
 
 struct SimulationData {

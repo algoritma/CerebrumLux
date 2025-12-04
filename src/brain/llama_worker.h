@@ -23,6 +23,13 @@
 
 namespace CerebrumLux {
 
+// Llama istek tipleri
+enum class LlamaRequestType {
+    INFERENCE,
+    EMBEDDING,
+    UNKNOWN // Varsayılan veya tanımlanmamış durumlar için
+};
+
 // LlamaWorker için bir istek yapısı
 struct LlamaRequest {
     std::string userId;
