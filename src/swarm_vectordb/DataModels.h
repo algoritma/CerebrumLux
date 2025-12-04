@@ -17,7 +17,7 @@ namespace SwarmVectorDB {
 
 struct CryptofigVector {
     std::vector<uint8_t> cryptofig; // Şifreli veri (~512 byte veya daha az)
-    Eigen::VectorXf embedding;      // 128D float vektör (256 byte, float16 yerine float kullanıldı)
+    Eigen::VectorXf embedding;      // 256D float vektör
     std::string fisher_query;       // Fisher sorusu (örn., "Bu veri doğru mu?")
     std::string topic;              // YENİ: Kapsülün konu başlığı
     std::string id;                 // Kapsül ID'sine karşılık gelen benzersiz ID

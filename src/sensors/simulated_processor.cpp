@@ -252,9 +252,7 @@ CerebrumLux::AtomicSignal SimulatedAtomicSignalProcessor::simulate_system_event(
     signal.id = generate_random_string(8);
     signal.type = SensorType::SystemEvent;
     signal.timestamp_us = get_current_timestamp_us();
-    signal.confidence = SafeRNG::getInstance().get_float(0.8f, 1.0f);
-
-    std::uniform_int_distribution<int> event_dist(0, 2);
+    std::uniform_int_distribution<int> event_dist(0, 1);
     switch (event_dist(generator)) {
         case 0: signal.system_event_type = "OS_STATUS_UPDATE"; signal.system_event_data = "CPU: " + std::to_string(SafeRNG::getInstance().get_int(10, 90)) + "%, RAM: " + std::to_string(SafeRNG::getInstance().get_int(20, 80)) + "%"; break;
         case 1: signal.system_event_type = "LOW_BATTERY"; signal.system_event_data = "Battery at " + std::to_string(CerebrumLux::SafeRNG::getInstance().get_int(5, 20)) + "%"; break;
