@@ -158,8 +158,13 @@ int main(int argc, char *argv[])
     QTimer::singleShot(100, [&]() { // GUI açıldıktan kısa bir süre sonra
         LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Asenkron KnowledgeBase ve FastText model yüklemesi başlatılıyor.");
         LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller yukleniyor...");
-        kb.import_from_json("knowledge.json");
-        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller yuklendi.");
+        try {
+            kb.import_from_json("knowledge.json");
+            LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: KnowledgeBase JSON dosyasindan kapsuller basariyla yuklendi.");
+        } catch (const std::exception& e) {
+            LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: KnowledgeBase yuklenirken kritik hata: " << e.what());
+            // İsteğe bağlı: Kullanıcıya bir hata mesajı göstermek için GUI'ye bir sinyal gönderilebilir.
+        }
         // FastText yükleme çağrısı kaldırıldı.
         if (window.getKnowledgeBasePanel()) {
             window.getKnowledgeBasePanel()->updateKnowledgeBaseContent();

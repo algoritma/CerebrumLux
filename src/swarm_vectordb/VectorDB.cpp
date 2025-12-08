@@ -672,7 +672,7 @@ std::unique_ptr<CryptofigVector> SwarmVectorDB::get_vector(const std::string& id
     key.mv_data = (void*)id.data();
 
     int rc = mdb_get(current_txn, dbi_, &key, &data);
-    LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::get_vector(): mdb_get çağrıldı. ID: " << id << ", RC: " << rc << ", Hata: " << mdb_strerror(rc) << ", Data Size: " << data.mv_size);
+    //LOG_DEFAULT(LogLevel::DEBUG, "SwarmVectorDB::get_vector(): mdb_get çağrıldı. ID: " << id << ", RC: " << rc << ", Hata: " << mdb_strerror(rc) << ", Data Size: " << data.mv_size);
     if (rc == MDB_NOTFOUND) {
         LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB: Vektör bulunamadı. ID: " << id);
         if (!existing_txn) { // Kendi başlattığı transaction'ı abort et
