@@ -58,6 +58,9 @@ class NaturalLanguageProcessor : public QObject { // QObject mirası eklendi
     // YENİ: Asenkron embedding (GUI THREAD'İNDEN ÇAĞRILMALI)
     void request_embedding_async(const std::string& text, const std::string& request_id);
 
+    // YENİ: TeacherInvoker gibi iç sistemlerin basit istemler göndermesi için.
+    virtual std::string generate_simple_response(const std::string& prompt) const;
+
 signals: // Q_OBJECT olduğu için sinyaller burada
     void embeddingReady(const std::string& request_id, const std::vector<float>& embedding);
 
@@ -163,6 +166,9 @@ public:
     ) const override;
 
     std::vector<float> generate_text_embedding_sync(const std::string& text, CerebrumLux::Language lang) const override;
+
+    // YENİ: TeacherInvoker gibi iç sistemlerin basit istemler göndermesi için.
+    std::string generate_simple_response(const std::string& prompt) const override;
 };
 
 } // namespace CerebrumLux

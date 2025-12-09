@@ -421,4 +421,22 @@ void NaturalLanguageProcessor::request_embedding_async(const std::string& text, 
     });
 }
 
+// YENİ: TeacherInvoker gibi iç sistemler için basit yanıt üretme metodu
+std::string NaturalLanguageProcessor::generate_simple_response(const std::string& prompt) const {
+    LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "NaturalLanguageProcessor::generate_simple_response çağrıldı. Bu temel sınıf ve bir şey yapmamalı.");
+    return "Base implementation of generate_simple_response. This should be overridden.";
+}
+
+// YENİ: TeacherInvoker gibi iç sistemler için basit yanıt üretme metodu
+std::string LLMProcessor::generate_simple_response(const std::string& prompt) const {
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "LLMProcessor: generate_simple_response çağrıldı.");
+    if (LLMEngine::global_instance && LLMEngine::global_instance->is_model_loaded()) {
+        // LLMEngine'in senkron generate metodunu çağırıyoruz.
+        return LLMEngine::global_instance->generate(prompt);
+    }
+    LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "LLMProcessor: Llama motoru mevcut değil. Basit yanıt için fallback kullanılıyor.");
+    return "Fallback response: LLaMA engine not available.";
+}
+
+
 } // namespace CerebrumLux

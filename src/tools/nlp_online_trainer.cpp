@@ -240,6 +240,10 @@ public:
     void trainIncremental(const std::string& input, const std::string& expected_intent) {}
     void load_model(const std::string& path) { throw std::runtime_error("Dummy NLP modeli yüklenemedi."); }
     void save_model(const std::string& path) const {}
+
+    std::string generate_simple_response(const std::string& prompt) const override {
+        return "Dummy simple response";
+    }
 };
 
 

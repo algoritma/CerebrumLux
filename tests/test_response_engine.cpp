@@ -235,6 +235,10 @@ public:
     {
         return std::vector<float>(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.1f);
     }
+
+    std::string generate_simple_response(const std::string& prompt) const override {
+        return "Dummy simple response";
+    }
  };
 
 

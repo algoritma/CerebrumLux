@@ -39,6 +39,29 @@
 #include "learning/KnowledgeBase.h"
 #include "learning/LearningModule.h"
 #include "learning/Capsule.h"
+#include "learning/ai_tutor_loop.h" // YENİ: Otonom eğitmen döngüsü için
+#include <memory> // YENİ: std::unique_ptr için
+
+// YENİ: Otonom AI eğitmen döngüsünü yönetecek global broker nesnesi
+std::unique_ptr<TutorBroker> g_tutorBroker;
+
+// YENİ: Döngüyü başlatan fonksiyon
+void start_ai_tutor_loop(CerebrumLux::NaturalLanguageProcessor* nlp, CerebrumLux::KnowledgeBase* kb) {
+    if (!nlp || !kb) {
+        LOG_DEFAULT(CerebrumLux::LogLevel::ERR_CRITICAL, "TUTOR_LOOP: NLP veya Bilgi Tabanı başlatılamadı, döngü başlatılamıyor.");
+        return;
+    }
+    g_tutorBroker = std::make_unique<TutorBroker>(nlp, kb);
+    g_tutorBroker->start();
+}
+
+// YENİ: Döngüyü durduran fonksiyon
+void stop_ai_tutor_loop() {
+    if (g_tutorBroker) {
+        g_tutorBroker->stop();
+        g_tutorBroker.reset(); // Kaynağı serbest bırak
+    }
+}
 
 
 int main(int argc, char *argv[])
@@ -153,6 +176,10 @@ int main(int argc, char *argv[])
     window.show();
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] MainWindow shown." << std::endl;
     early_diagnostic_log.flush();
+
+    // YENİ: Otonom AI eğitmen döngüsünü başlat
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Otonom AI egitmen dongusu baslatiliyor...");
+    start_ai_tutor_loop(&nlp, &kb);
     
     // Asenkron FastText model ve KnowledgeBase yüklemesini tetikle
     QTimer::singleShot(100, [&]() { // GUI açıldıktan kısa bir süre sonra
@@ -215,6 +242,10 @@ int main(int argc, char *argv[])
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] Exiting QApplication::exec()." << std::endl;
     early_diagnostic_log.flush();
     
+    // YENİ: Otonom AI eğitmen döngüsünü durdur
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Otonom AI egitmen dongusu durduruluyor...");
+    stop_ai_tutor_loop();
+
     // DÜZELTİLDİ: Singleton'ların shutdown metodları çağrıldı.
     // YENİ DÜZELTME: LearningModule'ün Q-Table'ını Logger kapatılmadan önce kaydet.
     // Eğer LearningModule'ün yıkıcısı çağrılmıyorsa, burada manuel olarak kaydedilir.

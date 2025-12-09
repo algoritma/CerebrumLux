@@ -70,6 +70,10 @@ public:
         // Basit bir embedding döndür
         return std::vector<float>(256, 0.1f);
     }
+
+    std::string generate_simple_response(const std::string& prompt) const override {
+        return "Dummy simple response";
+    }
 };
 
 
