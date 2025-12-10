@@ -265,11 +265,33 @@ void KnowledgeBase::import_from_json(const std::string& filename) {
             nlohmann::json j;
             i >> j;
             if (j.contains("active_capsules") && j["active_capsules"].is_array()) {
+                bool needs_rewrite = false;
+                std::vector<CerebrumLux::Capsule> imported_capsules; // Kapsülleri buraya topla
+
                 for (const auto& json_capsule : j["active_capsules"]) {
+                    // JSON'da yeni eklenen alanların olup olmadığını kontrol et
+                    if (!json_capsule.contains("trust_score")) {
+                        needs_rewrite = true;
+                    }
+                    if (!json_capsule.contains("timestamp_utc")) {
+                        needs_rewrite = true;
+                    }
+
                     CerebrumLux::Capsule capsule = json_capsule.get<CerebrumLux::Capsule>();
-                    add_capsule(capsule); // Her kapsülü KnowledgeBase'e ekle
+                    imported_capsules.push_back(capsule);
                 }
+
+                // Tüm kapsüller başarıyla yüklendikten sonra topluca ekle
+                for (const auto& capsule : imported_capsules) {
+                    add_capsule(capsule);
+                }
+                
                 LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: JSON dosyasindan kapsüller başarıyla içe aktarıldı: " << file_path.string());
+
+                if (needs_rewrite) {
+                    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "KnowledgeBase: Eski formatta JSON dosyası algılandı. Yeni formata güncelleniyor: " << file_path.string());
+                    export_to_json(filename); // Dosyayı yeni formata yeniden yaz
+                }
             } else {
                 LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "KnowledgeBase: JSON dosyasinda 'active_capsules' dizisi bulunamadı veya geçersiz. İçe aktarma atlandı.");
             }
