@@ -60,14 +60,24 @@ struct Capsule {
     // from_json için kural
     friend void from_json(const nlohmann::json& j, Capsule& c) {
         j.at("id").get_to(c.id);
-        j.at("trust_score").get_to(c.trust_score);
+        //j.at("trust_score").get_to(c.trust_score);
+        c.trust_score = j.value("trust_score", 1.0f);
 
-        // ISO 8601 string'i timestamp_utc'ye dönüştür
-        std::string ts_str = j.at("timestamp_utc").get<std::string>();
-        std::tm tm = {};
-        std::stringstream ss(ts_str);
-        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
-        c.timestamp_utc = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+        if (j.contains("timestamp_utc")) {
+            // ISO 8601 string'i timestamp_utc'ye dönüştür
+            std::string ts_str = j.at("timestamp_utc").get<std::string>();
+            std::tm tm = {};
+            std::stringstream ss(ts_str);
+            ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+            if (ss.fail()) { // Parsing failed, default to current time
+                c.timestamp_utc = std::chrono::system_clock::now();
+            } else {
+                c.timestamp_utc = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+            }
+        } else {
+            // "timestamp_utc" yoksa, mevcut zamanı varsayılan olarak ayarla
+            c.timestamp_utc = std::chrono::system_clock::now();
+        }
 
         // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak.
         // Daha sonra KnowledgeBase.cpp'de 256 boyuta düzeltilecek.
