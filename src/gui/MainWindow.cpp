@@ -15,6 +15,7 @@
 #include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/panels/QTablePanel.h" // YENİ: QTablePanel için başlık
 #include "../gui/panels/ChatPanel.h"   // YENİ: ChatPanel için başlık
+#include "../gui/panels/TrainingHubPanel.h"
 #include "../gui/engine_integration.h"
 #include "../learning/Capsule.h"
 #include "../communication/natural_language_processor.h" // generate_text_embedding için
@@ -83,6 +84,13 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     tabWidget->addTab(chatPanel, "Chat");      // YENİ: Chat sekmesi eklendi
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Chat tab'ı eklendi. Tab sayısı: " << tabWidget->count());
 
+    // YENİ: Eğitim (Tutor) Paneli Eklendi
+    // Not: LLMEngine::global_instance'ın tanımlı olduğu varsayılmaktadır.
+    // learningModule referansı zaten MainWindow'da mevcut
+    trainingHubPanel = new TrainingHubPanel(CerebrumLux::LLMEngine::global_instance, CerebrumLux::LLMEngine::global_instance, &learningModule, this);
+    tabWidget->addTab(trainingHubPanel, "Eğitim");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: TrainingHubPanel tab'ı eklendi. Tab sayısı: " << tabWidget->count());
+
     setWindowTitle("Cerebrum Lux");
     resize(1024, 768);
 
@@ -123,9 +131,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
     // OPTİMİZASYON: GUI güncelleme sıklığı 1 saniyeden 3 saniyeye çekildi.
     // Bu, veritabanı okuma yükünü %66 azaltır ve arayüz donmalarını engeller.
+
+    // OPTİMİZASYON: GUI güncelleme sıklığı 1 saniyeden 3 saniyeye çekildi.
     guiUpdateTimer->start(3000); 
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (3000ms). [Graph ve Simulation panellerini etkiler]");
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: GUI güncelleme zamanlayıcısı başlatıldı (3000ms). [Graph ve Simulation panellerini etkiler]");    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: QTablePanel güncellemesi GUI zamanlayıcısına bağlandı.");
 
     // YENİ: Ağır LLM modelini GUI'yi bloklamadan arka planda yükle
     // LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: LLM modelinin asenkron yüklenmesi tetikleniyor..."); // Bu satır kaldırıldı

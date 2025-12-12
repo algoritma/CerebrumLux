@@ -1,5 +1,6 @@
 #include "llm_engine.h"
 #include "../core/logger.h"
+#include "../learning/UnicodeSanitizer.h" // EKLENDİ
 #include <iostream>
 #include <vector>
 #include <cstring>
@@ -101,10 +102,12 @@ std::string LLMEngine::token_to_str(llama_token token) {
 
 // YENİ: Embedding Üretim Fonksiyonu
 std::vector<float> LLMEngine::get_embedding(const std::string& text) { 
+    UnicodeSanitizer sanitizer;
+    std::string sanitized_text = sanitizer.sanitize(text);
     std::lock_guard<std::recursive_mutex> lock(engine_mutex); // KİLİT
     if (!model || !ctx) return {}; // Doğrudan model ve ctx kontrolü
 
-    std::vector<llama_token> tokens_list = tokenize(text, true);
+    std::vector<llama_token> tokens_list = tokenize(sanitized_text, true);
     
     // GÜVENLİK: Boş metin veya çok uzun metin kontrolü
     if (tokens_list.empty()) return {};
@@ -176,10 +179,12 @@ std::vector<float> CerebrumLux::LLMEngine::reduce_embedding_dimension(const std:
 std::string LLMEngine::generate(const std::string& prompt, 
                                 const LLMGenerationConfig& config,
                                 std::function<bool(const std::string&)> callback) {
+    UnicodeSanitizer sanitizer;
+    std::string sanitized_prompt = sanitizer.sanitize(prompt);
     std::lock_guard<std::recursive_mutex> lock(engine_mutex); // KİLİT
     if (!model || !ctx) return {};
 
-    std::vector<llama_token> tokens_list = tokenize(prompt, true);
+    std::vector<llama_token> tokens_list = tokenize(sanitized_prompt, true);
     
     // --- GÜVENLİK YAMASI: BUFFER OVERFLOW ENGELLEME ---
     const int max_prompt_tokens = n_ctx - config.max_tokens;
@@ -256,7 +261,7 @@ std::string LLMEngine::generate(const std::string& prompt,
     }
 
     llama_batch_free(batch);
-    return full_response;
+    return sanitizer.sanitize(full_response);
 }
 
 } // namespace CerebrumLux

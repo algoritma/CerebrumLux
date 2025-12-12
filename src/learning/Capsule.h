@@ -59,12 +59,26 @@ struct Capsule {
 
     // from_json için kural
     friend void from_json(const nlohmann::json& j, Capsule& c) {
+        // Essential fields - throw error if missing
         j.at("id").get_to(c.id);
-        //j.at("trust_score").get_to(c.trust_score);
+        j.at("content").get_to(c.content);
+        
+        // Optional fields - use .value() with defaults
         c.trust_score = j.value("trust_score", 1.0f);
+        c.topic = j.value("topic", "DefaultTopic");
+        c.source = j.value("source", "DefaultSource");
+        c.plain_text_summary = j.value("plain_text_summary", "");
+        c.cryptofig_blob_base64 = j.value("cryptofig_blob_base64", "");
+        c.embedding = j.value("embedding", std::vector<float>{});
+        c.confidence = j.value("confidence", 0.5f);
+        c.encrypted_content = j.value("encrypted_content", "");
+        c.signature_base64 = j.value("signature_base64", "");
+        c.encryption_iv_base64 = j.value("encryption_iv_base64", "");
+        c.gcm_tag_base64 = j.value("gcm_tag_base64", "");
+        c.code_file_path = j.value("code_file_path", "");
 
+        // Timestamp with fallback
         if (j.contains("timestamp_utc")) {
-            // ISO 8601 string'i timestamp_utc'ye dönüştür
             std::string ts_str = j.at("timestamp_utc").get<std::string>();
             std::tm tm = {};
             std::stringstream ss(ts_str);
@@ -78,32 +92,6 @@ struct Capsule {
             // "timestamp_utc" yoksa, mevcut zamanı varsayılan olarak ayarla
             c.timestamp_utc = std::chrono::system_clock::now();
         }
-
-        // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak.
-        // Daha sonra KnowledgeBase.cpp'de 256 boyuta düzeltilecek.
-        if (j.contains("embedding") && j.at("embedding").is_array()) {
-            // Embedding okuma mantığı: Eğer JSON'da varsa oku, yoksa boş veya 0 boyutlu bırak.
-        // Daha sonra KnowledgeBase.cpp'de 256 boyuta düzeltilecek.
-        if (j.contains("embedding") && j.at("embedding").is_array()) {
-            j.at("embedding").get_to(c.embedding);
-        } else {
-            c.embedding.clear(); // JSON'da yoksa veya geçersizse boş bırak
-        }
-        } else {
-            c.embedding.clear(); // JSON'da yoksa veya geçersizse boş bırak
-        }
-        
-        j.at("topic").get_to(c.topic);
-        j.at("source").get_to(c.source);
-        j.at("content").get_to(c.content);
-        j.at("plain_text_summary").get_to(c.plain_text_summary);
-        j.at("cryptofig_blob_base64").get_to(c.cryptofig_blob_base64);
-        j.at("confidence").get_to(c.confidence);
-        j.at("encrypted_content").get_to(c.encrypted_content);
-        j.at("signature_base64").get_to(c.signature_base64);
-        j.at("encryption_iv_base64").get_to(c.encryption_iv_base64);
-        j.at("gcm_tag_base64").get_to(c.gcm_tag_base64);
-        if (j.contains("code_file_path")) j.at("code_file_path").get_to(c.code_file_path); //EKLENDİ: code_file_path JSON'dan okunuyor
     }
 };
 

@@ -73,6 +73,15 @@ void LearningModule::learnFromText(const std::string& text,
     new_capsule.timestamp_utc = std::chrono::system_clock::now();
 
     new_capsule.embedding = compute_embedding(new_capsule.content);
+
+    // --- ÇÖKME ÖNLEME: Sıfır veya geçersiz embedding'leri veritabanına ekleme ---
+    if (new_capsule.embedding.empty() || std::all_of(new_capsule.embedding.begin(), new_capsule.embedding.end(), [](float f){ return f == 0.0f; }))
+    {
+        LOG_DEFAULT(LogLevel::WARNING, "LearningModule: Geçersiz (sıfır veya boş) embedding üretildi, kapsül veritabanına eklenmeyecek. Metin: " << text.substr(0, 100) << "...");
+        return; // Fonksiyondan çık, bu kapsülü işleme
+    }
+    // --------------------------------------------------------------------------
+
     new_capsule.cryptofig_blob_base64 = cryptofig_encode(new_capsule.embedding);
 
     knowledgeBase.add_capsule(new_capsule);

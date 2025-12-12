@@ -26,6 +26,7 @@
 #include "../gui/DataTypes.h"
 #include "ui_MainWindow.h"
 
+class TrainingHubPanel; // Forward declaration
 
 namespace CerebrumLux {
 
@@ -44,7 +45,6 @@ public:
     KnowledgeBasePanel* getKnowledgeBasePanel() const;
     QTablePanel* getQTablePanel() const; // YENİ: QTablePanel için getter
     ChatPanel* getChatPanel() const;     // YENİ: ChatPanel için getter
-
  
     void updateGraphData(const QString& seriesName, const QMap<qreal, qreal>& data);
     void updateSimulationHistory(const QVector<CerebrumLux::SimulationData>& data);
@@ -76,6 +76,7 @@ private:
     KnowledgeBasePanel *knowledgeBasePanel;
     QTablePanel *qTablePanel; // YENİ: QTablePanel üyesi
     ChatPanel *chatPanel;     // YENİ: ChatPanel üyesi
+    TrainingHubPanel *trainingHubPanel;   // YENİ: TrainingHubPanel üyesi
 
     EngineIntegration& engine;
     LearningModule& learningModule;
