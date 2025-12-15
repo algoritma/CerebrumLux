@@ -21,7 +21,10 @@
 #include "../gui/panels/KnowledgeBasePanel.h"
 #include "../gui/panels/QTablePanel.h" // YENİ: QTablePanel için başlık
 #include "../gui/panels/ChatPanel.h"
+#include "../ai_tutor/tutor_gui_bridge.h" // YENİ: TutorGUIBridge için
+#include "../ai_tutor/tutor_broker_adapter.h" // YENİ: TutorBrokerAdapter için
 #include "../communication/natural_language_processor.h" // CerebrumLux::ChatResponse için
+#include "../core/CoreEventBus.h" // YENİ: CoreEventBus için
 #include "../gui/engine_integration.h"
 #include "../gui/DataTypes.h"
 #include "ui_MainWindow.h"
@@ -66,6 +69,12 @@ private slots:
     // YENİ: Asenkron embedding hazır olduğunda çağrılır
     void onEmbeddingReady(const std::string& request_id, const std::vector<float>& embedding);
 
+    // YENİ: TutorBroker'dan gelen mesajları GUI'ye aktarmak için slot
+    void onTutorBrokerMessageReceived(const QString &from, const QString &type, const QString &payload);
+
+    // YENİ: Öğrenme metrikleri güncellendiğinde çağrılacak slot
+    void onLearningUpdate(const QString &metric, float value);
+
 private:
     Ui::MainWindow *ui;
     QTabWidget *tabWidget;
@@ -75,11 +84,13 @@ private:
     CapsuleTransferPanel *capsuleTransferPanel;
     KnowledgeBasePanel *knowledgeBasePanel;
     QTablePanel *qTablePanel; // YENİ: QTablePanel üyesi
-    ChatPanel *chatPanel;     // YENİ: ChatPanel üyesi
-    TrainingHubPanel *trainingHubPanel;   // YENİ: TrainingHubPanel üyesi
-
-    EngineIntegration& engine;
-    LearningModule& learningModule;
+        ChatPanel *chatPanel;     // YENİ: ChatPanel üyesi
+        TrainingHubPanel *trainingHubPanel;   // YENİ: TrainingHubPanel üyesi
+    
+        TutorGUIBridge* tutorGuiBridge; // YENİ: TutorGUIBridge için üye
+        TutorBrokerAdapter* tutorBrokerAdapter; // YENİ: TutorBrokerAdapter için üye
+     
+        EngineIntegration& engine;    LearningModule& learningModule;
 
     QTimer *guiUpdateTimer;
 

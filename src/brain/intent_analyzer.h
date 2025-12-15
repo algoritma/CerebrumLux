@@ -4,19 +4,25 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <memory>
 #include <algorithm> // std::max için
 #include "../core/enums.h" // UserIntent, AIAction için
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include "intent_template.h" // IntentTemplate için
+#include "IntentSignal.h" // IntentSignal struct için
+#include "../communication/fasttext_wrapper.h" // YENİ: FastTextWrapper için
 
-namespace CerebrumLux { // IntentAnalyzer sınıfı bu namespace içine alınacak
+namespace CerebrumLux {
 
 class IntentAnalyzer {
 public:
-    IntentAnalyzer();
+    IntentAnalyzer(FastTextWrapper& fastTextRef); // YENİ: FastTextWrapper referansı alacak şekilde kurucu güncellendi
 
     virtual UserIntent analyze_intent(const DynamicSequence& sequence);
     virtual float get_confidence_for_intent(UserIntent intent_id, const std::vector<float>& features) const;
+
+    // YENİ: Hibrit intent analizi
+    std::vector<IntentSignal> analyzeHybrid(const std::string& text);
 
     // Niyet şablonlarını yönetme
     void add_intent_template(const IntentTemplate& new_template);
@@ -31,6 +37,7 @@ public:
 private:
     std::map<UserIntent, IntentTemplate> intent_templates;
     float last_confidence; // En son analiz edilen niyetin güven seviyesi
+    FastTextWrapper& fasttextModel; // YENİ: FastTextWrapper referansı
     
     // Yardımcı fonksiyonlar
     float calculate_cosine_similarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const;

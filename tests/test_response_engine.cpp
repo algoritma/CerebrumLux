@@ -47,10 +47,15 @@ public:
     }
 };
 
+#include "../communication/fasttext_wrapper.h"
+
+// Global dummy wrapper for tests
+CerebrumLux::FastTextWrapper g_dummy_ft_wrapper_re_test("dummy.bin");
+
 // Dummy IntentAnalyzer
 class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer {
 public:
-    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {}
+    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer(g_dummy_ft_wrapper_re_test) {}
     // analyze_intent base class'ta virtual
     CerebrumLux::UserIntent analyze_intent(const CerebrumLux::DynamicSequence& sequence) override { return CerebrumLux::UserIntent::Programming; }
     // get_confidence_for_intent base class'ta virtual
@@ -139,8 +144,8 @@ public:
     void process_feedback(const CerebrumLux::DynamicSequence& sequence, CerebrumLux::UserIntent predicted_intent, const std::deque<CerebrumLux::AtomicSignal>& recent_signals) {}
     // process_explicit_feedback base class'ta virtual
     void process_explicit_feedback(CerebrumLux::UserIntent predicted_intent, CerebrumLux::AIAction action, bool approved, const CerebrumLux::DynamicSequence& sequence, CerebrumLux::AbstractState current_abstract_state) override {
-        std::cout << "[DUMMY LEARNER] Açık geri bildirim: " << CerebrumLux::intent_to_string(predicted_intent)
-                  << ", eylem=" << CerebrumLux::action_to_string(action)
+        std::cout << "[DUMMY LEARNER] Açık geri bildirim: " << CerebrumLux::to_string(predicted_intent)
+                  << ", eylem=" << CerebrumLux::to_string(action)
                   << ", onaylandı=" << (approved ? "Evet" : "Hayır")
                   << ", durum=" << CerebrumLux::abstract_state_to_string(current_abstract_state) << "\n";
     }

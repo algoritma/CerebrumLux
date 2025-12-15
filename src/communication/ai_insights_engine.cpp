@@ -4,6 +4,8 @@
 #include "../core/enums.h" // InsightType, UrgencyLevel, UserIntent, AIAction, KnowledgeTopic, InsightSeverity için
 #include "../core/utils.h" // intent_to_string, SafeRNG için
 #include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
+#include "../brain/cryptofig_processor.h"
+#include "../brain/intent_learner.h" // Needed for IntentLearner definition
 #include "../data_models/dynamic_sequence.h" // DynamicSequence için
 #include <numeric> // std::accumulate için
 #include <algorithm> // std::min, std::max için

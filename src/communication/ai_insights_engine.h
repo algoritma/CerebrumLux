@@ -1,6 +1,8 @@
 #ifndef AI_INSIGHTS_ENGINE_H
 #define AI_INSIGHTS_ENGINE_H
 
+#pragma once
+
 #include <string>
 #include <vector>
 #include <map> // Cooldown mekanizması için

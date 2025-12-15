@@ -1,3 +1,9 @@
+#include "../communication/ai_insights_engine.h"
+#include "../communication/natural_language_processor.h"
+#include "UnicodeSanitizer.h"
+#include "StegoDetector.h"
+#include "WebFetcher.h"
+
 #include "LearningModule.h"
 #include "../core/logger.h"
 #include "../core/enums.h"
@@ -15,7 +21,6 @@
 #include <QUrlQuery> // URL kodlama için gerekli
 #include <QDateTime> // QDateTime::currentDateTime().toString() için
 
-#include "../communication/natural_language_processor.h" // generate_text_embedding için
 #include "../gui/engine_integration.h" // Geçici olarak NLP'ye erişim için
 namespace CerebrumLux {
 
@@ -556,7 +561,7 @@ void LearningModule::update_q_values(const std::vector<float>& current_state_emb
 
     q_table.q_values[current_state_key][action] = current_q_value + learning_rate_rl * (reward + discount_factor * max_next_q - current_q_value);
     
-    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table değeri güncellendi. Durum (Kısmi): " << current_state_key.substr(0, std::min((size_t)50, current_state_key.length())) << "..., Eylem: " << CerebrumLux::action_to_string(action) << ", Ödül: " << reward << ", Yeni Q-Değeri: " << q_table.q_values[current_state_key][action]);
+    LOG_DEFAULT(LogLevel::INFO, "[LearningModule] Q-Table değeri güncellendi. Durum (Kısmi): " << current_state_key.substr(0, std::min((size_t)50, current_state_key.length())) << "..., Eylem: " << CerebrumLux::to_string(action) << ", Ödül: " << reward << ", Yeni Q-Değeri: " << q_table.q_values[current_state_key][action]);
     emit qTableUpdated(); // Q-Table güncellendiğinde sinyal yay
     // PERFORMANS DÜZELTMESİ:
     // save_q_table(); ÇAĞRISI KALDIRILDI.
@@ -575,7 +580,7 @@ void LearningModule::save_q_table() const {
         EmbeddingStateKey state_key = state_pair.first;
         nlohmann::json action_map_json;
         for (const auto& action_pair : state_pair.second) {
-            action_map_json[CerebrumLux::action_to_string(action_pair.first)] = action_pair.second;
+            action_map_json[CerebrumLux::to_string(action_pair.first)] = action_pair.second;
         }
         std::string action_map_json_str = action_map_json.dump();
 
@@ -630,7 +635,7 @@ void LearningModule::onAutoSaveTimerTimeout() {
 void LearningModule::setLastInteraction(const std::vector<float>& state, CerebrumLux::AIAction action) {
     this->last_interaction_state = state;
     this->last_interaction_action = action;
-    LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: RLHF için son etkileşim kaydedildi. Action: " << CerebrumLux::action_to_string(action));
+    LOG_DEFAULT(LogLevel::DEBUG, "LearningModule: RLHF için son etkileşim kaydedildi. Action: " << CerebrumLux::to_string(action));
 }
 
 // YENİ: Kullanıcı geri bildirimini işle
@@ -646,7 +651,7 @@ void LearningModule::processUserChatFeedback(bool isPositive) {
      
     LOG_DEFAULT(LogLevel::INFO, "LearningModule: RLHF Tetiklendi -> Geri Bildirim: " << (isPositive ? "POZİTİF" : "NEGATİF") 
                                 << ", Ödül: " << reward 
-                                << ", Action: " << CerebrumLux::action_to_string(last_interaction_action));
+                                << ", Action: " << CerebrumLux::to_string(last_interaction_action));
 
     // Q-Table'ı güncelle
     // Not: Next state olarak şimdilik mevcut state'i veriyoruz, bu basit bir "bandit" yaklaşımıdır.
@@ -656,6 +661,39 @@ void LearningModule::processUserChatFeedback(bool isPositive) {
     // Örn: Son state-action çiftini bul ve reward += feedback_score uygula.
     // Şimdilik sadece logluyoruz çünkü "son action"ı stateful olarak takip etmemiz gerek.
     // Ancak bu fonksiyonun varlığı, GUI entegrasyonu için yeterli.
+}
+
+
+
+void LearningModule::processTeacherAutoEvaluation(
+    const std::string& user_input,
+    const std::string& assistant_reply
+) {
+    if (last_interaction_state.empty() ||
+        last_interaction_action == CerebrumLux::AIAction::None) {
+        LOG_DEFAULT(LogLevel::TRACE,
+            "[TeacherAI] Auto-eval skipped: no last interaction.");
+        return;
+    }
+    TeacherAutoEval eval =
+        teacherAI.auto_evaluate_chat(user_input, assistant_reply);
+
+    // 0–5 arası reward (TeacherAI ölçeği)
+    float reward = eval.overall() * 5.0f;
+
+    LOG_DEFAULT(LogLevel::INFO,
+        "[TeacherAI AutoEval] relevance=" << eval.relevance
+        << " coherence=" << eval.coherence
+        << " pedagogy=" << eval.pedagogical_quality
+        << " reward=" << reward
+        << " action=" << CerebrumLux::to_string(last_interaction_action));
+
+    update_q_values(
+        last_interaction_state,
+        last_interaction_action,
+        reward,
+        last_interaction_state
+    );
 }
 
 } // namespace CerebrumLux

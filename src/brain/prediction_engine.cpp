@@ -38,7 +38,7 @@ UserIntent PredictionEngine::predict_next_intent(UserIntent previous_intent, con
         }
     }
 
-    LOG_DEFAULT(LogLevel::DEBUG, "PredictionEngine: Niyet '" << intent_to_string(previous_intent) << "' sonrası için tahmin edilen niyet: '" << intent_to_string(predicted) << "' (Olasılık: " << highest_prob << ")");
+    LOG_DEFAULT(LogLevel::DEBUG, "PredictionEngine: Niyet '" << CerebrumLux::to_string(previous_intent) << "' sonrası için tahmin edilen niyet: '" << CerebrumLux::to_string(predicted) << "' (Olasılık: " << highest_prob << ")");
     return predicted;
 }
 
@@ -68,7 +68,7 @@ void PredictionEngine::update_state_graph(UserIntent previous_intent, UserIntent
             }
         }
     }
-    LOG_DEFAULT(LogLevel::DEBUG, "PredictionEngine: Durum grafiği güncellendi: '" << intent_to_string(previous_intent) << "' -> '" << intent_to_string(current_intent) << "'");
+    LOG_DEFAULT(LogLevel::DEBUG, "PredictionEngine: Durum grafiği güncellendi: '" << CerebrumLux::to_string(previous_intent) << "' -> '" << CerebrumLux::to_string(current_intent) << "'");
 }
 
 float PredictionEngine::query_intent_probability(UserIntent target_intent, const DynamicSequence& current_sequence) const {
@@ -88,7 +88,7 @@ void PredictionEngine::learn_time_patterns(const std::deque<AtomicSignal>& signa
     if (time_pattern_history[current_intent].size() > time_pattern_history_limit) {
         time_pattern_history[current_intent].pop_front();
     }
-    LOG_DEFAULT(LogLevel::TRACE, "PredictionEngine: Niyet '" << intent_to_string(current_intent) << "' için zaman deseni öğrenildi: " << duration << " us.");
+    LOG_DEFAULT(LogLevel::TRACE, "PredictionEngine: Niyet '" << CerebrumLux::to_string(current_intent) << "' için zaman deseni öğrenildi: " << duration << " us.");
 }
 
 StateEdge* PredictionEngine::find_or_create_edge(UserIntent from_intent, UserIntent to_intent) {
@@ -100,7 +100,7 @@ StateEdge* PredictionEngine::find_or_create_edge(UserIntent from_intent, UserInt
         // Yeni bir kenar oluştur
         state_graph_edges[key] = StateEdge(from_intent, to_intent);
         state_graph_nodes[from_intent].transition_probabilities[to_intent] = state_graph_edges[key].weight; // Düğümde de referans
-        LOG_DEFAULT(LogLevel::DEBUG, "PredictionEngine: Yeni durum kenarı oluşturuldu: " << intent_to_string(from_intent) << " -> " << intent_to_string(to_intent));
+        LOG_DEFAULT(LogLevel::DEBUG, "PredictionEngine: Yeni durum kenarı oluşturuldu: " << CerebrumLux::to_string(from_intent) << " -> " << CerebrumLux::to_string(to_intent));
         return &(state_graph_edges[key]);
     }
 }

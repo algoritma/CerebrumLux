@@ -23,7 +23,7 @@ struct AtomicSignal {
     int mouse_y;
     int mouse_delta_x;
     int mouse_delta_y;
-    MouseButtonState mouse_button_state; // Left, Right, Middle, None
+    CerebrumLux::MouseButtonState mouse_button_state; // Left, Right, Middle, None
 
     // Ses ve Görüntü sinyallerine özel (şimdilik placeholder)
     std::vector<unsigned char> raw_audio_data;
@@ -46,7 +46,7 @@ struct AtomicSignal {
     AtomicSignal()
         : id(""), type(CerebrumLux::SensorType::InternalAI), value(""), timestamp_us(0), // Namespace ile güncellendi
           key_type(CerebrumLux::KeyType::Other), event_type(CerebrumLux::KeyEventType::Press), // Namespace ile güncellendi
-          mouse_x(0), mouse_y(0), mouse_delta_x(0), mouse_delta_y(0), mouse_button_state(CerebrumLux::MouseButtonState::None), // Namespace ile güncellendi
+          mouse_x(0), mouse_y(0), mouse_delta_x(0), mouse_delta_y(0), mouse_button_state(CerebrumLux::MouseButtonState::None), // Namespace ile g├╝ncellendi
           ai_internal_event_type(""), ai_internal_event_data(""), confidence(0.0f),
           current_network_active(false), network_activity_level(0), network_protocol(""),
           system_event_type(""), system_event_data("") {}

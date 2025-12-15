@@ -31,6 +31,8 @@ struct IntentTemplate {
         // ... diğer aksiyonlar için başlangıç puanları
     }
 
+    float matchScore(const std::string& text) const;
+
     // JSON serileştirme desteği için (eğer kullanılıyorsa)
     // NLOHMANN_DEFINE_TYPE_INTRUSIVE(IntentTemplate, id, weights, confidence_threshold, action_success_scores)
 };

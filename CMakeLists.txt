@@ -4,6 +4,12 @@ project(CerebrumLux)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if (MINGW AND NOT DEFINED VCPKG_TARGET_TRIPLET)
+    message(FATAL_ERROR
+        "MinGW detected but VCPKG_TARGET_TRIPLET is not set. "
+        "Use -DVCPKG_TARGET_TRIPLET=x64-mingw-static")
+endif()
+
 # -----------------------------
 # Qt6 entegrasyonu
 # -----------------------------
@@ -13,9 +19,12 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+
 # Projenin dizinlerini tanımla
 set(PROJECT_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(PROJECT_TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+
+add_subdirectory(src/ai_tutor)
 
 # -----------------------------
 # OpenSSL entegrasyonu (vcpkg static)
@@ -25,6 +34,7 @@ find_package(OpenSSL REQUIRED) # OpenSSL kütüphanelerini bul
 # --- Yeni Kütüphaneler: Eigen3 (vcpkg üzerinden) ---
 find_package(Eigen3 CONFIG REQUIRED)          # Eigen3 için vcpkg tarafından sağlanan hedef
 find_package(hnswlib CONFIG REQUIRED) # hnswlib için vcpkg tarafından sağlanan hedef
+find_package(GTest CONFIG REQUIRED) # GTest için vcpkg tarafından sağlanan hedef
 
 # gumbo kütüphanesini bul (HTML5 parser)
 # find_package(gumbo CONFIG REQUIRED) # Gumbo manuel olarak bağlanıyor
@@ -49,6 +59,10 @@ set(LLAMA_AVX2 ON CACHE BOOL "Enable AVX2" FORCE)
 set(LLAMA_FMA ON CACHE BOOL "Enable FMA" FORCE)
 set(LLAMA_F16C ON CACHE BOOL "Enable F16C" FORCE)
 
+# YENİ: GPU desteğini etkinleştir
+set(LLAMA_BUILD_GGML_VULKAN ON CACHE BOOL "Enable Vulkan backend for GGML" FORCE)
+set(LLAMA_BUILD_GGML_CUDA ON CACHE BOOL "Enable CUDA backend for GGML" FORCE)
+
 # NATIVE kapalı kalsın (Derleme taşınabilirliği için)
 set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
@@ -68,7 +82,12 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/llama.cpp)
 # -----------------------------
 # Core library
 # -----------------------------
+
+
+
+# ORIGINAL CerebrumLuxCore library
 file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
+    "${PROJECT_SRC_DIR}/ai_tutor/*.cpp"
     "${PROJECT_SRC_DIR}/brain/*.cpp"
     "${PROJECT_SRC_DIR}/communication/*.cpp"
     "${PROJECT_SRC_DIR}/core/*.cpp"
@@ -86,6 +105,7 @@ file(GLOB_RECURSE CEREBRUMLUX_CORE_SOURCES
 )
 
 file(GLOB_RECURSE CEREBRUMLUX_CORE_HEADERS
+    "${PROJECT_SRC_DIR}/ai_tutor/*.h"
     "${PROJECT_SRC_DIR}/brain/*.h"
     "${PROJECT_SRC_DIR}/communication/*.h"
     "${PROJECT_SRC_DIR}/core/*.h"
@@ -121,6 +141,7 @@ set_target_properties(fasttext PROPERTIES
 
 target_include_directories(CerebrumLuxCore PUBLIC
     "${PROJECT_SRC_DIR}"
+    "${PROJECT_SRC_DIR}/ai_tutor"
     "${PROJECT_SRC_DIR}/brain"
     "${PROJECT_SRC_DIR}/communication"
     "${PROJECT_SRC_DIR}/core"
@@ -192,9 +213,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         "${PROJECT_SRC_DIR}/gui/panels/QTableWorker.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/ChatPanel.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/TutorPanel.cpp"
-        "${PROJECT_SRC_DIR}/gui/panels/TutorWorker.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/CurriculumPanel.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/TrainingHubPanel.cpp"
+    )
+    set_target_properties(CerebrumLuxGUI PROPERTIES
+        AUTOMOC ON
+        AUTOUIC ON
+        AUTORCC ON
     )
     target_link_options(CerebrumLuxGUI PRIVATE -Wl,--subsystem,windows)
 else()
@@ -219,10 +244,16 @@ else()
         "${PROJECT_SRC_DIR}/gui/panels/CurriculumPanel.cpp"
         "${PROJECT_SRC_DIR}/gui/panels/TrainingHubPanel.cpp"
     )
+    set_target_properties(CerebrumLuxGUI PROPERTIES
+        AUTOMOC ON
+        AUTOUIC ON
+        AUTORCC ON
+    )
 endif()
 
 target_link_libraries(CerebrumLuxGUI PRIVATE
     CerebrumLuxCore
+    ai_tutor
     Qt6::Core
     Qt6::Gui
     #Qt6::Widgets
@@ -354,6 +385,7 @@ target_link_libraries(test_response_engine PRIVATE
     #hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla
     advapi32
     winmm
+    GTest::gtest GTest::gtest_main
     # PROBLEMLİ BAYRAKLAR KALDIRILDI: mingw32, stdc++, gcc, -Wl,--enable-stdcall-fixup
 )
 
@@ -388,6 +420,7 @@ target_link_libraries(test_learning_module PRIVATE
     winpthread
     advapi32
     winmm
+    GTest::gtest GTest::gtest_main
     # PROBLEMLİ BAYRAKLAR KALDIRILDI: mingw32, stdc++, gcc, -Wl,--enable-stdcall-fixup
 )
 
@@ -396,6 +429,54 @@ target_include_directories(test_learning_module PRIVATE
     "${PROJECT_TESTS_DIR}"
     "${PROJECT_SRC_DIR}/crypto"
     "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için gerekli
+)
+
+# -----------------------------
+# Test executable (test_conversation_learning) - YENİ EKLENDİ
+# -----------------------------
+add_test(
+    NAME test_conversation_learning
+    COMMAND test_conversation_learning_gtest
+)
+file(GLOB TEST_CONVERSATION_LEARNING_SOURCE "${PROJECT_TESTS_DIR}/test_conversation_learning.cpp")
+add_executable(test_conversation_learning_gtest ${TEST_CONVERSATION_LEARNING_SOURCE})
+
+target_link_libraries(test_conversation_learning_gtest PRIVATE 
+    CerebrumLuxCore # CerebrumLuxCore'u testlere bağla
+    GTest::gtest
+    GTest::gtest_main
+    ai_tutor # StudentAI, TeacherAI, LlamaAdapter için
+    Qt6::Core # Bazı testler Qt Core'a ihtiyaç duyabilir
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    # nlohmann::json gibi kütüphaneleri de buraya eklemeniz gerekebilir.
+    # eğer test_conversation_learning'de json kullanılıyorsa
+    "C:/vcpkg/installed/x64-mingw-static/lib/libgumbo.a" # Gumbo'yu teste bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/liblmdb.a" # LMDB kütüphanesini teste bağla
+    Eigen3::Eigen # Eigen3 kütüphanesini teste bağla
+    "C:/vcpkg/installed/x64-mingw-static/lib/libzlib.a" # Zlib'i teste statik olarak bağla
+    hnswlib::hnswlib # hnswlib kütüphanesini vcpkg hedefi ile bağla
+    winpthread
+    ws2_32
+    crypt32
+    gdi32
+    version
+    advapi32
+    winmm
+    GTest::gtest GTest::gtest_main
+)
+
+target_include_directories(test_conversation_learning_gtest PRIVATE
+    "${PROJECT_SRC_DIR}"
+    "${PROJECT_TESTS_DIR}"
+    "${PROJECT_SRC_DIR}/crypto"
+    "${PROJECT_SRC_DIR}/external" # nlohmann/json.hpp için gerekli
+    "${PROJECT_SRC_DIR}/ai_tutor" # StudentAI, TeacherAI için
+    "${PROJECT_SRC_DIR}/learning" # LearningStore, BehaviorProfile için
+    "${PROJECT_SRC_DIR}/swarm_vectordb" # SwarmVectorDB DataModels için
+    "${PROJECT_SRC_DIR}/hnswlib_wrapper" # hnswlib_wrapper.h için
+    "C:/vcpkg/installed/x64-mingw-static/include/hnswlib" # hnswlib başlık dizini (vcpkg)
+    ${Eigen3_INCLUDE_DIRS} # Eigen3 başlık dizinleri (find_package ile gelir)
 )
 
 # -----------------------------

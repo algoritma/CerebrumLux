@@ -1,34 +1,36 @@
 #include "TrainingHubPanel.h"
 #include "CurriculumPanel.h"
 #include "TutorPanel.h"
-#include "TutorWorker.h"
+#include "ai_tutor/tutor_broker_router.h" // YENİ
+#include "brain/llm_engine.h" // LLMEngine için
 #include <QVBoxLayout>
 #include <QSplitter>
-#include <QThread>
+#include <QDebug>
 
-TrainingHubPanel::TrainingHubPanel(CerebrumLux::LLMEngine* teacherModel, 
+TrainingHubPanel::TrainingHubPanel(CerebrumLux::LLMEngine* teacherModel,
                                    CerebrumLux::LLMEngine* studentModel,
                                    CerebrumLux::LearningModule* learningModule,
                                    QWidget *parent)
-    : QWidget(parent), m_teacherModel(teacherModel), m_studentModel(studentModel), 
-      m_learningModule(learningModule),
-      m_worker(nullptr), m_workerThread(nullptr)
+    : QWidget(parent), m_teacherModel(teacherModel), m_studentModel(studentModel),
+      m_learningModule(learningModule), m_tutorBroker(nullptr)
 {
     setupUi();
 }
 
 TrainingHubPanel::~TrainingHubPanel()
 {
+    // Broker'ı durdur ve temizle
+    if (m_tutorBroker) {
+        m_tutorBroker->stop();
+        delete m_tutorBroker;
+    }
 }
 
 void TrainingHubPanel::setupUi() {
     auto mainLayout = new QHBoxLayout(this);
     auto splitter = new QSplitter(Qt::Horizontal, this);
 
-    // Left side: Curriculum management
     m_curriculumPanel = new CurriculumPanel(this);
-
-    // Right side: Training execution and log
     m_tutorPanel = new TutorPanel(this);
 
     splitter->addWidget(m_curriculumPanel);
@@ -38,53 +40,62 @@ void TrainingHubPanel::setupUi() {
 
     mainLayout->addWidget(splitter);
 
-    // --- Worker and Thread Management ---
+    // --- Broker Yönetimi ---
+    m_tutorBroker = new TutorBroker();
+
+    // LLM'leri ve diğer servisleri Broker'a bağla
+    if(m_teacherModel) {
+        // TeacherAI ve StudentAI'nin Llama'yı kullanmasını sağlayacak adaptörler
+        // Şimdilik basit bir sohbet fonksiyonu bağlıyoruz.
+        // Gerçek implementasyonda prompt'u daha detaylı işlemek gerekebilir.
+        auto llm_callback = [this](const std::string& prompt) -> std::string {
+            CerebrumLux::LLMGenerationConfig config;
+            // config ayarları...
+            return m_teacherModel->generate(prompt, config, nullptr);
+        };
+        m_tutorBroker->set_external_llm(llm_callback);
+    }
+    // NOT: FastText veya diğer intent classifier'lar da burada set edilebilir.
+    // m_tutorBroker->set_fasttext_classifier(...)
+
+    // GUI sinyallerini Broker'a bağla
     connect(m_tutorPanel, &TutorPanel::startTrainingClicked, this, [this]() {
-        // Eğer zaten çalışan bir thread varsa, yenisini başlatma
-        if (m_workerThread && m_workerThread->isRunning()) {
-            return;
+        // Müfredatı panelden alıp globale yükle
+        const CerebrumLux::Curriculum& curriculum = m_curriculumPanel->getCurriculum();
+        for(const auto& pair : curriculum.sections) {
+            CerebrumLux::GLOBAL_CURRICULUM.addSection(pair.first, pair.second);
         }
-        Curriculum curriculum = m_curriculumPanel->getCurriculum();
         
-        // Yeni Thread ve Worker oluştur
-        m_workerThread = new QThread(this);
-        // LearningModule'ü de geçiriyoruz
-        m_worker = new TutorWorker(m_teacherModel, m_studentModel, m_learningModule, curriculum);
-        m_worker->moveToThread(m_workerThread);
-
-        // Connect worker signals to TutorPanel slots
-        connect(m_workerThread, &QThread::started, m_worker, &TutorWorker::run);
-        connect(m_worker, &TutorWorker::update, m_tutorPanel, &TutorPanel::handleTrainingUpdate);
-        connect(m_worker, &TutorWorker::finished, m_tutorPanel, &TutorPanel::handleTrainingFinished);
-        
-        // İşlem bittiğinde thread'i durdur
-        connect(m_worker, &TutorWorker::finished, m_workerThread, &QThread::quit);
-
-        // Temizlik: Worker ve Thread işleri bitince silinsin
-        connect(m_worker, &TutorWorker::finished, m_worker, &TutorWorker::deleteLater);
-        connect(m_workerThread, &QThread::finished, m_workerThread, &QThread::deleteLater);
-        
-        // Thread tamamen bittiğinde pointerları sıfırla
-        connect(m_workerThread, &QThread::finished, this, [this]() {
-            m_workerThread = nullptr;
-            m_worker = nullptr;
-        });
-        
-        m_workerThread->start();
-   });
+        m_tutorPanel->handleTrainingUpdate("Tutor broker başlatılıyor...");
+        m_tutorBroker->start();
+    });
 
     connect(m_tutorPanel, &TutorPanel::stopTrainingClicked, this, [this]() {
-        if(m_worker) {
-            m_worker->stop(); // Tell the worker to stop its loop
+        if(m_tutorBroker) {
+            m_tutorBroker->stop();
+            m_tutorPanel->handleTrainingUpdate("Tutor broker durduruluyor...");
+            m_tutorPanel->handleTrainingFinished(); // Butonları resetle
         }
     });
 
-    // When the hub is destroyed, make sure to quit the thread if it's running
+    // Broker'dan gelen mesajları GUI'de göster
+    connect(m_tutorBroker, &TutorBroker::new_message_for_gui, this, [this](const Msg& msg){
+        QString displayText = QString("<b>[%1]</b>: %2")
+            .arg(QString::fromStdString(msg.from))
+            .arg(QString::fromStdString(msg.payload.value("text", "")));
+        
+        m_tutorPanel->handleTrainingUpdate(displayText);
+
+        // Hata mesajı varsa durumu güncelle
+        if (msg.type == "error") {
+            m_tutorPanel->handleTrainingFinished(); // Hata durumunda da durmuş gibi göster
+        }
+    });
+    
+    // Pencere kapandığında broker'ı temizle
     connect(this, &QObject::destroyed, this, [=](){
-        if(m_workerThread && m_workerThread->isRunning()){
-            m_worker->stop(); // Önce döngüyü kır
-            m_workerThread->quit();
-            m_workerThread->wait();
+        if(m_tutorBroker){
+            m_tutorBroker->stop();
         }
     });
 }

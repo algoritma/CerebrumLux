@@ -2,7 +2,7 @@
 #define CURRICULUM_PANEL_H
 
 #include <QWidget>
-#include "../../learning/ai_tutor_loop.h"
+#include "../../ai_tutor/curriculum.h"
 
 class QLineEdit;
 class QTextEdit;
@@ -17,8 +17,8 @@ public:
     explicit CurriculumPanel(QWidget *parent = nullptr);
     ~CurriculumPanel();
 
-    Curriculum getCurriculum() const;
-    void setCurriculum(const Curriculum& curriculum);
+    const CerebrumLux::Curriculum& getCurriculum() const;
+    void setCurriculum(const CerebrumLux::Curriculum& curriculum);
 
 private slots:
     void addSection();
@@ -35,7 +35,7 @@ private:
     QPushButton* m_removeButton;
     QTableWidget* m_curriculumTable;
 
-    Curriculum m_curriculum;
+    CerebrumLux::Curriculum m_curriculum;
 };
 
 #endif // CURRICULUM_PANEL_H

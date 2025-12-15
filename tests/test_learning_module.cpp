@@ -27,8 +27,15 @@
 // JSON işleme için
 #include "../src/external/nlohmann/json.hpp"
 
-// test_response_engine.cpp'den alınan dummy sınıflar
-class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer { public: DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {} };
+#include "../src/communication/fasttext_wrapper.h"
+
+// Global dummy wrapper for tests
+CerebrumLux::FastTextWrapper g_dummy_ft_wrapper_lm_test("dummy.bin");
+
+class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer { 
+public: 
+    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer(g_dummy_ft_wrapper_lm_test) {} 
+};
 class DummyIntentLearner : public CerebrumLux::IntentLearner { public: DummyIntentLearner(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SuggestionEngine& s, CerebrumLux::UserProfileManager& u) : CerebrumLux::IntentLearner(a,s,u) {} };
 class DummyPredictionEngine : public CerebrumLux::PredictionEngine { public: DummyPredictionEngine(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SequenceManager& sm) : CerebrumLux::PredictionEngine(a,sm) {} };
 class DummyCryptofigAutoencoder : public CerebrumLux::CryptofigAutoencoder { public: DummyCryptofigAutoencoder() : CerebrumLux::CryptofigAutoencoder() {} };

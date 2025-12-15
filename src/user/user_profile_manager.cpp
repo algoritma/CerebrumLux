@@ -30,7 +30,7 @@ void UserProfileManager::add_intent_history_entry(UserIntent intent, long long t
     if (intent_history.size() > history_limit) {
         intent_history.pop_front();
     }
-    LOG_DEFAULT(LogLevel::TRACE, "UserProfileManager: Niyet tarihçesine eklendi: " << intent_to_string(intent));
+    LOG_DEFAULT(LogLevel::TRACE, "UserProfileManager: Niyet tarihçesine eklendi: " << CerebrumLux::to_string(intent));
 }
 
 void UserProfileManager::add_state_history_entry(AbstractState state, long long timestamp_us) {
@@ -44,8 +44,8 @@ void UserProfileManager::add_state_history_entry(AbstractState state, long long 
 void UserProfileManager::add_explicit_action_feedback(UserIntent intent, AIAction action, bool approved) {
     personalized_action_feedback[intent][action].push_back(approved);
     // Geri bildirim geçmişini sınırlayabiliriz.
-    LOG_DEFAULT(LogLevel::DEBUG, "UserProfileManager: Açık eylem geri bildirimi: Niyet '" << intent_to_string(intent)
-                                  << "', Eylem '" << action_to_string(action) << "', Onaylandı: " << (approved ? "Evet" : "Hayır"));
+    LOG_DEFAULT(LogLevel::DEBUG, "UserProfileManager: Açık eylem geri bildirimi: Niyet '" << CerebrumLux::to_string(intent)
+                                  << "', Eylem '" << CerebrumLux::to_string(action) << "', Onaylandı: " << (approved ? "Evet" : "Hayır"));
 }
 
 float UserProfileManager::get_personalized_feedback_strength(UserIntent intent, AIAction action) const {

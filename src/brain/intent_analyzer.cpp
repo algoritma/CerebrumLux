@@ -4,11 +4,13 @@
 #include <numeric> // std::accumulate için
 #include <cmath>   // std::sqrt için
 #include "../brain/autoencoder.h" // CryptofigAutoencoder::INPUT_DIM için
+#include "../ai_tutor/llama_adapter.h" // LlamaAdapter için
 
 namespace CerebrumLux {
 
-IntentAnalyzer::IntentAnalyzer()
-    : last_confidence(0.0f)
+// Kurucu güncellendi
+IntentAnalyzer::IntentAnalyzer(FastTextWrapper& fastTextRef)
+    : last_confidence(0.0f), fasttextModel(fastTextRef) // fasttextModel başlatıldı
 {
     // Varsayılan niyet şablonlarını başlat
     add_intent_template(IntentTemplate(UserIntent::Undefined, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.1f)));
@@ -18,6 +20,35 @@ IntentAnalyzer::IntentAnalyzer()
     add_intent_template(IntentTemplate(UserIntent::FastTyping, std::vector<float>(CryptofigAutoencoder::INPUT_DIM, 0.5f)));
 
     LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Initialized with default intent templates.");
+}
+
+std::vector<IntentSignal> IntentAnalyzer::analyzeHybrid(const std::string& text) {
+    std::vector<IntentSignal> intentSignals;
+
+    // 1. FastText sonucu
+    const FastTextResult ft = fasttextModel.classify(text);
+    intentSignals.emplace_back(
+        ft.label,
+        static_cast<float>(ft.confidence)
+    );
+
+    // 2. Şablon tabanlı skorlar
+    for (const auto& pair : intent_templates) {
+        const UserIntent intent = pair.first;
+        const IntentTemplate& tmpl = pair.second;
+
+        const float score = tmpl.matchScore(text);
+        if (score <= 0.0f) {
+            continue;
+        }
+
+        intentSignals.emplace_back(
+            to_string(intent),
+            score
+        );
+    }
+
+    return intentSignals;
 }
 
 UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
@@ -43,7 +74,7 @@ UserIntent IntentAnalyzer::analyze_intent(const DynamicSequence& sequence) {
     }
 
     last_confidence = highest_confidence;
-    LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer::analyze_intent: Analiz edilen niyet: " << CerebrumLux::intent_to_string(best_intent) << ", Güven: " << highest_confidence); // GÜNCELLENDİ
+    LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer::analyze_intent: Analiz edilen niyet: " << CerebrumLux::to_string(best_intent) << ", Güven: " << highest_confidence); // GÜNCELLENDİ
     return best_intent;
 }
 
@@ -60,9 +91,9 @@ float IntentAnalyzer::get_confidence_for_intent(UserIntent intent_id, const std:
 void IntentAnalyzer::add_intent_template(const IntentTemplate& new_template) {
     auto [it, inserted] = intent_templates.insert({new_template.id, new_template});
     if (inserted) {
-        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Yeni niyet şablonu eklendi: " << CerebrumLux::intent_to_string(new_template.id)); // GÜNCELLENDİ
+        LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Yeni niyet şablonu eklendi: " << CerebrumLux::to_string(new_template.id)); // GÜNCELLENDİ
     } else {
-        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu zaten mevcut: " << CerebrumLux::intent_to_string(new_template.id) << ". Güncelleniyor."); // GÜNCELLENDİ
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu zaten mevcut: " << CerebrumLux::to_string(new_template.id) << ". Güncelleniyor."); // GÜNCELLENDİ
         it->second = new_template;
     }
 }
@@ -71,9 +102,9 @@ void IntentAnalyzer::update_template_weights(UserIntent intent_id, const std::ve
     auto it = intent_templates.find(intent_id);
     if (it != intent_templates.end()) {
         it->second.weights = new_weights;
-        LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Niyet şablonu ağırlıkları güncellendi: " << CerebrumLux::intent_to_string(intent_id)); // GÜNCELLENDİ
+        LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Niyet şablonu ağırlıkları güncellendi: " << CerebrumLux::to_string(intent_id)); // GÜNCELLENDİ
     } else {
-        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu bulunamadı: " << CerebrumLux::intent_to_string(intent_id) << ", ağırlıklar güncellenemedi."); // GÜNCELLENDİ
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu bulunamadı: " << CerebrumLux::to_string(intent_id) << ", ağırlıklar güncellenemedi."); // GÜNCELLENDİ
     }
 }
 
@@ -82,9 +113,9 @@ void IntentAnalyzer::update_action_success_score(UserIntent intent_id, AIAction 
     if (it != intent_templates.end()) {
         it->second.action_success_scores[action] += score_change;
         it->second.action_success_scores[action] = std::max(0.0f, std::min(1.0f, it->second.action_success_scores[action]));
-        LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Niyet '" << CerebrumLux::intent_to_string(intent_id) << "' için eylem '" << CerebrumLux::action_to_string(action) << "' başarı puanı güncellendi."); // GÜNCELLENDİ
+        LOG_DEFAULT(LogLevel::DEBUG, "IntentAnalyzer: Niyet '" << CerebrumLux::to_string(intent_id) << "' için eylem '" << CerebrumLux::to_string(action) << "' başarı puanı güncellendi."); // GÜNCELLENDİ
     } else {
-        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu bulunamadı: " << CerebrumLux::intent_to_string(intent_id) << ", eylem başarı puanı güncellenemedi."); // GÜNCELLENDİ
+        LOG_DEFAULT(LogLevel::WARNING, "IntentAnalyzer: Niyet şablonu bulunamadı: " << CerebrumLux::to_string(intent_id) << ", eylem başarı puanı güncellenemedi."); // GÜNCELLENDİ
     }
 }
 
@@ -97,7 +128,7 @@ std::vector<float> IntentAnalyzer::get_intent_weights(UserIntent intent_id) cons
 }
 
 void IntentAnalyzer::report_learning_performance(UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg) {
-    LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Niyet '" << CerebrumLux::intent_to_string(intent_id) << "' için öğrenme performansı raporu - İmplicit: " << implicit_feedback_avg << ", Explicit: " << explicit_feedback_avg); // GÜNCELLENDİ
+    LOG_DEFAULT(LogLevel::INFO, "IntentAnalyzer: Niyet '" << CerebrumLux::to_string(intent_id) << "' için öğrenme performansı raporu - İmplicit: " << implicit_feedback_avg << ", Explicit: " << explicit_feedback_avg); // GÜNCELLENDİ
 }
 
 float IntentAnalyzer::calculate_cosine_similarity(const std::vector<float>& vec1, const std::vector<float>& vec2) const {

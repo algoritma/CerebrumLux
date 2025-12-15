@@ -12,12 +12,17 @@
 #include "../communication/suggestion_engine.h" // SuggestionEngine için
 #include "../user/user_profile_manager.h" // UserProfileManager için
 #include "../core/utils.h" // MessageQueue için
+#include "../brain/IntentSignal.h" // YENİ: IntentSignal struct için
 
 namespace CerebrumLux { // IntentLearner sınıfı bu namespace içine alınacak
 
 class IntentLearner {
 public:
     IntentLearner(IntentAnalyzer& analyzer, SuggestionEngine& suggester, UserProfileManager& user_profile_manager);
+
+    // YENİ: Hibrit intent sinyallerinden nihai niyeti çözer
+    std::string resolveIntent(const std::vector<IntentSignal>& intentSignals);
+
 
     // Öğrenme hızını ayarlar
     void set_learning_rate(float rate);

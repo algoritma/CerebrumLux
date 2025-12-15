@@ -73,6 +73,9 @@ SwarmVectorDB::SwarmVectorDB(const std::string& db_path)
     id_to_hnsw_label_map_dbi_ = 0;
     hnsw_next_label_dbi_ = 0;
     capsule_content_dbi_ = 0; // Yeni eklenen DBI'ı başlat
+    q_values_dbi_ = 0;
+    q_metadata_dbi_ = 0;
+    strategy_outcome_dbi_ = 0; // Initialize new DBI
     LOG_DEFAULT(LogLevel::INFO, "SwarmVectorDB Kurucusu: Başlatıldı. DB Yolu: " << db_path_);
     env_ = nullptr; // env_ ve dbi_ üyelerini açıkça başlat
     dbi_ = 0;
@@ -175,6 +178,8 @@ void SwarmVectorDB::close_internal() {
         // Q-Table DBI'larını kapat
         if (q_values_dbi_ != 0) { mdb_dbi_close(env_, q_values_dbi_); q_values_dbi_ = 0; }
         if (q_metadata_dbi_ != 0) { mdb_dbi_close(env_, q_metadata_dbi_); q_metadata_dbi_ = 0; }
+        if (capsule_content_dbi_ != 0) { mdb_dbi_close(env_, capsule_content_dbi_); capsule_content_dbi_ = 0; }
+        if (strategy_outcome_dbi_ != 0) { mdb_dbi_close(env_, strategy_outcome_dbi_); strategy_outcome_dbi_ = 0; } // Close new DBI
 
         // Close the environment
         mdb_env_close(env_);
@@ -328,6 +333,14 @@ bool SwarmVectorDB::open() {
         return false;
     }
     LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'capsule_content_db' başarılı.");
+
+    rc = mdb_dbi_open(txn, "strategy_outcome_db", MDB_CREATE, &strategy_outcome_dbi_); // Open new DBI
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::open(): mdb_dbi_open 'strategy_outcome_db' başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn); mdb_env_close(env_); env_ = nullptr;
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::open(): mdb_dbi_open 'strategy_outcome_db' başarılı.");
 
     rc = mdb_txn_commit(txn);
     if (rc != MDB_SUCCESS) {
@@ -1175,6 +1188,135 @@ std::optional<std::string> SwarmVectorDB::get_capsule_content(const std::string&
 
     if (local_txn) mdb_txn_abort(txn);
     return result;
+}
+
+
+
+// YENİ: Öğretme stratejisi sonuçlarını kaydetmek için metot
+bool SwarmVectorDB::store_strategy_outcome(UserIntent intent, const StrategyOutcome& outcome) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_strategy_outcome(): Veritabanı açık değil. Strateji sonucu depolanamadı.");
+        return false;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_strategy_outcome(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+
+    nlohmann::json j_outcome = outcome; // StrategyOutcome'u JSON'a dönüştür
+    std::string outcome_json_str = j_outcome.dump();
+
+    // Anahtar: IntentType_timestamp (örn: CODE_1678886400)
+    std::string key_str = CerebrumLux::to_string(intent) + "_" + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    
+    MDB_val key, data;
+    key.mv_size = key_str.length();
+    key.mv_data = (void*)key_str.c_str();
+    data.mv_size = outcome_json_str.length();
+    data.mv_data = (void*)outcome_json_str.c_str();
+
+    rc = mdb_put(txn, strategy_outcome_dbi_, &key, &data, 0);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_strategy_outcome(): mdb_put başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return false;
+    }
+
+    rc = mdb_txn_commit(txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::store_strategy_outcome(): mdb_txn_commit başarısız: " << mdb_strerror(rc));
+        return false;
+    }
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::store_strategy_outcome(): Strateji sonucu başarıyla depolandı. Intent: " << CerebrumLux::to_string(intent) << ", Key: " << key_str);
+    return true;
+}
+
+// YENİ: Öğretme stratejisi geçmişini yüklemek için metot
+std::vector<StrategyOutcome> SwarmVectorDB::load_strategy_history(UserIntent intent, int limit) const {
+    std::vector<StrategyOutcome> history;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (env_ == nullptr) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::load_strategy_history(): Veritabanı açık değil. Strateji geçmişi yüklenemedi.");
+        return history;
+    }
+
+    MDB_txn* txn;
+    int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::load_strategy_history(): mdb_txn_begin başarısız: " << mdb_strerror(rc));
+        return history;
+    }
+
+    MDB_cursor* cursor;
+    rc = mdb_cursor_open(txn, strategy_outcome_dbi_, &cursor);
+    if (rc != MDB_SUCCESS) {
+        LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::load_strategy_history(): mdb_cursor_open başarısız: " << mdb_strerror(rc));
+        mdb_txn_abort(txn);
+        return history;
+    }
+
+    MDB_val key, data;
+    std::string intent_prefix = CerebrumLux::to_string(intent) + "_";
+    key.mv_size = intent_prefix.length();
+    key.mv_data = (void*)intent_prefix.c_str();
+
+    // Key'i prefix olarak kullanarak arama yap
+    rc = mdb_cursor_get(cursor, &key, &data, MDB_SET_RANGE);
+    
+    // Geriye doğru tarayarak en son 'limit' kadarını al
+    // LMDB'de anahtarlar sıralı olduğu için, SET_RANGE ile başlayan yerden geri gitmek en sonuncuları verir.
+    // Ancak MDB_PREV ile geriye doğru gitmek, anahtarın tam eşleşmesini değil, aralıktaki bir sonraki/önceki anahtarı bulur.
+    // Doğrudan MDB_LAST kullanarak en sondan başlayıp geriye doğru saymak daha garantili.
+
+    // Eğer SET_RANGE tam eşleşmezse veya ilk eleman değilse, MDB_PREV ile düzeltmek gerekebilir.
+    // En basiti, tüm eşleşen anahtarları toplayıp sonra sıralamak/kesmek.
+    // Ancak performans için direkt sondan başlama denenebilir.
+    std::vector<std::pair<std::string, std::string>> raw_outcomes; // key, value
+    if (rc == MDB_SUCCESS && std::string((char*)key.mv_data, key.mv_size).rfind(intent_prefix, 0) == 0) {
+        raw_outcomes.push_back({std::string((char*)key.mv_data, key.mv_size), std::string((char*)data.mv_data, data.mv_size)});
+    } else if (rc == MDB_NOTFOUND) {
+        // Prefix ile başlayan hiçbir şey bulunamadı. Cursor'ı sonuna alıp geriye doğru denemeye başla
+        rc = mdb_cursor_get(cursor, &key, &data, MDB_LAST);
+        if (rc == MDB_SUCCESS && std::string((char*)key.mv_data, key.mv_size).rfind(intent_prefix, 0) == 0) {
+            raw_outcomes.push_back({std::string((char*)key.mv_data, key.mv_size), std::string((char*)data.mv_data, data.mv_size)});
+        }
+    }
+
+    // Son bulunan noktadan geriye doğru tarama
+    if (rc == MDB_SUCCESS) { // Cursor geçerli bir konumdaysa
+        while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_PREV)) == MDB_SUCCESS && history.size() < limit) {
+            std::string current_key_str((char*)key.mv_data, key.mv_size);
+            if (current_key_str.rfind(intent_prefix, 0) == 0) { // Prefix eşleşiyorsa
+                raw_outcomes.push_back({current_key_str, std::string((char*)data.mv_data, data.mv_size)});
+            } else {
+                break; // Prefix artık eşleşmiyorsa dur
+            }
+        }
+    }
+
+    // Sondan başlattığımız için ters çevir
+    std::reverse(raw_outcomes.begin(), raw_outcomes.end());
+
+    for (const auto& raw_outcome : raw_outcomes) {
+        try {
+            nlohmann::json j = nlohmann::json::parse(raw_outcome.second);
+            StrategyOutcome so;
+            from_json(j, so);
+            history.push_back(so);
+            if (history.size() >= limit) break;
+        } catch (const nlohmann::json::parse_error& e) {
+            LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "SwarmVectorDB::load_strategy_history(): JSON parse hatasi: " << e.what() << ", Veri: " << raw_outcome.second);
+        }
+    }
+
+    mdb_cursor_close(cursor);
+    mdb_txn_abort(txn);
+    LOG_DEFAULT(LogLevel::TRACE, "SwarmVectorDB::load_strategy_history(): Intent " << CerebrumLux::to_string(intent) << " için " << history.size() << " strateji sonucu yüklendi.");
+    return history;
 }
 
 

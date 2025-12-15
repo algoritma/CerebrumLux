@@ -28,8 +28,12 @@
 #include <Windows.h>
 #endif
 
-// Hata düzeltmesi: NLP örneği oluşturmak için gereken dummy sınıflar
-class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer { public: DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {} };
+#include "../communication/fasttext_wrapper.h"
+
+// Global dummy wrapper for tests
+CerebrumLux::FastTextWrapper g_dummy_ft_wrapper_ki("dummy.bin");
+
+class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer { public: DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer(g_dummy_ft_wrapper_ki) {} };
 class DummySuggestionEngine : public CerebrumLux::SuggestionEngine { public: DummySuggestionEngine(CerebrumLux::IntentAnalyzer& a) : CerebrumLux::SuggestionEngine(a) {} };
 class DummyUserProfileManager : public CerebrumLux::UserProfileManager { public: DummyUserProfileManager() : CerebrumLux::UserProfileManager() {} };
 class DummyIntentLearner : public CerebrumLux::IntentLearner { public: DummyIntentLearner(CerebrumLux::IntentAnalyzer& a, CerebrumLux::SuggestionEngine& s, CerebrumLux::UserProfileManager& u) : CerebrumLux::IntentLearner(a,s,u) {} };

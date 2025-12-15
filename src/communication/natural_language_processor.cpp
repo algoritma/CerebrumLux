@@ -45,7 +45,7 @@ ChatResponse LLMProcessor::generate_response_text(
     const CerebrumLux::KnowledgeBase& kb,
     const std::vector<float>& user_embedding
 ) const {
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: generate_response_text çağrıldı. Niyet: " << intent_to_string(current_intent) << ", Durum: " << abstract_state_to_string(current_abstract_state));
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NaturalLanguageProcessor: generate_response_text çağrıldı. Niyet: " << CerebrumLux::to_string(current_intent) << ", Durum: " << abstract_state_to_string(current_abstract_state));
 
     ChatResponse response_obj;
     std::string generated_text = "";
@@ -67,7 +67,7 @@ ChatResponse LLMProcessor::generate_response_text(
              search_term_for_embedding = relevant_keywords[0];
              if (relevant_keywords.size() > 1) search_term_for_embedding += " " + relevant_keywords[1];
          } else {
-             search_term_for_embedding = intent_to_string(current_intent);
+             search_term_for_embedding = CerebrumLux::to_string(current_intent);
              if (current_intent == CerebrumLux::UserIntent::Question) search_term_for_embedding += " nedir";
          }
     }
@@ -269,7 +269,7 @@ std::string NaturalLanguageProcessor::generate_dynamic_prompt(
      const std::vector<CerebrumLux::Capsule>& relevant_capsules
  ) const {
     std::stringstream ss;
-    ss << std::string("Kullanıcının niyeti: ") << CerebrumLux::intent_to_string(intent) << std::string(". ");
+    ss << std::string("Kullanıcının niyeti: ") << CerebrumLux::to_string(intent) << std::string(". ");
     ss << std::string("Mevcut sistem durumu: ") << CerebrumLux::abstract_state_to_string(state) << std::string(". ");
     ss << std::string("AI'ın mevcut hedefi: ") << CerebrumLux::goal_to_string(goal) << std::string(". ");
     ss << std::string("Kullanıcı girdisi (veya anahtar kelimelerden türetilen sorgu): '") << user_input << std::string("'. ");
@@ -326,7 +326,7 @@ void NaturalLanguageProcessor::update_model(const std::string& observed_text, Ce
         weights[i] += learning_rate_nlp * (latent_cryptofig[i] - weights[i]);
         weights[i] = std::min(10.0f, std::max(-10.0f, weights[i]));
     }
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP::update_model updated weights for intent " << CerebrumLux::intent_to_string(true_intent));
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "NLP::update_model updated weights for intent " << CerebrumLux::to_string(true_intent));
 }
 
 void NaturalLanguageProcessor::trainIncremental(const std::string& input, const std::string& expected_intent) {
@@ -396,7 +396,7 @@ std::string NaturalLanguageProcessor::fallback_response_for_intent(CerebrumLux::
     if (intent == CerebrumLux::UserIntent::Undefined || intent == CerebrumLux::UserIntent::Unknown) {
         response += "Niyetinizi tam olarak anlayamadım.";
     } else {
-        response += "Niyetiniz '" + CerebrumLux::intent_to_string(intent) + "' gibi görünüyor, ancak daha fazla bilgiye ihtiyacım var.";
+        response += "Niyetiniz '" + CerebrumLux::to_string(intent) + "' gibi görünüyor, ancak daha fazla bilgiye ihtiyacım var.";
     }
     return response;
 }

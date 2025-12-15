@@ -25,7 +25,7 @@ ChatResponse ResponseEngine::generate_response(
     const KnowledgeBase& kb,
     const std::vector<float>& user_embedding // YENİ: Embedding parametresi
 ) const { 
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "ResponseEngine: Yanıt üretimi isteniyor. Niyet: " << CerebrumLux::intent_to_string(current_intent) << ", Durum: " << CerebrumLux::abstract_state_to_string(current_abstract_state));
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "ResponseEngine: Yanıt üretimi isteniyor. Niyet: " << CerebrumLux::to_string(current_intent) << ", Durum: " << CerebrumLux::abstract_state_to_string(current_abstract_state));
 
     // Kapsülden anahtar kelimeler çıkarma (placeholder olarak sequence'den alındı)
     std::vector<std::string> keywords;
@@ -138,7 +138,7 @@ ChatResponse ResponseEngine::generate_response(
     // ------------------------
 
     // LOG_DEFAULT çağrısını ChatResponse'un üyelerini kullanacak şekilde güncelle
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "ResponseEngine: Yanıt üretildi. Niyet: " << CerebrumLux::intent_to_string(current_intent)
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "ResponseEngine: Yanıt üretildi. Niyet: " << CerebrumLux::to_string(current_intent)
                                   << ", Yanıt (kısaltılmış): " << nlp_generated_response.text.substr(0, std::min((size_t)50, nlp_generated_response.text.length()))
                                   << ", Açıklama Gerekli: " << (nlp_generated_response.needs_clarification ? "Evet" : "Hayır"));
 

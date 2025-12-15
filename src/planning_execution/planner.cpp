@@ -17,7 +17,7 @@ Planner::Planner(IntentAnalyzer& analyzer_ref, SuggestionEngine& suggester_ref, 
 }
 
 std::vector<ActionPlanStep> Planner::create_action_plan(UserIntent current_intent, AbstractState current_abstract_state, AIGoal current_goal, const DynamicSequence& sequence) const {
-    LOG_DEFAULT(LogLevel::DEBUG, "Planner: Niyet '" << intent_to_string(current_intent)
+    LOG_DEFAULT(LogLevel::DEBUG, "Planner: Niyet '" << CerebrumLux::to_string(current_intent)
                                   << "', Durum '" << abstract_state_to_string(current_abstract_state)
                                   << "', Hedef '" << goal_to_string(current_goal) << "' için eylem planı oluşturuluyor.");
 
@@ -51,7 +51,7 @@ std::vector<ActionPlanStep> Planner::create_action_plan(UserIntent current_inten
     // Öneri motorundan ek eylemler al
     AIAction suggested_action = suggestion_engine.suggest_action(current_intent, current_abstract_state, sequence);
     if (suggested_action != AIAction::None) {
-        plan.push_back({suggested_action, "Öneri motorundan gelen eylem: " + action_to_string(suggested_action), 0.8f});
+        plan.push_back({suggested_action, "Öneri motorundan gelen eylem: " + CerebrumLux::to_string(suggested_action), 0.8f});
     }
 
     LOG_DEFAULT(LogLevel::INFO, "Planner: Eylem planı oluşturuldu. Adım sayısı: " << plan.size());

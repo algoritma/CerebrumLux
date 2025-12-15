@@ -88,8 +88,12 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     // Not: LLMEngine::global_instance'ın tanımlı olduğu varsayılmaktadır.
     // learningModule referansı zaten MainWindow'da mevcut
     trainingHubPanel = new TrainingHubPanel(CerebrumLux::LLMEngine::global_instance, CerebrumLux::LLMEngine::global_instance, &learningModule, this);
-    tabWidget->addTab(trainingHubPanel, "Eğitim");
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: TrainingHubPanel tab'ı eklendi. Tab sayısı: " << tabWidget->count());
+    // YENİ: TutorBrokerAdapter ve TutorGUIBridge oluştur ve bağla
+    tutorBrokerAdapter = new TutorBrokerAdapter();
+    tutorGuiBridge = new TutorGUIBridge(this);
+    tutorGuiBridge->setBroker(tutorBrokerAdapter);
+    tutorBrokerAdapter->start();
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: TutorBrokerAdapter ve TutorGUIBridge başlatıldı.");
 
     setWindowTitle("Cerebrum Lux");
     resize(1024, 768);
@@ -102,10 +106,10 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
     connect(simulationPanel, &CerebrumLux::SimulationPanel::commandEntered, this, &CerebrumLux::MainWindow::onSimulationCommandEntered);
     connect(simulationPanel, &CerebrumLux::SimulationPanel::startSimulationTriggered, this, &CerebrumLux::MainWindow::onStartSimulationTriggered);
     connect(simulationPanel, &CerebrumLux::SimulationPanel::stopSimulationTriggered, this, &CerebrumLux::MainWindow::onStopSimulationTriggered);
-    // DÜZELTİLDİ: Chat mesajı sinyali artık ChatPanel'den gelecek
+    // Chat mesajı sinyali doğrudan MainWindow'a gelecek, çünkü intent analizi hala ana yolda
     connect(chatPanel, &CerebrumLux::ChatPanel::chatMessageEntered, this, &CerebrumLux::MainWindow::onChatMessageReceived);
     
-    // YENİ: Kullanıcı geri bildirimi sinyalini LearningModule'e bağla
+    // Kullanıcı geri bildirimi sinyalini LearningModule'e bağla
     connect(chatPanel, &CerebrumLux::ChatPanel::userFeedbackGiven, &learningModule, &CerebrumLux::LearningModule::processUserChatFeedback);
     
     LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: SimulationPanel connect tamamlandı.");
@@ -126,8 +130,33 @@ MainWindow::MainWindow(EngineIntegration& engineRef, LearningModule& learningMod
 
     // YENİ: Asenkron yanıt izleyicisini bağla
     connect(&responseWatcher, &QFutureWatcher<CerebrumLux::ChatResponse>::finished, this, &CerebrumLux::MainWindow::onLLMResponseReady);
+    
+    // YENİ: CoreEventBus sinyallerini MainWindow slotlarına bağla
+    connect(
+        &CerebrumLux::CoreEventBus::getInstance(),
+        &CerebrumLux::CoreEventBus::responseReady,
+        this,
+        [this](const QString& text) {
+            if (chatPanel) {
+                chatPanel->appendChatMessage("CerebrumLux", text);
+            }
+        }
+    );   
+    connect(
+        &CerebrumLux::CoreEventBus::getInstance(),
+        &CerebrumLux::CoreEventBus::learningUpdate,
+        this,
+        &CerebrumLux::MainWindow::onLearningUpdate
+    );
+    connect(
+        &CerebrumLux::CoreEventBus::getInstance(),
+        &CerebrumLux::CoreEventBus::tutorBrokerMessage,
+        this,
+        &CerebrumLux::MainWindow::onTutorBrokerMessageReceived
+    );
+        LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: CoreEventBus sinyalleri bağlandı.");
 
-    guiUpdateTimer = new QTimer(this);
+    guiUpdateTimer = new QTimer(this); // guiUpdateTimer'ı burada tanımla   
     connect(guiUpdateTimer, &QTimer::timeout, this, &CerebrumLux::MainWindow::updateGui);
     // OPTİMİZASYON: GUI güncelleme sıklığı 1 saniyeden 3 saniyeye çekildi.
     // Bu, veritabanı okuma yükünü %66 azaltır ve arayüz donmalarını engeller.
@@ -347,10 +376,12 @@ void MainWindow::onEmbeddingReady(const std::string& request_id, const std::vect
 void MainWindow::onLLMResponseReady() {
     CerebrumLux::ChatResponse response = responseWatcher.result();
     
-    if (chatPanel) {
-        chatPanel->appendChatMessage("CerebrumLux", response);
-    }
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Asenkron NLP yanıtı GUI'ye eklendi.");
+    // YENİ: Yanıtı doğrudan CoreEventBus üzerinden yayınla
+    emit CerebrumLux::CoreEventBus::getInstance().responseReady(
+        QString::fromStdString(response.text)
+    );
+
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MainWindow: Asenkron NLP yanıtı CoreEventBus üzerinden yayınlandı.");
 }
 
 void MainWindow::updateKnowledgeBasePanel() {
@@ -360,6 +391,22 @@ void MainWindow::updateKnowledgeBasePanel() {
     } else {
         LOG_DEFAULT(CerebrumLux::LogLevel::WARNING, "MainWindow::updateKnowledgeBasePanel: knowledgeBasePanel null. KnowledgeBase listesi güncellenemedi.");
     }
+}
+
+void MainWindow::onTutorBrokerMessageReceived(const QString &from, const QString &type, const QString &payload) {
+    if (chatPanel) {
+        QString displayMessage = QString("[%1][%2] %3").arg(from, type, payload);
+        chatPanel->appendChatMessage(from, displayMessage);
+    }
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Tutor Broker mesajı alındı: " << from.toStdString() << ", " << type.toStdString() << ", " << payload.toStdString());
+}
+
+// YENİ: Öğrenme güncellemelerini işlemek için slot
+void MainWindow::onLearningUpdate(const QString &metric, float value) {
+    // Burada öğrenme metriğini GraphPanel'de veya başka bir yerde görselleştirebilirsiniz.
+    // Şimdilik sadece logluyoruz.
+    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MainWindow: Öğrenme metriği güncellendi - " << metric.toStdString() << ": " << value);
+    // Örnek: graphPanel->updateLearningMetric(metric, value);
 }
 
 } // namespace CerebrumLux

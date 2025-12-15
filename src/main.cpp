@@ -30,6 +30,7 @@
 #include "brain/autoencoder.h"
 #include "brain/cryptofig_processor.h"
 #include "brain/llm_engine.h" // YENİ: LLMEngine erişimi için
+#include "communication/fasttext_wrapper.h" // YENİ: FastTextWrapper için
 #include "communication/ai_insights_engine.h"
 #include <filesystem> // YENİ: Dosya yolu kontrolü için (C++17)
 #include "planning_execution/goal_manager.h"
@@ -41,7 +42,8 @@
 #include "learning/KnowledgeBase.h"
 #include "learning/LearningModule.h"
 #include "learning/Capsule.h"
-#include "learning/ai_tutor_loop.h" // YENİ: Otonom eğitmen döngüsü için
+#include "ai_tutor/tutor_broker_router.h" // YENİ: TutorBroker ve Msg için
+#include "ai_tutor/llama_adapter.h"    // YENİ: LlamaAdapter için
 #include <memory> // YENİ: std::unique_ptr için
 
 
@@ -63,6 +65,7 @@ int main(int argc, char *argv[])
 
     qRegisterMetaType<CerebrumLux::IngestResult>("CerebrumLux::IngestResult");
     qRegisterMetaType<CerebrumLux::IngestReport>("CerebrumLux::IngestReport");
+    qRegisterMetaType<Msg>("Msg"); // YENİ: TutorBroker sinyalleri için
     
     // Logger başlat ve yapılandır
     CerebrumLux::Logger::getInstance().init(CerebrumLux::LogLevel::DEBUG, "cerebrum_lux_gui_log.txt", "MAIN_APP");
@@ -74,7 +77,8 @@ int main(int argc, char *argv[])
 
     // --- AI motoru bileşenleri ---
     CerebrumLux::SequenceManager sequenceManager;
-    CerebrumLux::IntentAnalyzer analyzer;
+    CerebrumLux::FastTextWrapper fastTextModel("dummy.bin"); // YENİ: FastText modeli başlatıldı
+    CerebrumLux::IntentAnalyzer analyzer(fastTextModel); // YENİ: FastTextWrapper referansı ile başlatıldı
     CerebrumLux::SuggestionEngine suggester(analyzer);
     CerebrumLux::UserProfileManager userProfileManager;
     CerebrumLux::IntentLearner learner(analyzer, suggester, userProfileManager);
@@ -145,6 +149,16 @@ int main(int argc, char *argv[])
         } else {
             LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: LLM modeli bulunamadi: " << model_rel_path);
         }
+
+        // YENİ: LlamaAdapter'ı mevcut LLMEngine ile bağla
+        CerebrumLux::LlamaAdapter::set_inference_fn([](const std::string& prompt) {
+            if (CerebrumLux::LLMEngine::global_instance && CerebrumLux::LLMEngine::global_instance->is_model_loaded()) {
+                return CerebrumLux::LLMEngine::global_instance->generate(prompt);
+            }
+            throw std::runtime_error("LLMEngine not loaded or global_instance is null for LlamaAdapter inference.");
+        });
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: LlamaAdapter, LLMEngine ile bağlandı.");
+
     } else {
         LOG_ERROR_CERR(CerebrumLux::LogLevel::ERR_CRITICAL, "MAIN_APP: LLMEngine::global_instance null. Model yüklenemedi.");   
     }
@@ -178,10 +192,6 @@ int main(int argc, char *argv[])
     window.show();
     early_diagnostic_log << CerebrumLux::get_current_timestamp_str() << " [EARLY DIAGNOSTIC] MainWindow shown." << std::endl;
     early_diagnostic_log.flush();
-
-    // YENİ: Otonom AI eğitmen döngüsünü başlat
-    LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "MAIN_APP: Otonom AI egitmen dongusu baslatiliyor...");
-    // start_ai_tutor_loop(&nlp, &kb);
     
     // Asenkron FastText model ve KnowledgeBase yüklemesini tetikle
     QTimer::singleShot(100, [&]() { // GUI açıldıktan kısa bir süre sonra

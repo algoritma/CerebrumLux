@@ -22,9 +22,9 @@ AIAction SuggestionEngine::suggest_action(UserIntent current_intent, AbstractSta
 
     AIAction chosen_action = choose_action(current_state, explore);
 
-    LOG_DEFAULT(LogLevel::DEBUG, "SuggestionEngine: State [Intent: " << intent_to_string(current_intent)
+    LOG_DEFAULT(LogLevel::DEBUG, "SuggestionEngine: State [Intent: " << CerebrumLux::to_string(current_intent)
                                   << ", State: " << abstract_state_to_string(current_abstract_state)
-                                  << "] için önerilen eylem: " << action_to_string(chosen_action));
+                                  << "] için önerilen eylem: " << CerebrumLux::to_string(chosen_action));
     return chosen_action;
 }
 
@@ -36,9 +36,9 @@ void SuggestionEngine::update_q_value(const StateKey& state, AIAction action, fl
     float new_q_value = old_q_value + learning_rate * (reward + discount_factor * max_future_q - old_q_value);
 
     q_table[state][action] = new_q_value;
-    LOG_DEFAULT(LogLevel::DEBUG, "SuggestionEngine: Q-değeri güncellendi. State [Intent: " << intent_to_string(state.intent)
+    LOG_DEFAULT(LogLevel::DEBUG, "SuggestionEngine: Q-değeri güncellendi. State [Intent: " << CerebrumLux::to_string(state.intent)
                                   << ", State: " << abstract_state_to_string(state.state)
-                                  << "], Action: " << action_to_string(action) << ", Yeni Q-Değeri: " << new_q_value);
+                                  << "], Action: " << CerebrumLux::to_string(action) << ", Yeni Q-Değeri: " << new_q_value);
 }
 
 AIAction SuggestionEngine::choose_action(const StateKey& state, bool explore) const {

@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QScrollBar>
+#include "core/logger.h"
 
 TutorPanel::TutorPanel(QWidget *parent) : QWidget(parent) {
     auto layout = new QVBoxLayout(this);
@@ -16,6 +17,7 @@ TutorPanel::TutorPanel(QWidget *parent) : QWidget(parent) {
     m_startButton = new QPushButton("Eğitimi Başlat", this);
     m_startButton->setStyleSheet("background-color: #4CAF50; color: white;");
     connect(m_startButton, &QPushButton::clicked, [this](){ 
+        LOG_DEFAULT(CerebrumLux::LogLevel::INFO, "TutorPanel: Start button clicked.");
         m_trainingLog->clear(); 
         emit startTrainingClicked(); 
         m_startButton->setEnabled(false);
@@ -46,7 +48,7 @@ TutorPanel::TutorPanel(QWidget *parent) : QWidget(parent) {
 TutorPanel::~TutorPanel() {}
 
 void TutorPanel::handleTrainingUpdate(const QString& update) {
-    m_trainingLog->appendPlainText(update);
+    m_trainingLog->appendHtml(update);
     m_trainingLog->verticalScrollBar()->setValue(m_trainingLog->verticalScrollBar()->maximum());
 }
 

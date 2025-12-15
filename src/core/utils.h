@@ -44,19 +44,18 @@ std::string get_current_timestamp_str();
 long long get_current_timestamp_us();
 std::string generate_unique_id(); // ✅ YENİ: Benzersiz ID üretme fonksiyonu
 
+// === String Yardımcı Fonksiyonları ===
+std::string trim_string(const std::string& str);
+
 // === Hash Fonksiyonları ===
 unsigned short hash_string(const std::string& s);
 
 // === Enum Dönüşüm Fonksiyonları (Deklarasyonlar) ===
-std::string intent_to_string(UserIntent intent);
 std::string abstract_state_to_string(AbstractState state);
 std::string goal_to_string(AIGoal goal);
-std::string action_to_string(AIAction action);
-AIAction string_to_action(const std::string& action_str);
 std::string sensor_type_to_string(SensorType type);
 std::string key_type_to_string(KeyType type);
 std::string key_event_type_to_string(KeyEventType type);
-std::string mouse_button_state_to_string(MouseButtonState state);
 
 // === MessageQueue Tanımı ===
 enum class MessageType { Log, Command, Feedback };
@@ -78,6 +77,13 @@ private:
     std::queue<MessageData> queue;
     std::mutex mutex;
 };
+
+inline UserIntent parse_intent_from_string(const std::string& s) {
+    if (s == "Question" || s == "Soru") return UserIntent::Question;
+    if (s == "Command" || s == "Komut") return UserIntent::Command;
+    if (s == "Statement" || s == "Açıklama") return UserIntent::Statement;
+    return UserIntent::Undefined;
+}
 
 } // namespace CerebrumLux
 

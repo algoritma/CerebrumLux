@@ -22,7 +22,7 @@ QTableDisplayData QTableWorker::createDisplayData(const CerebrumLux::SwarmVector
     QTableDisplayData data;
     data.stateKey = QString::fromStdString(stateKey);
     for (const auto& pair : actionQValues) {
-        data.actionQValues[QString::fromStdString(CerebrumLux::action_to_string(pair.first))] = pair.second;
+        data.actionQValues[QString::fromStdString(CerebrumLux::to_string(pair.first))] = pair.second;
     }
     return data;
 }

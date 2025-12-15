@@ -74,7 +74,7 @@ void GoalManager::evaluate_and_set_goal(const DynamicSequence& current_sequence)
     UserIntent analyzed_current_intent = UserIntent::Undefined; // Default değeri ayarla
     try {
         analyzed_current_intent = insights_engine.get_analyzer().analyze_intent(current_sequence);
-        LOG_DEFAULT(LogLevel::DEBUG, "GoalManager: analyze_intent sonucu: " << intent_to_string(analyzed_current_intent));
+        LOG_DEFAULT(LogLevel::DEBUG, "GoalManager: analyze_intent sonucu: " << CerebrumLux::to_string(analyzed_current_intent));
     } catch (const std::exception& e) {
         LOG_ERROR_CERR(LogLevel::ERR_CRITICAL, "GoalManager: analyze_intent çağrısında hata: " << e.what());
         // Hata durumunda varsayılan niyetle devam edebiliriz veya döngüyü kesebiliriz.

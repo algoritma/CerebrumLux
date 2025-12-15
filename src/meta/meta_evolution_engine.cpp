@@ -56,7 +56,7 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
     // Adım 2: Öngörüde bulun. (Şimdilik eylem seçimi için doğrudan Q-table'a bakacağız)
     LOG_DEFAULT(CerebrumLux::LogLevel::TRACE, "MetaEvolutionEngine: PredictionEngine predict_next_intent çağrılıyor (şimdilik doğrudan kullanılmuyor).");
     CerebrumLux::UserIntent predicted_intent = predictor.predict_next_intent(CerebrumLux::UserIntent::Undefined, current_sequence);
-    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Tahmin edilen niyet: " << CerebrumLux::intent_to_string(predicted_intent));
+    LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Tahmin edilen niyet: " << CerebrumLux::to_string(predicted_intent));
 
 
     std::vector<AIInsight> insights; // Yerel içgörü vektörü
@@ -165,7 +165,7 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
             };
             int random_index = static_cast<int>(CerebrumLux::SafeRNG::getInstance().get_float(0.0f, static_cast<float>(possible_actions.size() - 1)));
             chosen_action = possible_actions[random_index];
-            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Rastgele eylem seçildi (Exploration): " << CerebrumLux::action_to_string(chosen_action));
+            LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Rastgele eylem seçildi (Exploration): " << CerebrumLux::to_string(chosen_action));
         } else {
             // Exploitation: Q-Table'dan en iyi eylemi seç
             // DÜZELTİLDİ: learning_module'den CryptoManager'a erişmek için getter kullanıldı ve vec_to_str overload'u çağrıldı.
@@ -191,10 +191,10 @@ void MetaEvolutionEngine::run_meta_evolution_cycle(const DynamicSequence& curren
             
             if (best_action_from_q != CerebrumLux::AIAction::None) {
                 chosen_action = best_action_from_q;
-                LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Q-Table'dan en iyi eylem seçildi (Exploitation): " << CerebrumLux::action_to_string(chosen_action) << ", Q-Value: " << max_q_value);
+                LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Q-Table'dan en iyi eylem seçildi (Exploitation): " << CerebrumLux::to_string(chosen_action) << ", Q-Value: " << max_q_value);
             } else {
                 chosen_action = CerebrumLux::AIAction::MonitorPerformance; // Varsayılan eylem
-                LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Q-Table'da eylem bulunamadı, varsayılan eylem seçildi: " << CerebrumLux::action_to_string(chosen_action));
+                LOG_DEFAULT(CerebrumLux::LogLevel::DEBUG, "MetaEvolutionEngine: Epsilon-greedy: Q-Table'da eylem bulunamadı, varsayılan eylem seçildi: " << CerebrumLux::to_string(chosen_action));
             }
         }
 

@@ -10,15 +10,15 @@
 #include <QMessageBox>
 #include <QStringList>
 
+#include "../../ai_tutor/curriculum.h"
+
 CurriculumPanel::CurriculumPanel(QWidget *parent) : QWidget(parent) {
     setupUi();
     
     // Varsayılan Müfredat (Demo için)
-    Curriculum defaultCurr;
-    defaultCurr.sections["coding_cpp"].topics = {"Classes", "Pointers", "Lambda"};
-    defaultCurr.sections["coding_cpp"].difficulty = "adaptive";
-    defaultCurr.sections["logic"].topics = {"Reasoning", "Math"};
-    defaultCurr.sections["logic"].difficulty = "adaptive";
+    CerebrumLux::Curriculum defaultCurr;
+    defaultCurr.addSection("coding_cpp", { "coding_cpp", {"Classes", "Pointers", "Lambda"}, {}, "adaptive" });
+    defaultCurr.addSection("logic", { "logic", {"Reasoning", "Math"}, {}, "adaptive" });
     setCurriculum(defaultCurr);
 }
 
@@ -71,14 +71,15 @@ void CurriculumPanel::addSection() {
     }
 
     QStringList qTopics = topicsStr.split(',', Qt::SkipEmptyParts);
-    std::vector<std::string> topics;
-    for (const auto& t : qTopics) topics.push_back(t.trimmed().toStdString());
+    std::vector<std::string> objectives;
+    for (const auto& t : qTopics) objectives.push_back(t.trimmed().toStdString());
 
-    CurriculumSection section;
-    section.topics = topics;
+    CerebrumLux::CurriculumSection section;
+    section.title = name.toStdString();
+    section.objectives = objectives;
     section.difficulty = m_difficultyComboBox->currentText().toStdString();
 
-    m_curriculum.sections[name.toStdString()] = section;
+    m_curriculum.addSection(name.toStdString(), section);
     
     updateTable();
     m_sectionNameInput->clear();
@@ -103,9 +104,9 @@ void CurriculumPanel::updateTable() {
         m_curriculumTable->setItem(r, 0, new QTableWidgetItem(QString::fromStdString(name)));
         
         QString tList;
-        for (size_t i=0; i<sec.topics.size(); i++) {
-            tList += QString::fromStdString(sec.topics[i]);
-            if (i < sec.topics.size()-1) tList += ", ";
+        for (size_t i=0; i<sec.objectives.size(); i++) {
+            tList += QString::fromStdString(sec.objectives[i]);
+            if (i < sec.objectives.size()-1) tList += ", ";
         }
         
         auto tItem = new QTableWidgetItem(tList);
@@ -115,5 +116,11 @@ void CurriculumPanel::updateTable() {
     }
 }
 
-Curriculum CurriculumPanel::getCurriculum() const { return m_curriculum; }
-void CurriculumPanel::setCurriculum(const Curriculum& c) { m_curriculum = c; updateTable(); }
+const CerebrumLux::Curriculum& CurriculumPanel::getCurriculum() const { return m_curriculum; }
+void CurriculumPanel::setCurriculum(const CerebrumLux::Curriculum& c) { 
+    m_curriculum.sections.clear();
+    for(const auto& pair : c.sections) {
+        m_curriculum.addSection(pair.first, pair.second);
+    }
+    updateTable(); 
+}

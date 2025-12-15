@@ -17,6 +17,28 @@ IntentLearner::IntentLearner(IntentAnalyzer& analyzer_ref, SuggestionEngine& sug
     LOG_DEFAULT(LogLevel::INFO, "IntentLearner: Initialized.");
 }
 
+std::string IntentLearner::resolveIntent(const std::vector<IntentSignal>& intentSignals) {
+    for (const auto& s : intentSignals) {
+    // LLaMA sinyallerini kontrol et, güveni yüksekse onu seç
+        if (s.source == "llama" && s.confidence > 0.80f) { // Eşik değeri ayarlanabilir
+            LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: LLaMA tabanlı niyet çözüldü: " << s.intent << " (Güven: " << s.confidence << ")");
+            return s.intent;
+        }
+    }
+
+    // Aksi halde, ilk FastText sinyalini kullan (veya varsayılan olarak)
+    for (const auto& s : intentSignals) {
+        if (s.source == "fasttext") {
+            LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: FastText tabanlı niyet çözüldü: " << s.intent << " (Güven: " << s.confidence << ")");
+            return s.intent;
+        }
+    }
+    
+    // Hiçbir niyet çözülemezse Undefined döndür
+    LOG_DEFAULT(LogLevel::WARNING, "IntentLearner: Hibrit analizden niyet çözülemedi, Undefined döndürüldü.");
+    return "Undefined"; 
+}
+
 void IntentLearner::set_learning_rate(float rate) {
     learning_rate = std::max(0.0001f, std::min(1.0f, rate)); // Öğrenme hızını sınırla
     LOG_DEFAULT(LogLevel::INFO, "IntentLearner: Öğrenme hızı ayarlandı: " << learning_rate);
@@ -52,7 +74,7 @@ void IntentLearner::process_feedback(const DynamicSequence& sequence, UserIntent
         implicit_feedback_history[predicted_intent].pop_front();
     }
 
-    LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: Niyet '" << intent_to_string(predicted_intent) << "' için örtük geri bildirim işlendi: " << implicit_feedback_score);
+    LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: Niyet '" << CerebrumLux::to_string(predicted_intent) << "' için örtük geri bildirim işlendi: " << implicit_feedback_score);
 
     // Duruma göre aksiyon önerme mekanizması buradan tetiklenebilir
     // suggestion_engine.suggest_action(predicted_intent, inferred_state, sequence);
@@ -69,8 +91,8 @@ void IntentLearner::process_explicit_feedback(UserIntent predicted_intent, AIAct
     float feedback_strength = user_profile_manager.get_personalized_feedback_strength(predicted_intent, action);
     adjust_template(predicted_intent, sequence, feedback_strength);
 
-    LOG_DEFAULT(LogLevel::INFO, "IntentLearner: Açık geri bildirim işlendi. Niyet '" << intent_to_string(predicted_intent)
-                                  << "', Eylem '" << action_to_string(action) << "', Onaylandı: " << (approved ? "Evet" : "Hayır"));
+    LOG_DEFAULT(LogLevel::INFO, "IntentLearner: Açık geri bildirim işlendi. Niyet '" << CerebrumLux::to_string(predicted_intent)
+                                  << "', Eylem '" << CerebrumLux::to_string(action) << "', Onaylandı: " << (approved ? "Evet" : "Hayır"));
 }
 
 bool IntentLearner::get_implicit_feedback_for_intent(UserIntent intent_id, std::deque<float>& history_out) const {
@@ -134,12 +156,12 @@ void IntentLearner::adjust_template(UserIntent intent_id, const DynamicSequence&
         current_weights[i] += adjustment_factor * (sequence.statistical_features_vector[i] - current_weights[i]);
     }
     intent_analyzer.update_template_weights(intent_id, current_weights);
-    LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: Niyet '" << intent_to_string(intent_id) << "' şablonu ayarlandı.");
+    LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: Niyet '" << CerebrumLux::to_string(intent_id) << "' şablonu ayarlandı.");
 }
 
 void IntentLearner::adjust_action_score(UserIntent intent_id, AIAction action, float score_change) {
     intent_analyzer.update_action_success_score(intent_id, action, score_change);
-    LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: Niyet '" << intent_to_string(intent_id) << "' için eylem '" << action_to_string(action) << "' puanı ayarlandı.");
+    LOG_DEFAULT(LogLevel::DEBUG, "IntentLearner: Niyet '" << CerebrumLux::to_string(intent_id) << "' için eylem '" << CerebrumLux::to_string(action) << "' puanı ayarlandı.");
 }
 
 float IntentLearner::calculate_sensor_contribution(SensorType type) const {

@@ -42,22 +42,17 @@ public:
     }
 };
 
+#include "../communication/fasttext_wrapper.h"
+
+// Dummy FastTextWrapper (a real object with a dummy file)
+CerebrumLux::FastTextWrapper g_dummy_ft_wrapper("dummy.bin");
+
 // Dummy IntentAnalyzer
 class DummyIntentAnalyzer : public CerebrumLux::IntentAnalyzer {
 public:
-    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer() {}
-    // analyze_intent base class'ta virtual
+    DummyIntentAnalyzer() : CerebrumLux::IntentAnalyzer(g_dummy_ft_wrapper) {}
     CerebrumLux::UserIntent analyze_intent(const CerebrumLux::DynamicSequence& sequence) override { return CerebrumLux::UserIntent::Undefined; }
-    // get_confidence_for_intent base class'ta virtual
     float get_confidence_for_intent(CerebrumLux::UserIntent intent_id, const std::vector<float>& features) const override { return 0.5f; }
-    // get_last_confidence base class'ta virtual değil
-    float get_last_confidence() const { return 0.5f; }
-    // update_template_weights base class'ta virtual değil
-    void update_template_weights(CerebrumLux::UserIntent intent_id, const std::vector<float>& new_weights) {}
-    // get_intent_weights base class'ta virtual değil
-    std::vector<float> get_intent_weights(CerebrumLux::UserIntent intent_id) const { return std::vector<float>(CerebrumLux::CryptofigAutoencoder::INPUT_DIM, 0.0f); }
-    // report_learning_performance base class'ta virtual değil
-    void report_learning_performance(CerebrumLux::UserIntent intent_id, float implicit_feedback_avg, float explicit_feedback_avg) {}
 };
 
 // Dummy SuggestionEngine

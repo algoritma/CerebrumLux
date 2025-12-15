@@ -6,10 +6,14 @@
 #include <memory> // std::unique_ptr için
 #include <mutex> // LMDB erişimi için mutex
 #include <map> // hnswlib label'larını ID'lerle eşlemek için
+#include <nlohmann/json.hpp> // JSON serileştirme için
 
 #include "../core/logger.h" // CerebrumLux Logger için
 #include "DataModels.h"     // CryptofigVector için
 #include "../hnswlib_wrapper.h" // HNSWIndex wrapper için
+#include "../learning/StrategyOutcome.h" // StrategyOutcome için
+#include "../core/enums.h" // UserIntent için
+#include "../ai_tutor/enums.h" // TeachingStyle ve to_string fonksiyonları için
 
 // OpenSSL SHA-256 için
 #include <openssl/sha.h>
@@ -75,6 +79,10 @@ public:
     // Belirli bir DBI'daki tüm anahtarları döndürür.
     std::vector<EmbeddingStateKey> get_all_keys_for_dbi(MDB_dbi dbi) const;
 
+    // YENİ: Öğretme stratejisi sonuçlarını kaydetmek ve yüklemek için metotlar
+    bool store_strategy_outcome(UserIntent intent, const StrategyOutcome& outcome);
+    std::vector<StrategyOutcome> load_strategy_history(UserIntent intent, int limit) const;
+
 
     // LMDB ortam ve DBI handle'ları için getter'lar (list_data için gerekli)
     MDB_env* get_env() const { return env_; }
@@ -93,6 +101,9 @@ private:
     MDB_dbi q_values_dbi_;                // SparseQTable'ın Q-değerlerini (EmbeddingStateKey -> ActionMap JSON) saklamak için DBI
 
     MDB_dbi q_metadata_dbi_;              // SparseQTable ile ilgili meta verileri (örn. öğrenme oranları) JSON olarak saklamak için DBI
+
+    // YENİ: Öğretme stratejisi sonuçları için DBI
+    MDB_dbi strategy_outcome_dbi_;
 
     // HNSW index'i std::unique_ptr ile yönetiyoruz
     std::unique_ptr<CerebrumLux::HNSW::HNSWIndex> hnsw_index_; 

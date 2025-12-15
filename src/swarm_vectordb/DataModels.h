@@ -46,7 +46,7 @@ struct SparseQTable {
         for (const auto& state_pair : sqt.q_values) {
             nlohmann::json action_map_json;
             for (const auto& action_pair : state_pair.second) {
-                action_map_json[CerebrumLux::action_to_string(action_pair.first)] = action_pair.second;
+                action_map_json[CerebrumLux::to_string(action_pair.first)] = action_pair.second;
             }
             q_map_json[state_pair.first] = action_map_json;
         }

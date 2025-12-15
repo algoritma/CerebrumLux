@@ -15,7 +15,10 @@
 #include <QtConcurrent/QtConcurrent> // QtConcurrent::run için
 
 #include "../external/fasttext/include/fasttext.h" // FastText'in tam tanımı için
+#include "../brain/intent_learner.h"
 #include "../gui/DataTypes.h" // ChatResponse'un tam tanımı için
+#include "../core/enums.h"
+#include "../communication/fasttext_wrapper.h" // FastTextResult ve FastTextWrapper için
 
 // Forward declarations
 namespace CerebrumLux {
@@ -25,15 +28,14 @@ namespace CerebrumLux {
 
 namespace CerebrumLux {
 
+struct RoutedIntent {
+    UserIntent type;
+    float confidence;
+};
+
 // ----------------------------------------------------
 // IntentRouter İçin Yardımcı Veri Yapıları
 // ----------------------------------------------------
-
-struct FastTextResult {
-    std::string label;
-    double confidence;
-    std::string shortAnswer; // optional pre-baked answer
-};
 
 struct LlamaResult {
     bool ok;
@@ -46,25 +48,6 @@ struct LlamaResult {
 // Callback for results to be sent back to GUI (on GUI thread)
 // userID: Kullanıcı ID'si (veya mesaj ID'si), reply: AI'ın yanıtı
 using OnResultCb = std::function<void(const std::string& userId, const ChatResponse& reply)>;
-
-// ----------------------------------------------------
-// FastTextWrapper Sınıfı (FastText Modelini Yönetecek)
-// ----------------------------------------------------
-class FastTextWrapper {
-public:
-    // modelPath: FastText modelinin dosya yolu
-    FastTextWrapper(const std::string &modelPath);
-    ~FastTextWrapper();
-
-    // Metni sınıflandırır ve etiket + güven + isteğe bağlı kısa yanıt döndürür
-    FastTextResult classify(const std::string &text) const;
-
-    // FastText'in sınıflandırma için ihtiyaç duyduğu ön-işleme (eğer varsa)
-    std::string normalizeText(const std::string& text) const;
-private:
-    std::unique_ptr<fasttext::FastText> ft_model_; // FastText modelinin kendi instance'ı
-    bool is_model_loaded_ = false;
-};
 
 // ----------------------------------------------------
 // LlamaInvoker Sınıfı (LLM Engine Çağrılarını Yönetecek)
@@ -124,6 +107,15 @@ public:
     // Basit niyetleri ve hazır yanıtları ekle
     void add_simple_intent(const std::string &label, const std::string &reply);
 
+    // Metinden niyet tipini algılar
+    UserIntent detect(const std::string& text);
+
+    // YENİ: IntentRouter::route metodunun bildirimi
+    RoutedIntent route(const std::string& input);
+
+    // ---- IntentLearner erişimi (Qt Bridge için) ----
+    IntentLearner& getIntentLearner() const { return *intentLearner_; }
+
 private:
     // Internal helper functions
     void process_with_fasttext(const std::string &userId, const std::string &text);
@@ -134,6 +126,9 @@ private:
     LlamaInvoker* llama_;
     Config cfg_;
     OnResultCb callback_; // Doğrudan fonksiyon callback'i
+
+    // Öğrenen niyet modeli (sahiplik dışarıda)
+    IntentLearner* intentLearner_ = nullptr;
 
     std::mutex mtx_; // Cache ve simple_intents için kilit
     std::unordered_map<std::string, std::string> simple_intents_; // label -> reply

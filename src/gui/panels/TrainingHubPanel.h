@@ -8,10 +8,9 @@ namespace CerebrumLux {
     class LearningModule; // Forward declaration eklendi
 }
 
-class QThread; // Forward declaration
 class CurriculumPanel;
 class TutorPanel;
-class TutorWorker; // Forward declaration
+class TutorBroker; // Forward declaration
 
 class TrainingHubPanel : public QWidget {
     Q_OBJECT
@@ -33,9 +32,8 @@ private:
     CerebrumLux::LLMEngine* m_studentModel;
     CerebrumLux::LearningModule* m_learningModule; // YENİ
 
-    // Thread ve Worker yönetimi için üye değişkenler
-    TutorWorker* m_worker = nullptr;
-    QThread* m_workerThread = nullptr;
+    // Broker yönetimi için üye değişken
+    TutorBroker* m_tutorBroker = nullptr;
     
 };
 

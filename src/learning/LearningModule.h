@@ -17,12 +17,20 @@
 #include "WebFetcher.h" // WebFetcher için
 #include "web_page_parser.h" // WebPageParser için
 #include "web_search_result.h" // WebSearchResult için
+#include "../ai_tutor/teacher_ai.h"
 
 #include <QObject> 
 #include <QTimer> // YENİ: Otomatik kayıt için
 #include <QString> // QString için
 
 namespace CerebrumLux {
+
+class AIInsight;
+class NaturalLanguageProcessor;
+class WebFetcher;
+class UnicodeSanitizer;
+class StegoDetector;
+
 
 // Kapsül işleme sonucunu belirten enum
 enum class IngestResult {
@@ -102,6 +110,12 @@ public:
     std::string cryptofig_encode(const std::vector<float>& cryptofig_vector) const;
     std::vector<float> cryptofig_decode_base64(const std::string& base64_cryptofig_blob) const;
 
+    // YENİ: TeacherAI tabanlı otomatik chat değerlendirmesi
+    void processTeacherAutoEvaluation(
+        const std::string& user_input,
+        const std::string& assistant_reply
+    );
+
 signals:
     void qTableUpdated();       // Q-Table'da bir Q-değeri güncellendiğinde yayılır
     void qTableLoadCompleted(); // Q-Table LMDB'den yüklendikten sonra yayılır
@@ -121,6 +135,8 @@ private slots:
 
 private:
     KnowledgeBase& knowledgeBase;
+    TeacherAI teacherAI; // 🔥 Otomatik kalite öğretmeni
+
     CerebrumLux::Crypto::CryptoManager& cryptoManager;
     NaturalLanguageProcessor& nlp_processor_; // YENİ: NLP'ye referans
     std::unique_ptr<UnicodeSanitizer> unicodeSanitizer;
@@ -146,6 +162,15 @@ private:
     bool corroboration_check(const Capsule& capsule) const;
     void audit_log_append(const IngestReport& report) const;
     CerebrumLux::IngestReport createIngestReport(CerebrumLux::IngestResult result, const std::string& message) const;
+};
+
+struct ChatReward {
+    float relevance;
+    float coherence;
+    float helpfulness;
+    float overall() const {
+        return (relevance + coherence + helpfulness)/3.0f;
+    }
 };
 
 } // namespace CerebrumLux
